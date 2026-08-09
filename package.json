@@ -1,0 +1,21 @@
+{
+  "name": "frezen-control-system-v3",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Private Frezen license and script management platform.",
+  "workspaces": [
+    "worker",
+    "dashboard",
+    "discord-bot",
+    "get-key"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w worker",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "deploy": "npm run deploy -w worker"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
