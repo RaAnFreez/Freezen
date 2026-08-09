@@ -15,6 +15,19 @@ describe("Frezen Worker", () => {
     expect(body.name).toBe("Frezen Control System V3");
     expect(body.status).toBe("ok");
     expect(body.environment).toBe("test");
+    expect(body.database).toBe("not_configured");
+    expect(body.request_id).toEqual(expect.any(String));
+  });
+
+  it("reports D1 as not configured when the binding is absent", async () => {
+    const response = await worker.fetch(
+      new Request("https://frezen.test/api/v1/health/db"),
+      { FREZEN_ENV: "test" },
+    );
+
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body.status).toBe("not_configured");
     expect(body.request_id).toEqual(expect.any(String));
   });
 
