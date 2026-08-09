@@ -6,9 +6,6 @@ workers_dev = true
 [vars]
 FREZEN_ENV = "development"
 
-# Development uses local/default Worker configuration.
-# D1 bindings and secrets are intentionally not committed.
-
 [env.staging]
 name = "frezen-control-system-v3-staging"
 workers_dev = true
@@ -19,5 +16,9 @@ name = "frezen-control-system-v3"
 workers_dev = true
 vars = { FREZEN_ENV = "production" }
 
-# Add D1 bindings per environment only after the Cloudflare databases exist.
-# Keep database IDs and secrets out of source control when they are sensitive.
+# D1 bindings will be added after the three isolated D1 databases exist.
+# Secrets must be configured with Wrangler/Cloudflare and must never be committed.
+
+# Recommended deployment commands:
+# npx wrangler deploy --env staging
+# npx wrangler deploy --env production
