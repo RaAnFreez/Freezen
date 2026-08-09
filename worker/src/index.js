@@ -20,6 +20,9 @@ const json = (data, status = 200, requestId = crypto.randomUUID()) =>
 const notFound = (requestId) =>
   json({ error: "NOT_FOUND", request_id: requestId }, 404, requestId);
 
+const methodNotAllowed = (requestId) =>
+  json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405, requestId);
+
 export default {
   async fetch(request, env) {
     const requestId = crypto.randomUUID();
@@ -37,12 +40,14 @@ export default {
       });
     }
 
-    if (request.method === "GET" && url.pathname === "/api/v1/status") {
+    if (url.pathname === "/api/v1/status") {
+      if (request.method !== "GET") return methodNotAllowed(requestId);
       return json(
         {
           name: "Frezen Control System V3",
           status: "ok",
           environment: env.FREZEN_ENV ?? "unknown",
+          database: env.DB ? "configured" : "not_configured",
           request_id: requestId,
         },
         200,
@@ -50,7 +55,30 @@ export default {
       );
     }
 
-    if (request.method === "GET" && url.pathname === "/access-denied") {
+    if (url.pathname === "/api/v1/health/db") {
+      if (request.method !== "GET") return methodNotAllowed(requestId);
+      if (!env.DB) {
+        return json(
+          { status: "not_configured", request_id: requestId },
+          503,
+          requestId,
+        );
+      }
+
+      try {
+        const result = await env.DB.prepare("SELECT 1 AS ok").first();
+        return json(
+          { status: result?.ok === 1 ? "ok" : "error", request_id: requestId },
+          result?.ok === 1 ? 200 : 503,
+          requestId,
+        );
+      } catch {
+        return json({ status: "error", request_id: requestId }, 503, requestId);
+      }
+    }
+
+    if (url.pathname === "/access-denied") {
+      if (request.method !== "GET") return methodNotAllowed(requestId);
       return json(
         {
           error: "UNAUTHENTICATED",
