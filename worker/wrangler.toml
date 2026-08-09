@@ -6,5 +6,18 @@ workers_dev = true
 [vars]
 FREZEN_ENV = "development"
 
-# D1 bindings and production secrets will be added in later phases.
-# Never put API keys, passwords, bot tokens, or master secrets here.
+# Development uses local/default Worker configuration.
+# D1 bindings and secrets are intentionally not committed.
+
+[env.staging]
+name = "frezen-control-system-v3-staging"
+workers_dev = true
+vars = { FREZEN_ENV = "staging" }
+
+[env.production]
+name = "frezen-control-system-v3"
+workers_dev = true
+vars = { FREZEN_ENV = "production" }
+
+# Add D1 bindings per environment only after the Cloudflare databases exist.
+# Keep database IDs and secrets out of source control when they are sensitive.
