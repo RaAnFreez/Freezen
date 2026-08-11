@@ -115,6 +115,48 @@ export default {
       }
     }
 
+    const licenseMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)$/);
+    if (licenseMatch) {
+      if (request.method !== "GET") return methodNotAllowed(requestId);
+      if (!env.DB) return databaseUnavailable(requestId);
+
+      const licenseId = decodeURIComponent(licenseMatch[1]);
+      if (!licenseId || licenseId.length > 128) {
+        return json({ error: "INVALID_LICENSE_ID", request_id: requestId }, 400, requestId);
+      }
+
+      try {
+        const license = await env.DB
+          .prepare(
+            "SELECT id, user_id, status, expires_at, created_at, updated_at FROM licenses WHERE id = ?1 LIMIT 1",
+          )
+          .bind(licenseId)
+          .first();
+
+        if (!license) {
+          return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId);
+        }
+
+        return json(
+          {
+            license: {
+              id: license.id,
+              user_id: license.user_id,
+              status: license.status,
+              expires_at: license.expires_at,
+              created_at: license.created_at,
+              updated_at: license.updated_at,
+            },
+            request_id: requestId,
+          },
+          200,
+          requestId,
+        );
+      } catch {
+        return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId);
+      }
+    }
+
     if (url.pathname === "/access-denied") {
       if (request.method !== "GET") return methodNotAllowed(requestId);
       return json(
