@@ -16,8 +16,10 @@ name = "frezen-control-system-v3"
 workers_dev = true
 vars = { FREZEN_ENV = "production" }
 
-# D1 bindings will be added after the three isolated D1 databases exist.
-# Secrets must be configured with Wrangler/Cloudflare and must never be committed.
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "frezen-production"
+database_id = "ff6e12e2-c59b-4891-812c-9ce0bbae64fc"
 
 # Recommended deployment commands:
 # npx wrangler deploy --env staging
