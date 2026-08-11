@@ -1,3 +1,5 @@
+import { requireAuth } from "./security/auth.js";
+
 const SECURITY_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
@@ -77,6 +79,8 @@ export default {
     const userMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)$/);
     if (userMatch) {
       if (request.method !== "GET") return methodNotAllowed(requestId);
+      const authError = await requireAuth(request, env, requestId);
+      if (authError) return authError;
       if (!env.DB) return databaseUnavailable(requestId);
 
       const externalId = decodeURIComponent(userMatch[1]);
@@ -118,6 +122,8 @@ export default {
     const licenseMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)$/);
     if (licenseMatch) {
       if (request.method !== "GET") return methodNotAllowed(requestId);
+      const authError = await requireAuth(request, env, requestId);
+      if (authError) return authError;
       if (!env.DB) return databaseUnavailable(requestId);
 
       const licenseId = decodeURIComponent(licenseMatch[1]);
