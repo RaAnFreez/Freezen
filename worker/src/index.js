@@ -24,7 +24,7 @@ const methodNotAllowed = (requestId) =>
   json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405, requestId);
 
 const databaseUnavailable = (requestId) =>
-  json({ error: "DATABASE_NOT_CONFIGURED", request_id: requestId }, 503, requestId);
+  json({ status: "not_configured", request_id: requestId }, 503, requestId);
 
 export default {
   async fetch(request, env) {
