@@ -93,6 +93,71 @@ describe("Frezen Worker", () => {
     expect(body.error).toBe("INVALID_EXTERNAL_ID");
   });
 
+  it("looks up a license without exposing its hash", async () => {
+    const prepare = (sql) => ({
+      bind: (...params) => {
+        expect(sql).toContain("FROM licenses");
+        expect(sql).not.toContain("license_key_hash");
+        expect(params).toEqual(["license-123"]);
+        return {
+          first: async () => ({
+            id: "license-123",
+            user_id: 1,
+            status: "active",
+            expires_at: "2027-08-11T00:00:00.000Z",
+            created_at: "2026-08-11T00:00:00.000Z",
+            updated_at: "2026-08-11T00:00:00.000Z",
+            license_key_hash: "must-not-leak",
+          }),
+        };
+      },
+    });
+
+    const response = await worker.fetch(
+      new Request("https://frezen.test/api/v1/licenses/license-123"),
+      { FREZEN_ENV: "test", DB: { prepare } },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.license).toEqual({
+      id: "license-123",
+      user_id: 1,
+      status: "active",
+      expires_at: "2027-08-11T00:00:00.000Z",
+      created_at: "2026-08-11T00:00:00.000Z",
+      updated_at: "2026-08-11T00:00:00.000Z",
+    });
+    expect(body.license.license_key_hash).toBeUndefined();
+  });
+
+  it("returns 404 when the requested license does not exist", async () => {
+    const prepare = () => ({
+      bind: () => ({ first: async () => null }),
+    });
+
+    const response = await worker.fetch(
+      new Request("https://frezen.test/api/v1/licenses/missing-license"),
+      { FREZEN_ENV: "test", DB: { prepare } },
+    );
+
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.error).toBe("LICENSE_NOT_FOUND");
+  });
+
+  it("rejects an invalidly long license id", async () => {
+    const licenseId = "x".repeat(129);
+    const response = await worker.fetch(
+      new Request(`https://frezen.test/api/v1/licenses/${licenseId}`),
+      { FREZEN_ENV: "test", DB: { prepare: () => { throw new Error("should not query"); } } },
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("INVALID_LICENSE_ID");
+  });
+
   it("does not expose protected content without authentication", async () => {
     const response = await worker.fetch(
       new Request("https://frezen.test/dashboard"),
