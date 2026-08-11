@@ -23,6 +23,9 @@ const notFound = (requestId) =>
 const methodNotAllowed = (requestId) =>
   json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405, requestId);
 
+const databaseUnavailable = (requestId) =>
+  json({ status: "not_configured", request_id: requestId }, 503, requestId);
+
 export default {
   async fetch(request, env) {
     const requestId = crypto.randomUUID();
@@ -57,13 +60,7 @@ export default {
 
     if (url.pathname === "/api/v1/health/db") {
       if (request.method !== "GET") return methodNotAllowed(requestId);
-      if (!env.DB) {
-        return json(
-          { status: "not_configured", request_id: requestId },
-          503,
-          requestId,
-        );
-      }
+      if (!env.DB) return databaseUnavailable(requestId);
 
       try {
         const result = await env.DB.prepare("SELECT 1 AS ok").first();
@@ -74,6 +71,47 @@ export default {
         );
       } catch {
         return json({ status: "error", request_id: requestId }, 503, requestId);
+      }
+    }
+
+    const userMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)$/);
+    if (userMatch) {
+      if (request.method !== "GET") return methodNotAllowed(requestId);
+      if (!env.DB) return databaseUnavailable(requestId);
+
+      const externalId = decodeURIComponent(userMatch[1]);
+      if (!externalId || externalId.length > 128) {
+        return json({ error: "INVALID_EXTERNAL_ID", request_id: requestId }, 400, requestId);
+      }
+
+      try {
+        const user = await env.DB
+          .prepare(
+            "SELECT id, external_id, display_name, created_at, updated_at FROM users WHERE external_id = ?1 LIMIT 1",
+          )
+          .bind(externalId)
+          .first();
+
+        if (!user) {
+          return json({ error: "USER_NOT_FOUND", request_id: requestId }, 404, requestId);
+        }
+
+        return json(
+          {
+            user: {
+              id: user.id,
+              external_id: user.external_id,
+              display_name: user.display_name,
+              created_at: user.created_at,
+              updated_at: user.updated_at,
+            },
+            request_id: requestId,
+          },
+          200,
+          requestId,
+        );
+      } catch {
+        return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId);
       }
     }
 
