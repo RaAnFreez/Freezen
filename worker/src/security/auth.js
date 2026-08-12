@@ -17,6 +17,15 @@ const json = (data, status, requestId) =>
 const sha256 = async (value) =>
   new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
 
+const safeEqual = (left, right) => {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left[index] ^ right[index];
+  }
+  return difference === 0;
+};
+
 export async function requireAuth(request, env, requestId) {
   if (env.DB) {
     const session = await requireSession(request, env, requestId, json);
@@ -38,7 +47,7 @@ export async function requireAuth(request, env, requestId) {
 
   const supplied = await sha256(match[1]);
   const expected = await sha256(configuredToken);
-  const verified = crypto.subtle.timingSafeEqual(supplied, expected);
+  const verified = safeEqual(supplied, expected);
   if (!verified) {
     return json({ error: "UNAUTHORIZED", request_id: requestId }, 403, requestId);
   }
