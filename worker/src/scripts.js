@@ -131,6 +131,18 @@ export async function setScriptVersionActive(request, env, requestId, json, auth
   } catch { return bad(json, requestId, "DATABASE_ERROR", 503); }
 }
 
+export async function setScriptVersionDisabled(request, env, requestId, json, auth, scriptId, versionId) {
+  if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
+  const version = await env.DB.prepare("SELECT id,script_id,version,status FROM script_versions WHERE id=?1 AND script_id=?2 LIMIT 1").bind(versionId, scriptId).first();
+  if (!version) return bad(json, requestId, "SCRIPT_VERSION_NOT_FOUND", 404);
+  if (version.status === "ACTIVE") return bad(json, requestId, "ACTIVE_VERSION_MUST_BE_ARCHIVED_OR_REPLACED", 409);
+  if (version.status === "DISABLED") return json({ status: "disabled", version: { id: version.id, version: version.version }, request_id: requestId });
+  const result = await env.DB.prepare("UPDATE script_versions SET status='DISABLED' WHERE id=?1 AND script_id=?2 AND status='ARCHIVED'").bind(versionId, scriptId).run();
+  if (!result?.meta?.changes) return bad(json, requestId, "VERSION_UPDATE_FAILED", 503);
+  await audit(env, auth, "SCRIPT_VERSION_DISABLED", "script_version", versionId, "SUCCESS", requestId, { script_id: scriptId, version: version.version });
+  return json({ status: "disabled", version: { id: version.id, version: version.version }, request_id: requestId });
+}
+
 export async function updateScript(request, env, requestId, json, auth, scriptId) {
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
   let body;
