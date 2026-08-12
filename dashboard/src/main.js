@@ -71,14 +71,18 @@ function renderSection(section) {
     <div class="stats-grid">
       ${stat("Total Licenses", "—", "Awaiting API data", "key")}
       ${stat("Active Licenses", "—", "Awaiting API data", "check")}
+      ${stat("Expired Licenses", "—", "Awaiting API data", "expired")}
+      ${stat("Revoked Licenses", "—", "Awaiting API data", "revoked")}
       ${stat("Users", "—", "Awaiting API data", "users")}
       ${stat("Script Requests", "—", "Awaiting API data", "script")}
+      ${stat("SafeLinkU Claims", "—", "Awaiting API data", "safelinku")}
+      ${stat("HWID Resets", "—", "Awaiting API data", "hwid")}
     </div>
     <div class="panel-grid"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">ACTIVITY</p><h3>Recent activity</h3></div><button class="ghost-button">View logs</button></div><div class="empty"><span>◌</span><strong>No activity loaded</strong><p>Connect the dashboard to the authenticated Frezen API to display live activity.</p></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">SYSTEM</p><h3>Service status</h3></div></div><div class="service"><span><i></i> Authentication</span><b>Protected</b></div><div class="service"><span><i></i> Authorization</span><b>Protected</b></div><div class="service"><span><i></i> Database</span><b>Protected</b></div></section></div>
   ` : `<section class="panel section-placeholder"><p class="eyebrow">${section.toUpperCase()}</p><h2>${items.find(([id]) => id === section)?.[1] ?? section}</h2><p>This Phase 11 navigation surface is ready. Feature-specific data and actions will be implemented only in their corresponding roadmap phases.</p></section>`;
 }
 
 function stat(label, value, note, type) { return `<article class="stat-card"><div class="stat-icon">${icon(type)}</div><p>${label}</p><strong>${value}</strong><small>${note}</small></article>`; }
-function icon(id) { const map = { overview: "◈", licenses: "◇", keys: "⌁", products: "▣", scripts: "{}", users: "♙", hwid: "⌘", safelinku: "↗", discord: "◉", analytics: "⌁", audit: "≡", invites: "✦", security: "◆", settings: "⚙", key: "◇", check: "✓", script: "{}" }; return map[id] ?? "•"; }
+function icon(id) { const map = { overview: "◈", licenses: "◇", keys: "⌁", products: "▣", scripts: "{}", users: "♙", hwid: "⌘", safelinku: "↗", discord: "◉", analytics: "⌁", audit: "≡", invites: "✦", security: "◆", settings: "⚙", key: "◇", check: "✓", expired: "◷", revoked: "⊘", script: "{}" }; return map[id] ?? "•"; }
 
 renderSection("overview");
