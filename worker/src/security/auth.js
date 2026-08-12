@@ -23,7 +23,7 @@ const equalBytes = (a, b) => {
 };
 
 export async function requireAuth(request, env, requestId) {
-  const configuredToken = env.FREZEN_API_TOKEN;
+  const configuredToken = env.AUTH_TOKEN ?? env.FREZEN_API_TOKEN;
   if (!configuredToken) {
     return json({ error: "AUTH_NOT_CONFIGURED", request_id: requestId }, 503, requestId);
   }
