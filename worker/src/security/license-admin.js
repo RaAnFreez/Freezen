@@ -6,7 +6,7 @@ export async function updateLicenseStatus(request, env, requestId, json, license
   try { body = await request.json(); } catch { return json({ error: "INVALID_JSON", request_id: requestId }, 400, requestId); }
 
   const status = typeof body?.status === "string" ? body.status.trim().toLowerCase() : "";
-  if (!["active", "revoked"].includes(status)) return json({ error: "INVALID_LICENSE_STATUS", request_id: requestId }, 400, requestId);
+  if (!["active", "revoked", "banned"].includes(status)) return json({ error: "INVALID_LICENSE_STATUS", request_id: requestId }, 400, requestId);
 
   try {
     const current = await env.DB.prepare("SELECT status FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first();
@@ -15,7 +15,6 @@ export async function updateLicenseStatus(request, env, requestId, json, license
     const result = await env.DB.prepare("UPDATE licenses SET status = ?1 WHERE id = ?2").bind(status, licenseId).run();
     if (!result?.meta || result.meta.changes !== 1) return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId);
 
-    // license_audit_log is created by the earlier license lifecycle migration.
     await env.DB.prepare(
       "INSERT INTO license_audit_log (id, license_id, previous_status, new_status) VALUES (?1, ?2, ?3, ?4)",
     ).bind(crypto.randomUUID(), licenseId, current.status, status).run();
