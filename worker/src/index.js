@@ -119,7 +119,15 @@ export default {
       try {
         const user = await env.DB.prepare("SELECT id, email, username, role, status, created_at, updated_at FROM users WHERE id = ?1 LIMIT 1").bind(userId).first();
         if (!user) return json({ error: "USER_NOT_FOUND", request_id: requestId }, 404, requestId);
-        return json({ user, request_id: requestId }, 200, requestId);
+        return json({ user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          role: user.role,
+          status: user.status,
+          created_at: user.created_at,
+          updated_at: user.updated_at,
+        }, request_id: requestId }, 200, requestId);
       } catch {
         return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId);
       }
@@ -134,7 +142,18 @@ export default {
       try {
         const license = await env.DB.prepare("SELECT id, user_id, product_id, status, expires_at, created_at, max_devices, last_seen, redeem_count, reset_count FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first();
         if (!license) return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId);
-        return json({ license, request_id: requestId }, 200, requestId);
+        return json({ license: {
+          id: license.id,
+          user_id: license.user_id,
+          product_id: license.product_id,
+          status: license.status,
+          expires_at: license.expires_at,
+          created_at: license.created_at,
+          max_devices: license.max_devices,
+          last_seen: license.last_seen,
+          redeem_count: license.redeem_count,
+          reset_count: license.reset_count,
+        }, request_id: requestId }, 200, requestId);
       } catch {
         return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId);
       }
