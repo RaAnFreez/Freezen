@@ -9,7 +9,8 @@ import { updateLicenseStatus } from "./security/license-admin.js";
 import { listLicenses } from "./security/license-list.js";
 import { getLicenseAudit } from "./security/license-audit.js";
 import { getUserLicenseSummary } from "./security/license-summary.js";
-import { generateLicense, redeemLicense, extendLicense, resetLicenseHwid } from "./security/license-lifecycle.js";
+import { generateLicense, redeemLicense, extendLicense } from "./security/license-lifecycle.js";
+import { listHwid, bindHwid, validateHwid, resetHwid, blockHwid, unblockHwid } from "./security/hwid.js";
 import { getDashboardOverview } from "./dashboard-overview.js";
 import { listProducts, getProduct, createProduct, updateProduct, deleteProduct } from "./products.js";
 
@@ -52,33 +53,49 @@ export default {
     if (url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/")) { if (request.method !== "GET") return methodNotAllowed(requestId); const access = await requirePrivateAccess(request, env, requestId); if (access instanceof Response) return access; return json({ private: true, status: "authorized", user: { id: access.user_id, username: access.username }, request_id: requestId }); }
     if (url.pathname === "/api/v1/dashboard" || url.pathname.startsWith("/api/v1/dashboard/")) { if (request.method !== "GET") return methodNotAllowed(requestId); const access = await requirePrivateAccess(request, env, requestId); if (access instanceof Response) return access; return json({ private: true, status: "authorized", user: { id: access.user_id, username: access.username }, request_id: requestId }); }
 
-    if (url.pathname === "/api/v1/licenses") {
-      if (request.method === "GET") {
-        const auth = await authorize(request, env, requestId, "licenses:read");
-        if (auth instanceof Response) return auth;
-        return listLicenses(request, env, requestId, json);
-      }
-      if (request.method === "POST") {
-        const auth = await authorize(request, env, requestId, "licenses:write");
-        if (auth instanceof Response) return auth;
-        return generateLicense(request, env, requestId, json, auth);
-      }
+    if (url.pathname === "/api/v1/hwid") {
+      const auth = await authorize(request, env, requestId, request.method === "GET" ? "hwid:read" : "hwid:write");
+      if (auth instanceof Response) return auth;
+      if (request.method === "GET") return listHwid(request, env, requestId, json);
+      if (request.method === "POST") return bindHwid(request, env, requestId, json, auth);
       return methodNotAllowed(requestId);
     }
-    if (url.pathname === "/api/v1/licenses/redeem") {
+    if (url.pathname === "/api/v1/hwid/validate") {
       if (request.method !== "POST") return methodNotAllowed(requestId);
       const auth = await requireAuth(request, env, requestId);
       if (auth instanceof Response) return auth;
-      return redeemLicense(request, env, requestId, json, auth);
+      return validateHwid(request, env, requestId, json, auth);
     }
+    const hwidResetMatch = url.pathname.match(/^\/api\/v1\/hwid\/licenses\/([^/]+)\/reset$/);
+    if (hwidResetMatch) {
+      if (request.method !== "POST") return methodNotAllowed(requestId);
+      const auth = await authorize(request, env, requestId, "hwid:write");
+      if (auth instanceof Response) return auth;
+      return resetHwid(request, env, requestId, json, decodeURIComponent(hwidResetMatch[1]));
+    }
+    const hwidDeviceMatch = url.pathname.match(/^\/api\/v1\/hwid\/devices\/([^/]+)\/(block|unblock)$/);
+    if (hwidDeviceMatch) {
+      if (request.method !== "PATCH") return methodNotAllowed(requestId);
+      const auth = await authorize(request, env, requestId, "hwid:write");
+      if (auth instanceof Response) return auth;
+      const deviceId = decodeURIComponent(hwidDeviceMatch[1]);
+      return hwidDeviceMatch[2] === "block" ? blockHwid(request, env, requestId, json, deviceId) : unblockHwid(request, env, requestId, json, deviceId);
+    }
+
+    if (url.pathname === "/api/v1/licenses") {
+      if (request.method === "GET") { const auth = await authorize(request, env, requestId, "licenses:read"); if (auth instanceof Response) return auth; return listLicenses(request, env, requestId, json); }
+      if (request.method === "POST") { const auth = await authorize(request, env, requestId, "licenses:write"); if (auth instanceof Response) return auth; return generateLicense(request, env, requestId, json, auth); }
+      return methodNotAllowed(requestId);
+    }
+    if (url.pathname === "/api/v1/licenses/redeem") { if (request.method !== "POST") return methodNotAllowed(requestId); const auth = await requireAuth(request, env, requestId); if (auth instanceof Response) return auth; return redeemLicense(request, env, requestId, json, auth); }
     if (url.pathname === "/api/v1/licenses/validate") { if (request.method !== "POST") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "licenses:read"); if (auth instanceof Response) return auth; return validateLicense(request, env, requestId, json); }
     const licenseStatusMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/status$/); if (licenseStatusMatch) { if (request.method !== "PATCH") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "licenses:write"); if (auth instanceof Response) return auth; return updateLicenseStatus(request, env, requestId, json, decodeURIComponent(licenseStatusMatch[1])); }
     const licenseExtendMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/extend$/); if (licenseExtendMatch) { if (request.method !== "POST") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "licenses:write"); if (auth instanceof Response) return auth; return extendLicense(request, env, requestId, json, decodeURIComponent(licenseExtendMatch[1])); }
-    const licenseHwidResetMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/hwid\/reset$/); if (licenseHwidResetMatch) { if (request.method !== "POST") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "hwid:write"); if (auth instanceof Response) return auth; return resetLicenseHwid(request, env, requestId, json, decodeURIComponent(licenseHwidResetMatch[1])); }
+    const licenseHwidResetMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/hwid\/reset$/); if (licenseHwidResetMatch) { if (request.method !== "POST") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "hwid:write"); if (auth instanceof Response) return auth; return resetHwid(request, env, requestId, json, decodeURIComponent(licenseHwidResetMatch[1])); }
     const licenseAuditMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/audit$/); if (licenseAuditMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "licenses:read"); if (auth instanceof Response) return auth; return getLicenseAudit(request, env, requestId, json, decodeURIComponent(licenseAuditMatch[1])); }
     const userLicenseSummaryMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)\/licenses$/); if (userLicenseSummaryMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "users:read"); if (auth instanceof Response) return auth; return getUserLicenseSummary(request, env, requestId, json, decodeURIComponent(userLicenseSummaryMatch[1])); }
     const userMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)$/); if (userMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "users:read"); if (auth instanceof Response) return auth; if (!env.DB) return databaseUnavailable(requestId); const userId = decodeURIComponent(userMatch[1]); if (!userId || userId.length > 128) return json({ error: "INVALID_USER_ID", request_id: requestId }, 400, requestId); try { const user = await env.DB.prepare("SELECT id, email, username, role, status, created_at, updated_at FROM users WHERE id = ?1 LIMIT 1").bind(userId).first(); if (!user) return json({ error: "USER_NOT_FOUND", request_id: requestId }, 404, requestId); return json({ user: { id: user.id, email: user.email, username: user.username, role: user.role, status: user.status, created_at: user.created_at, updated_at: user.updated_at }, request_id: requestId }); } catch { return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId); } }
-    const licenseMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)$/); if (licenseMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "licenses:read"); if (auth instanceof Response) return auth; if (!env.DB) return databaseUnavailable(requestId); const licenseId = decodeURIComponent(licenseMatch[1]); if (!licenseId || licenseId.length > 128) return json({ error: "INVALID_LICENSE_ID", request_id: requestId }, 400, requestId); try { const license = await env.DB.prepare("SELECT id, user_id, product_id, status, expires_at, created_at, max_devices, last_seen, redeem_count, reset_count FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first(); if (!license) return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId); return json({ license: { id: license.id, user_id: license.user_id, product_id: license.product_id, status: license.status, expires_at: license.expires_at, created_at: license.created_at, max_devices: license.max_devices, last_seen: license.last_seen, redeem_count: license.redeem_count, reset_count: license.reset_count }, request_id: requestId }); } catch { return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId); } }
+    const licenseMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)$/); if (licenseMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "licenses:read"); if (auth instanceof Response) return auth; if (!env.DB) return databaseUnavailable(requestId); const licenseId = decodeURIComponent(licenseMatch[1]); if (!licenseId || licenseId.length > 128) return json({ error: "INVALID_LICENSE_ID", request_id: requestId }, 400, requestId); try { const license = await env.DB.prepare("SELECT id, user_id, product_id, status, expires_at, created_at, max_devices, last_seen, redeem_count, reset_count, hwid_reset_at, hwid_reset_cooldown_until FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first(); if (!license) return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId); return json({ license: { id: license.id, user_id: license.user_id, product_id: license.product_id, status: license.status, expires_at: license.expires_at, created_at: license.created_at, max_devices: license.max_devices, last_seen: license.last_seen, redeem_count: license.redeem_count, reset_count: license.reset_count, hwid_reset_at: license.hwid_reset_at, hwid_reset_cooldown_until: license.hwid_reset_cooldown_until }, request_id: requestId }); } catch { return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId); } }
     if (url.pathname === "/access-denied") { if (request.method !== "GET") return methodNotAllowed(requestId); return json({ error: "UNAUTHENTICATED", message: "You can't access this link", request_id: requestId }, 401, requestId); }
     return notFound(requestId);
   },
