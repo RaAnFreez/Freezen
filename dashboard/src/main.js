@@ -2,6 +2,7 @@ import "./styles.css";
 import { renderProducts } from "./products.js";
 import { renderLicenses } from "./licenses.js";
 import { renderHwid } from "./hwid.js";
+import { renderScripts } from "./scripts.js";
 
 const items = [
   ["overview", "Overview"], ["licenses", "Licenses"], ["keys", "Keys"], ["products", "Products"], ["scripts", "Scripts"], ["users", "Users"], ["hwid", "HWID"], ["safelinku", "SafeLinkU"], ["discord", "Discord"], ["analytics", "Analytics"], ["audit", "Audit Logs"], ["invites", "Invites"], ["security", "Security"], ["settings", "Settings"],
@@ -34,6 +35,7 @@ function renderSection(section) {
   if (section === "products") return renderProducts(content);
   if (section === "licenses") return renderLicenses(content);
   if (section === "hwid") return renderHwid(content);
+  if (section === "scripts") return renderScripts(content);
   const isOverview = section === "overview";
   content.innerHTML = isOverview ? `
     <div class="welcome"><div><p class="eyebrow">PRIVATE ADMIN AREA</p><h2>Welcome back, Owner</h2><p>Manage Frezen services from one secure control center.</p></div><span class="protected-badge"><i></i> Protected</span></div>
