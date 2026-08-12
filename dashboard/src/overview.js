@@ -8,34 +8,20 @@ async function loadOverview(range = "7d") {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const metrics = data.metrics ?? {};
-    const cards = [
-      ["Total Licenses", metrics.total_licenses],
-      ["Active Licenses", metrics.active_licenses],
-      ["Users", metrics.users],
-      ["Script Requests", metrics.script_requests],
-    ];
-    root.querySelectorAll(".stat-card").forEach((card, index) => {
-      const value = card.querySelector("strong");
-      const note = card.querySelector("small");
-      if (cards[index]) { value.textContent = String(cards[index][1] ?? 0); note.textContent = `Live · ${RANGE_LABELS[data.range] ?? "7D"}`; }
-    });
+    const cards = [["Total Licenses", metrics.total_licenses], ["Active Licenses", metrics.active_licenses], ["Users", metrics.users], ["Script Requests", metrics.script_requests]];
+    root.querySelectorAll(".stat-card").forEach((card, index) => { const value = card.querySelector("strong"); const note = card.querySelector("small"); if (cards[index]) { value.textContent = String(cards[index][1] ?? 0); note.textContent = `Live · ${RANGE_LABELS[data.range] ?? "7D"}`; } });
     const empty = root.querySelector(".empty");
     if (empty) empty.innerHTML = renderActivity(data.recent_activity ?? []);
     const activityPanel = root.querySelector(".panel-grid .panel");
     if (activityPanel && !activityPanel.querySelector(".range-tabs")) {
       const heading = activityPanel.querySelector(".panel-heading");
-      const tabs = document.createElement("div");
-      tabs.className = "range-tabs";
+      const tabs = document.createElement("div"); tabs.className = "range-tabs";
       tabs.innerHTML = Object.entries(RANGE_LABELS).map(([key, label]) => `<button class="range-tab ${key === data.range ? "active" : ""}" data-range="${key}">${label}</button>`).join("");
       heading.appendChild(tabs);
       tabs.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => loadOverview(button.dataset.range)));
-    } else if (activityPanel) {
-      activityPanel.querySelectorAll(".range-tab").forEach((button) => button.classList.toggle("active", button.dataset.range === data.range));
-    }
+    } else if (activityPanel) activityPanel.querySelectorAll(".range-tab").forEach((button) => button.classList.toggle("active", button.dataset.range === data.range));
     renderChart(root, data.charts?.license_activity ?? [], data.charts?.script_requests ?? []);
-  } catch {
-    root.querySelectorAll(".stat-card small").forEach((node) => { node.textContent = "Unable to load live data"; });
-  }
+  } catch { root.querySelectorAll(".stat-card small").forEach((node) => { node.textContent = "Unable to load live data"; }); }
 }
 
 function renderActivity(rows) {
@@ -46,8 +32,7 @@ function renderActivity(rows) {
 function renderChart(root, licenseRows, scriptRows) {
   let chart = root.querySelector(".overview-chart");
   if (!chart) {
-    chart = document.createElement("section");
-    chart.className = "panel overview-chart";
+    chart = document.createElement("section"); chart.className = "panel overview-chart";
     chart.innerHTML = `<div class="panel-heading"><div><p class="eyebrow">ACTIVITY</p><h3>Activity trend</h3></div></div><div class="chart" aria-label="License and script request activity"></div>`;
     root.querySelector(".panel-grid")?.before(chart);
   }
@@ -61,6 +46,9 @@ function renderChart(root, licenseRows, scriptRows) {
 function barWidth(value, points) { const max = Math.max(1, ...points.map(([, row]) => Math.max(row.license, row.script))); return Math.max(value ? 4 : 0, Math.round((value / max) * 100)); }
 function escapeHtml(value) { return String(value).replace(/[&<>\"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]); }
 
-const observer = new MutationObserver(() => { if (document.querySelector("#content .stats-grid")) loadOverview(); });
+const observer = new MutationObserver(() => {
+  const root = document.querySelector("#content");
+  if (root?.querySelector(".stats-grid") && !root.querySelector(".range-tabs") && !root.querySelector(".overview-chart")) loadOverview();
+});
 observer.observe(document.querySelector("#content") ?? document.body, { childList: true, subtree: true });
 window.addEventListener("load", () => loadOverview());
