@@ -1,5 +1,6 @@
 import { requireAuth } from "./security/auth.js";
 import { validateLicense } from "./security/license.js";
+import { updateLicenseStatus } from "./security/license-admin.js";
 
 const SECURITY_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -69,6 +70,14 @@ export default {
       const authError = await requireAuth(request, env, requestId);
       if (authError) return authError;
       return validateLicense(request, env, requestId, json);
+    }
+
+    const licenseStatusMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/status$/);
+    if (licenseStatusMatch) {
+      if (request.method !== "PATCH") return methodNotAllowed(requestId);
+      const authError = await requireAuth(request, env, requestId);
+      if (authError) return authError;
+      return updateLicenseStatus(request, env, requestId, json, decodeURIComponent(licenseStatusMatch[1]));
     }
 
     const userMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)$/);
