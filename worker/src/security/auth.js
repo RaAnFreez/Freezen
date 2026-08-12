@@ -1,4 +1,4 @@
-import { getSession, requireSession } from "./session-auth.js";
+import { getSession, getSessionCookie, requireSession } from "./session-auth.js";
 
 const encoder = new TextEncoder();
 
@@ -27,19 +27,25 @@ const safeEqual = (left, right) => {
 };
 
 export async function requireAuth(request, env, requestId) {
+  const sessionCookie = getSessionCookie(request);
+  const authorization = request.headers.get("authorization") ?? "";
+  const hasBearer = /^Bearer ([^\s]+)$/i.test(authorization);
+
+  if (!sessionCookie && !hasBearer) {
+    return json({ error: "UNAUTHENTICATED", request_id: requestId }, 401, requestId);
+  }
+
   if (env.DB) {
     const session = await requireSession(request, env, requestId, json);
     if (session && session.user_id) return session;
     if (env.FREZEN_ENV === "production") return session;
   }
 
-  // Development/test compatibility only. Production protected routes use D1 sessions.
   const configuredToken = env.AUTH_TOKEN ?? env.FREZEN_API_TOKEN;
   if (!configuredToken || env.FREZEN_ENV === "production") {
     return json({ error: "AUTH_NOT_CONFIGURED", request_id: requestId }, 503, requestId);
   }
 
-  const authorization = request.headers.get("authorization") ?? "";
   const match = authorization.match(/^Bearer ([^\s]+)$/i);
   if (!match) {
     return json({ error: "UNAUTHENTICATED", request_id: requestId }, 401, requestId);
@@ -52,10 +58,6 @@ export async function requireAuth(request, env, requestId) {
     return json({ error: "UNAUTHORIZED", request_id: requestId }, 403, requestId);
   }
 
-  // Legacy bearer authentication is intentionally restricted to non-production
-  // development/test environments. Give it a synthetic authenticated principal so
-  // permission middleware can still exercise the same 401/403 path. Production
-  // never reaches this branch and therefore never accepts this principal.
   return {
     user_id: "legacy-test-principal",
     role: env.AUTH_ROLE ?? "ADMIN",

@@ -33,13 +33,13 @@ describe("Frezen Authentication Phase 5 compatibility", () => {
     expect((await response.json()).error).toBe("UNAUTHORIZED");
   });
 
-  it("returns 503 when the authentication secret is not configured", async () => {
+  it("returns 401 when authentication credentials are missing", async () => {
     const response = await worker.fetch(
       request("https://frezen.test/api/v1/users/user-123", null),
       { FREZEN_ENV: "test", DB: { prepare: () => { throw new Error("must not query"); } } },
     );
-    expect(response.status).toBe(503);
-    expect((await response.json()).error).toBe("AUTH_NOT_CONFIGURED");
+    expect(response.status).toBe(401);
+    expect((await response.json()).error).toBe("UNAUTHENTICATED");
   });
 
   it("allows an authenticated user lookup", async () => {
