@@ -42,10 +42,10 @@ describe("Frezen Worker", () => {
     expect((await response.json()).authenticated).toBe(true);
   });
 
-  it("returns an auth configuration error when the token is missing", async () => {
+  it("returns 401 when authentication credentials are missing", async () => {
     const response = await worker.fetch(new Request("https://frezen.test/api/v1/auth/verify"), { FREZEN_ENV: "test" });
-    expect(response.status).toBe(503);
-    expect((await response.json()).error).toBe("AUTH_NOT_CONFIGURED");
+    expect(response.status).toBe(401);
+    expect((await response.json()).error).toBe("UNAUTHENTICATED");
   });
 
   it("protects user lookup with authentication", async () => {

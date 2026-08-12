@@ -7,6 +7,7 @@ const makeDb = () => ({
       bind(...args) {
         return {
           async first() {
+            if (sql.includes("FROM sessions")) return null;
             if (sql.includes("COUNT")) return { count: 2 };
             return { ok: 1 };
           },
@@ -34,9 +35,10 @@ describe("Phase 12 — Dashboard Overview API", () => {
     expect(response.status).toBe(401);
   });
 
-  it("keeps the endpoint under server-side permission middleware", async () => {
-    const response = await worker.fetch(request("7d"), { ...env, AUTH_ROLE: "ADMIN" });
-    expect([200, 401, 403]).toContain(response.status);
+  it("enforces the required users:read permission server-side", async () => {
+    const response = await worker.fetch(request("7d"), { FREZEN_ENV: "test", FREZEN_API_TOKEN: "test-token", AUTH_ROLE: "UNKNOWN" });
+    expect(response.status).toBe(403);
+    expect((await response.json()).error).toBe("FORBIDDEN");
   });
 
   it("does not expose secrets in the overview response contract", async () => {
