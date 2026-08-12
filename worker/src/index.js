@@ -2,6 +2,7 @@ import { requireAuth } from "./security/auth.js";
 import { validateLicense } from "./security/license.js";
 import { updateLicenseStatus } from "./security/license-admin.js";
 import { getLicenseAudit } from "./security/license-audit.js";
+import { getUserLicenseSummary } from "./security/license-summary.js";
 
 const SECURITY_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -54,6 +55,12 @@ export default {
       if (request.method !== "GET") return methodNotAllowed(requestId);
       const authError = await requireAuth(request, env, requestId); if (authError) return authError;
       return getLicenseAudit(request, env, requestId, json, decodeURIComponent(licenseAuditMatch[1]));
+    }
+    const userLicenseSummaryMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)\/licenses$/);
+    if (userLicenseSummaryMatch) {
+      if (request.method !== "GET") return methodNotAllowed(requestId);
+      const authError = await requireAuth(request, env, requestId); if (authError) return authError;
+      return getUserLicenseSummary(request, env, requestId, json, decodeURIComponent(userLicenseSummaryMatch[1]));
     }
     const userMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)$/);
     if (userMatch) {
