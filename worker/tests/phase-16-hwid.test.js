@@ -21,6 +21,7 @@ function dbFactory({ license, devices = [] }) {
               if (sql.includes("FROM licenses")) return license;
               if (sql.includes("FROM devices") && sql.includes("hwid_hash")) return rows.find((row) => row.license_id === values[0] && row.hwid_hash === values[1]) ?? null;
               if (sql.includes("FROM devices") && sql.includes("COUNT(*)")) return { total: rows.filter((row) => row.license_id === values[0] && row.status === "active").length };
+              if (sql.includes("FROM devices") && sql.includes("WHERE id = ?1")) return rows.find((row) => row.id === values[0]) ?? null;
               return null;
             },
             async all() { return { results: rows.filter((row) => row.license_id === values[0]) }; },
