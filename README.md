@@ -9,6 +9,7 @@ Private production platform for managing software/scripts owned by the project o
 ### Phase 0 — Preparation
 - Development preparation for Windows, Android/Termux/Acode, Cloudflare, GitHub, Discord and SafeLinkU.
 - Never request real secrets in chat.
+- Detailed Phase 0 preparation document: `docs/PHASE-0-PREPARATION.md`.
 
 ### Phase 1 — Architecture
 - Cloudflare edge → public Get Key/private panel → Frezen API → D1.
