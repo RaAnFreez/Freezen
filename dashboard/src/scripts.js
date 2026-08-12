@@ -1,3 +1,5 @@
+import "./scripts.css";
+
 const API = "/api/v1";
 
 async function api(path, options = {}) {
