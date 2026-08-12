@@ -1,0 +1,44 @@
+const encoder = new TextEncoder();
+
+const json = (data, status, requestId) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "x-request-id": requestId,
+    },
+  });
+
+const sha256 = async (value) =>
+  new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
+
+const equalBytes = (a, b) => {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
+  return diff === 0;
+};
+
+export async function requireAuth(request, env, requestId) {
+  const configuredToken = env.AUTH_TOKEN ?? env.FREZEN_API_TOKEN;
+  if (!configuredToken) {
+    return json({ error: "AUTH_NOT_CONFIGURED", request_id: requestId }, 503, requestId);
+  }
+
+  const authorization = request.headers.get("authorization") ?? "";
+  const match = authorization.match(/^Bearer ([^\s]+)$/i);
+  if (!match) {
+    return json({ error: "UNAUTHENTICATED", request_id: requestId }, 401, requestId);
+  }
+
+  const supplied = await sha256(match[1]);
+  const expected = await sha256(configuredToken);
+  if (!equalBytes(supplied, expected)) {
+    return json({ error: "UNAUTHORIZED", request_id: requestId }, 403, requestId);
+  }
+
+  return null;
+}
