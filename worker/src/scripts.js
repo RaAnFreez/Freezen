@@ -44,7 +44,7 @@ async function parseUpload(request) {
   if (file.size <= 0 || file.size > MAX_LUA_BYTES) return { error: "LUA_FILE_TOO_LARGE_OR_EMPTY" };
   const content = await file.text();
   if (new TextEncoder().encode(content).byteLength > MAX_LUA_BYTES) return { error: "LUA_FILE_TOO_LARGE" };
-  return { fileName, content, sizeBytes: file.size };
+  return { fileName, content, sizeBytes: file.size, version: cleanVersion(form.get("version")), releaseNotes: cleanText(form.get("release_notes"), 2000) ?? null };
 }
 
 export async function listScripts(request, env, requestId, json) {
@@ -97,10 +97,7 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
   const parsed = await parseUpload(request);
   if (parsed.error) return bad(json, requestId, parsed.error);
-  const form = await request.clone().formData();
-  const version = cleanVersion(form.get("version"));
-  const releaseNotes = cleanText(form.get("release_notes"), 2000) ?? null;
-  if (!version) return bad(json, requestId, "INVALID_VERSION");
+  if (!parsed.version) return bad(json, requestId, "INVALID_VERSION");
   const script = await env.DB.prepare("SELECT id,status FROM scripts WHERE id=?1 LIMIT 1").bind(scriptId).first();
   if (!script) return bad(json, requestId, "SCRIPT_NOT_FOUND", 404);
   if (script.status !== "ACTIVE") return bad(json, requestId, "SCRIPT_DISABLED", 409);
@@ -108,10 +105,10 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
   const fileId = id();
   const sha256 = await sha256Hex(parsed.content);
   try {
-    await env.DB.prepare("INSERT INTO script_versions (id,script_id,version,file_reference,release_notes,status) VALUES (?1,?2,?3,?4,?5,'ARCHIVED')").bind(versionId, scriptId, version, fileId, releaseNotes).run();
+    await env.DB.prepare("INSERT INTO script_versions (id,script_id,version,file_reference,release_notes,status) VALUES (?1,?2,?3,?4,?5,'ARCHIVED')").bind(versionId, scriptId, parsed.version, fileId, parsed.releaseNotes).run();
     await env.DB.prepare("INSERT INTO script_files (id,script_version_id,file_name,content_type,size_bytes,content,sha256) VALUES (?1,?2,?3,'text/x-lua',?4,?5,?6)").bind(fileId, versionId, parsed.fileName, parsed.sizeBytes, parsed.content, sha256).run();
-    await audit(env, auth, "SCRIPT_VERSION_UPLOADED", "script_version", versionId, "SUCCESS", requestId, { script_id: scriptId, version });
-    return json({ version: { id: versionId, script_id: scriptId, version, file_name: parsed.fileName, size_bytes: parsed.sizeBytes, sha256, release_notes: releaseNotes, status: "ARCHIVED" }, request_id: requestId }, 201, requestId);
+    await audit(env, auth, "SCRIPT_VERSION_UPLOADED", "script_version", versionId, "SUCCESS", requestId, { script_id: scriptId, version: parsed.version });
+    return json({ version: { id: versionId, script_id: scriptId, version: parsed.version, file_name: parsed.fileName, size_bytes: parsed.sizeBytes, sha256, release_notes: parsed.releaseNotes, status: "ARCHIVED" }, request_id: requestId }, 201, requestId);
   } catch (error) {
     if (String(error?.message ?? "").includes("UNIQUE")) return bad(json, requestId, "VERSION_ALREADY_EXISTS", 409);
     return bad(json, requestId, "DATABASE_ERROR", 503);
