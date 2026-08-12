@@ -3,14 +3,13 @@ import worker from "../src/index.js";
 
 const TOKEN = "phase15-test-token";
 const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" };
+const STATUSES = new Set(["unused", "active", "expired", "revoked", "banned"]);
 
 function createDb(rows = []) {
   const licenses = rows.map((row) => ({ ...row }));
   const statement = (sql, values = []) => ({
     first: async () => {
-      if (sql.includes("SELECT COUNT(*) AS total FROM licenses")) {
-        return { total: filtered(sql, values).length };
-      }
+      if (sql.includes("SELECT COUNT(*) AS total FROM licenses")) return { total: filtered(sql, values).length };
       throw new Error(`Unexpected first SQL: ${sql}`);
     },
     all: async () => {
@@ -22,16 +21,17 @@ function createDb(rows = []) {
     run: async () => ({ meta: { changes: 1 } }),
   });
   const filtered = (sql, values) => {
-    let bindIndex = 0;
     let result = [...licenses];
     if (sql.includes("l.status = ?")) {
-      result = result.filter((row) => row.status === values[bindIndex++]);
+      const status = values.find((value) => STATUSES.has(value));
+      result = result.filter((row) => row.status === status);
     }
     if (sql.includes("l.product_id = ?")) {
-      result = result.filter((row) => row.product_id === values[bindIndex++]);
+      const productId = values.find((value) => typeof value === "string" && value.startsWith("p"));
+      result = result.filter((row) => row.product_id === productId);
     }
     if (sql.includes("l.id LIKE ?")) {
-      const patterns = values.slice(bindIndex, bindIndex + 6).map(String).map((value) => value.replaceAll("%", "").toLowerCase());
+      const patterns = values.filter((value) => typeof value === "string" && value.startsWith("%")).map((value) => value.slice(1, -1).toLowerCase());
       result = result.filter((row) => patterns.some((pattern) => [row.id, row.user_id, row.username, row.email, row.product_id, row.product_name].some((value) => String(value ?? "").toLowerCase().includes(pattern))));
     }
     return result;
