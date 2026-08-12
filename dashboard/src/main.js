@@ -1,4 +1,5 @@
 import "./styles.css";
+import { renderProducts } from "./products.js";
 
 const items = [
   ["overview", "Overview"],
@@ -60,6 +61,10 @@ document.querySelector("#menu").addEventListener("click", () => { sidebar.classL
 overlay.addEventListener("click", () => { sidebar.classList.remove("open"); overlay.classList.remove("show"); });
 
 function renderSection(section) {
+  if (section === "products") {
+    renderProducts(content);
+    return;
+  }
   const isOverview = section === "overview";
   content.innerHTML = isOverview ? `
     <div class="welcome"><div><p class="eyebrow">PRIVATE ADMIN AREA</p><h2>Welcome back, Owner</h2><p>Manage Frezen services from one secure control center.</p></div><span class="protected-badge"><i></i> Protected</span></div>
