@@ -1,5 +1,6 @@
 import "./styles.css";
 import { renderProducts } from "./products.js";
+import { renderLicenses } from "./licenses.js";
 
 const items = [
   ["overview", "Overview"],
@@ -63,6 +64,10 @@ overlay.addEventListener("click", () => { sidebar.classList.remove("open"); over
 function renderSection(section) {
   if (section === "products") {
     renderProducts(content);
+    return;
+  }
+  if (section === "licenses") {
+    renderLicenses(content);
     return;
   }
   const isOverview = section === "overview";
