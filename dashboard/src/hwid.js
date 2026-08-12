@@ -1,3 +1,5 @@
+import "./hwid.css";
+
 const API = "/api/v1";
 const escapeHtml = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 const formatDate = (value) => value ? new Date(value).toLocaleString() : "—";
@@ -50,7 +52,7 @@ export function renderHwid(container) {
     try { const data = await action("/hwid", "POST", { license_id: license.value.trim(), hwid: hwid.value }); show(data.existing ? "Device already bound; last seen updated." : "Device bound successfully."); await load(); } catch (error) { show(error.message, true); }
   };
   const validate = async () => {
-    try { const data = await action("/hwid/validate", "POST", { license_id: license.value.trim(), hwid: hwid.value }); show(data.valid ? "HWID validation passed." : `HWID validation denied: ${data.reason}` , !data.valid); await load(); } catch (error) { show(error.message, true); }
+    try { const data = await action("/hwid/validate", "POST", { license_id: license.value.trim(), hwid: hwid.value }); show(data.valid ? "HWID validation passed." : `HWID validation denied: ${data.reason}`, !data.valid); await load(); } catch (error) { show(error.message, true); }
   };
   const reset = async () => {
     if (!license.value.trim() || !window.confirm("Reset all active devices for this license? A cooldown will be applied.")) return;
