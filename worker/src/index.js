@@ -3,7 +3,7 @@ import { login, logout, listSessions, revokeSession, forgotPassword, resetPasswo
 import { validateLicense } from "./security/license.js";
 import { updateLicenseStatus } from "./security/license-admin.js";
 import { getLicenseAudit } from "./security/license-audit.js";
-import { getUserLicenseSummary } from "./security/user-license-summary.js";
+import { getUserLicenseSummary } from "./security/license-summary.js";
 
 const SECURITY_HEADERS = {
   "content-type": "application/json; charset=utf-8",
