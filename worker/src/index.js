@@ -1,4 +1,5 @@
 import { requireAuth } from "./security/auth.js";
+import { requirePrivateAccess } from "./security/private-access.js";
 import { login, logout, listSessions, revokeSession, forgotPassword, resetPassword } from "./security/auth-api.js";
 import { validateLicense } from "./security/license.js";
 import { updateLicenseStatus } from "./security/license-admin.js";
@@ -84,6 +85,38 @@ export default {
       if (auth instanceof Response) return auth;
       if (!env.DB || !auth.user_id) return json({ error: "SESSION_AUTH_REQUIRED", request_id: requestId }, 401, requestId);
       return revokeSession(request, env, requestId, json, auth, decodeURIComponent(revokeSessionMatch[1]));
+    }
+
+    // Phase 6 private boundary. UI remains a later phase; this endpoint is the
+    // server-side access boundary that the future dashboard can consume.
+    if (url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/")) {
+      if (request.method !== "GET") return methodNotAllowed(requestId);
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      return json({
+        private: true,
+        status: "authorized",
+        user: {
+          id: access.user_id,
+          username: access.username,
+        },
+        request_id: requestId,
+      }, 200, requestId);
+    }
+
+    if (url.pathname === "/api/v1/dashboard" || url.pathname.startsWith("/api/v1/dashboard/")) {
+      if (request.method !== "GET") return methodNotAllowed(requestId);
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      return json({
+        private: true,
+        status: "authorized",
+        user: {
+          id: access.user_id,
+          username: access.username,
+        },
+        request_id: requestId,
+      }, 200, requestId);
     }
 
     if (url.pathname === "/api/v1/licenses/validate") {
