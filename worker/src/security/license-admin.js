@@ -5,8 +5,8 @@ export async function updateLicenseStatus(request, env, requestId, json, license
   let body;
   try { body = await request.json(); } catch { return json({ error: "INVALID_JSON", request_id: requestId }, 400, requestId); }
 
-  const status = typeof body?.status === "string" ? body.status.trim().toUpperCase() : "";
-  if (!["ACTIVE", "REVOKED"].includes(status)) return json({ error: "INVALID_LICENSE_STATUS", request_id: requestId }, 400, requestId);
+  const status = typeof body?.status === "string" ? body.status.trim().toLowerCase() : "";
+  if (!["active", "revoked"].includes(status)) return json({ error: "INVALID_LICENSE_STATUS", request_id: requestId }, 400, requestId);
 
   try {
     const current = await env.DB.prepare("SELECT status FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first();
