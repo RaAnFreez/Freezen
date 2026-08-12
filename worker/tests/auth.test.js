@@ -9,7 +9,7 @@ const request = (url, token = TOKEN) =>
     headers: { Authorization: `Bearer ${token}` },
   });
 
-describe("Frezen Authentication Phase 4", () => {
+describe("Frezen Authentication Phase 5 compatibility", () => {
   it("keeps status public", async () => {
     const response = await worker.fetch(new Request("https://frezen.test/api/v1/status"), env);
     expect(response.status).toBe(200);
@@ -47,7 +47,7 @@ describe("Frezen Authentication Phase 4", () => {
       bind: (...params) => {
         expect(sql).toContain("FROM users");
         expect(params).toEqual(["user-123"]);
-        return { first: async () => ({ id: 1, external_id: "user-123", display_name: "Test User", created_at: "2026-08-11T00:00:00.000Z", updated_at: "2026-08-11T00:00:00.000Z" }) };
+        return { first: async () => ({ id: "user-123", email: "test@example.com", username: "test-user", role: "SUPPORT", status: "ACTIVE", created_at: "2026-08-11T00:00:00.000Z", updated_at: "2026-08-11T00:00:00.000Z" }) };
       },
     });
     const response = await worker.fetch(
@@ -55,7 +55,9 @@ describe("Frezen Authentication Phase 4", () => {
       { ...env, DB: { prepare } },
     );
     expect(response.status).toBe(200);
-    expect((await response.json()).user.external_id).toBe("user-123");
+    const body = await response.json();
+    expect(body.user.id).toBe("user-123");
+    expect(body.user.username).toBe("test-user");
   });
 
   it("allows an authenticated license lookup", async () => {

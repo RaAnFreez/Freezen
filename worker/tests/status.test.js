@@ -36,7 +36,7 @@ describe("Frezen Worker", () => {
     expect((await response.json()).error).toBe("UNAUTHORIZED");
   });
 
-  it("accepts the configured bearer token", async () => {
+  it("accepts the configured legacy bearer token in test mode", async () => {
     const response = await worker.fetch(new Request("https://frezen.test/api/v1/auth/verify", { headers: authHeaders }), env());
     expect(response.status).toBe(200);
     expect((await response.json()).authenticated).toBe(true);
@@ -53,18 +53,18 @@ describe("Frezen Worker", () => {
     expect(response.status).toBe(401);
   });
 
-  it("looks up a user with authentication without exposing license hashes", async () => {
+  it("looks up a user with authentication without exposing password hashes", async () => {
     const prepare = (sql) => ({
       bind: (...params) => {
         expect(sql).toContain("FROM users");
         expect(params).toEqual(["user-123"]);
-        return { first: async () => ({ id: 1, external_id: "user-123", display_name: "Test User", created_at: "2026-08-11T00:00:00.000Z", updated_at: "2026-08-11T00:00:00.000Z", license_key_hash: "must-not-leak" }) };
+        return { first: async () => ({ id: "user-123", email: "test@example.com", username: "test", role: "SUPPORT", status: "ACTIVE", created_at: "2026-08-11T00:00:00.000Z", updated_at: "2026-08-11T00:00:00.000Z", password_hash: "must-not-leak" }) };
       },
     });
     const response = await worker.fetch(new Request("https://frezen.test/api/v1/users/user-123", { headers: authHeaders }), env({ DB: { prepare } }));
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.user.license_key_hash).toBeUndefined();
+    expect(body.user.password_hash).toBeUndefined();
   });
 
   it("returns 404 when an authenticated user does not exist", async () => {
@@ -75,25 +75,25 @@ describe("Frezen Worker", () => {
   });
 
   it("rejects an invalidly long authenticated user id", async () => {
-    const externalId = "x".repeat(129);
-    const response = await worker.fetch(new Request(`https://frezen.test/api/v1/users/${externalId}`, { headers: authHeaders }), env({ DB: { prepare: () => { throw new Error("should not query"); } } }));
+    const userId = "x".repeat(129);
+    const response = await worker.fetch(new Request(`https://frezen.test/api/v1/users/${userId}`, { headers: authHeaders }), env({ DB: { prepare: () => { throw new Error("should not query"); } } }));
     expect(response.status).toBe(400);
-    expect((await response.json()).error).toBe("INVALID_EXTERNAL_ID");
+    expect((await response.json()).error).toBe("INVALID_USER_ID");
   });
 
   it("looks up a license with authentication without exposing its hash", async () => {
     const prepare = (sql) => ({
       bind: (...params) => {
         expect(sql).toContain("FROM licenses");
-        expect(sql).not.toContain("license_key_hash");
+        expect(sql).not.toContain("key_hash");
         expect(params).toEqual(["license-123"]);
-        return { first: async () => ({ id: "license-123", user_id: 1, status: "active", expires_at: "2027-08-11T00:00:00.000Z", created_at: "2026-08-11T00:00:00.000Z", updated_at: "2026-08-11T00:00:00.000Z", license_key_hash: "must-not-leak" }) };
+        return { first: async () => ({ id: "license-123", user_id: "user-1", product_id: "product-1", status: "ACTIVE", expires_at: "2027-08-11T00:00:00.000Z", created_at: "2026-08-11T00:00:00.000Z", max_devices: 1, last_seen: null, redeem_count: 0, reset_count: 0, key_hash: "must-not-leak" }) };
       },
     });
     const response = await worker.fetch(new Request("https://frezen.test/api/v1/licenses/license-123", { headers: authHeaders }), env({ DB: { prepare } }));
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.license.license_key_hash).toBeUndefined();
+    expect(body.license.key_hash).toBeUndefined();
   });
 
   it("returns 404 when an authenticated license does not exist", async () => {
