@@ -31,10 +31,12 @@ const sha256 = async (value) => {
 };
 
 const safeEqual = (left, right) => {
-  const a = fromBase64Url(left);
-  const b = fromBase64Url(right);
-  if (a.length !== b.length) return false;
-  return crypto.subtle.timingSafeEqual(a, b);
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left[index] ^ right[index];
+  }
+  return difference === 0;
 };
 
 export async function hashPassword(password) {
@@ -67,7 +69,7 @@ export async function verifyPassword(password, encoded) {
       key,
       expected.length * 8,
     );
-    return crypto.subtle.timingSafeEqual(new Uint8Array(bits), expected);
+    return safeEqual(new Uint8Array(bits), expected);
   } catch {
     return false;
   }
