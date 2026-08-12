@@ -1,4 +1,4 @@
-name: Phase 4 CI
+name: Frezen CI
 
 on:
   pull_request:
@@ -13,16 +13,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: phase-4-ci-${{ github.ref }}
+  group: frezen-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
-    name: Worker tests
+    name: Workspace tests and builds
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: worker
 
     steps:
       - name: Checkout
@@ -36,5 +33,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run tests
+      - name: Run workspace tests
         run: npm test
+
+      - name: Build workspace packages
+        run: npm run build:all
