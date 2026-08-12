@@ -1,7 +1,8 @@
 -- Frezen Control System V3
 -- Phase 5B test/provisioning foundation.
 -- Creates a deterministic demo user/license for integration testing.
--- The demo license key is represented only by its SHA-256 hash.
+-- Demo license key: FREZEN-PHASE5B-DEMO
+-- Only its SHA-256 hash is stored in D1.
 
 INSERT OR IGNORE INTO users (id, external_id, display_name)
 VALUES ('demo-user-phase5b', 'demo-phase5b', 'Frezen Demo User');
@@ -16,7 +17,7 @@ INSERT OR IGNORE INTO licenses (
 VALUES (
   'demo-license-phase5b',
   'demo-user-phase5b',
-  '9f7f8b2f6a4b5f0c0a4f9b7e5f6e1b3c2d1a0f9e8d7c6b5a4f3e2d1c0b9a8f7',
+  '53e72824143d4b0084cecd2e93570929738ceba2eb7600fa69c927fba0fba332',
   'active',
   NULL
 );
