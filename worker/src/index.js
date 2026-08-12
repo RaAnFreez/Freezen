@@ -76,6 +76,13 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/v1/auth/verify") {
+      if (request.method !== "GET") return methodNotAllowed(requestId);
+      const authError = await requireAuth(request, env, requestId);
+      if (authError) return authError;
+      return json({ authenticated: true, request_id: requestId }, 200, requestId);
+    }
+
     const userMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)$/);
     if (userMatch) {
       if (request.method !== "GET") return methodNotAllowed(requestId);
