@@ -1,25 +1,14 @@
 import { requireAuth } from "./security/auth.js";
 import { requirePrivateAccess } from "./security/private-access.js";
 import { login, logout, listSessions, revokeSession, forgotPassword, resetPassword } from "./security/auth-api.js";
+import { setupOwner } from "./security/owner-setup.js";
 import { validateLicense } from "./security/license.js";
 import { updateLicenseStatus } from "./security/license-admin.js";
 import { getLicenseAudit } from "./security/license-audit.js";
 import { getUserLicenseSummary } from "./security/license-summary.js";
 
-const SECURITY_HEADERS = {
-  "content-type": "application/json; charset=utf-8",
-  "cache-control": "no-store",
-  "x-content-type-options": "nosniff",
-  "referrer-policy": "no-referrer",
-  "strict-transport-security": "max-age=31536000; includeSubDomains",
-};
-
-const json = (data, status = 200, requestId = crypto.randomUUID(), extraHeaders = {}) =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: { ...SECURITY_HEADERS, ...extraHeaders, "x-request-id": requestId },
-  });
-
+const SECURITY_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "strict-transport-security": "max-age=31536000; includeSubDomains" };
+const json = (data, status = 200, requestId = crypto.randomUUID(), extraHeaders = {}) => new Response(JSON.stringify(data), { status, headers: { ...SECURITY_HEADERS, ...extraHeaders, "x-request-id": requestId } });
 const notFound = (requestId) => json({ error: "NOT_FOUND", request_id: requestId }, 404, requestId);
 const methodNotAllowed = (requestId) => json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405, requestId);
 const databaseUnavailable = (requestId) => json({ status: "not_configured", request_id: requestId }, 503, requestId);
@@ -28,173 +17,26 @@ export default {
   async fetch(request, env) {
     const requestId = crypto.randomUUID();
     const url = new URL(request.url);
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: { ...SECURITY_HEADERS, "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type,authorization,x-csrf-token", "access-control-max-age": "600" } });
-    }
-
-    if (url.pathname === "/api/v1/status") {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      return json({ name: "Frezen Control System V3", status: "ok", environment: env.FREZEN_ENV ?? "unknown", database: env.DB ? "configured" : "not_configured", request_id: requestId }, 200, requestId);
-    }
-
-    if (url.pathname === "/api/v1/health/db") {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      if (!env.DB) return databaseUnavailable(requestId);
-      try {
-        const result = await env.DB.prepare("SELECT 1 AS ok").first();
-        return json({ status: result?.ok === 1 ? "ok" : "error", request_id: requestId }, result?.ok === 1 ? 200 : 503, requestId);
-      } catch {
-        return json({ status: "error", request_id: requestId }, 503, requestId);
-      }
-    }
-
-    if (url.pathname === "/api/v1/auth/login") {
-      if (request.method !== "POST") return methodNotAllowed(requestId);
-      return login(request, env, requestId, json);
-    }
-    if (url.pathname === "/api/v1/auth/logout") {
-      if (request.method !== "POST") return methodNotAllowed(requestId);
-      return logout(request, env, requestId, json);
-    }
-    if (url.pathname === "/api/v1/auth/forgot-password") {
-      if (request.method !== "POST") return methodNotAllowed(requestId);
-      return forgotPassword(request, env, requestId, json);
-    }
-    if (url.pathname === "/api/v1/auth/reset-password") {
-      if (request.method !== "POST") return methodNotAllowed(requestId);
-      return resetPassword(request, env, requestId, json);
-    }
-    if (url.pathname === "/api/v1/auth/verify") {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      const auth = await requireAuth(request, env, requestId);
-      if (auth instanceof Response) return auth;
-      return json({ authenticated: true, user: auth.user_id ? { id: auth.user_id, email: auth.email, username: auth.username, role: auth.role } : null, request_id: requestId }, 200, requestId);
-    }
-    if (url.pathname === "/api/v1/auth/sessions") {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      const auth = await requireAuth(request, env, requestId);
-      if (auth instanceof Response) return auth;
-      if (!env.DB || !auth.user_id) return json({ error: "SESSION_AUTH_REQUIRED", request_id: requestId }, 401, requestId);
-      return listSessions(request, env, requestId, json, auth);
-    }
-    const revokeSessionMatch = url.pathname.match(/^\/api\/v1\/auth\/sessions\/([^/]+)$/);
-    if (revokeSessionMatch) {
-      if (request.method !== "DELETE") return methodNotAllowed(requestId);
-      const auth = await requireAuth(request, env, requestId);
-      if (auth instanceof Response) return auth;
-      if (!env.DB || !auth.user_id) return json({ error: "SESSION_AUTH_REQUIRED", request_id: requestId }, 401, requestId);
-      return revokeSession(request, env, requestId, json, auth, decodeURIComponent(revokeSessionMatch[1]));
-    }
-
-    // Phase 6 private boundary. UI remains a later phase; this endpoint is the
-    // server-side access boundary that the future dashboard can consume.
-    if (url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/")) {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      const access = await requirePrivateAccess(request, env, requestId);
-      if (access instanceof Response) return access;
-      return json({
-        private: true,
-        status: "authorized",
-        user: {
-          id: access.user_id,
-          username: access.username,
-        },
-        request_id: requestId,
-      }, 200, requestId);
-    }
-
-    if (url.pathname === "/api/v1/dashboard" || url.pathname.startsWith("/api/v1/dashboard/")) {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      const access = await requirePrivateAccess(request, env, requestId);
-      if (access instanceof Response) return access;
-      return json({
-        private: true,
-        status: "authorized",
-        user: {
-          id: access.user_id,
-          username: access.username,
-        },
-        request_id: requestId,
-      }, 200, requestId);
-    }
-
-    if (url.pathname === "/api/v1/licenses/validate") {
-      if (request.method !== "POST") return methodNotAllowed(requestId);
-      const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError;
-      return validateLicense(request, env, requestId, json);
-    }
-    const licenseStatusMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/status$/);
-    if (licenseStatusMatch) {
-      if (request.method !== "PATCH") return methodNotAllowed(requestId);
-      const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError;
-      return updateLicenseStatus(request, env, requestId, json, decodeURIComponent(licenseStatusMatch[1]));
-    }
-    const licenseAuditMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/audit$/);
-    if (licenseAuditMatch) {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError;
-      return getLicenseAudit(request, env, requestId, json, decodeURIComponent(licenseAuditMatch[1]));
-    }
-    const userLicenseSummaryMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)\/licenses$/);
-    if (userLicenseSummaryMatch) {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError;
-      return getUserLicenseSummary(request, env, requestId, json, decodeURIComponent(userLicenseSummaryMatch[1]));
-    }
-    const userMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)$/);
-    if (userMatch) {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError;
-      if (!env.DB) return databaseUnavailable(requestId);
-      const userId = decodeURIComponent(userMatch[1]);
-      if (!userId || userId.length > 128) return json({ error: "INVALID_USER_ID", request_id: requestId }, 400, requestId);
-      try {
-        const user = await env.DB.prepare("SELECT id, email, username, role, status, created_at, updated_at FROM users WHERE id = ?1 LIMIT 1").bind(userId).first();
-        if (!user) return json({ error: "USER_NOT_FOUND", request_id: requestId }, 404, requestId);
-        return json({ user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          role: user.role,
-          status: user.status,
-          created_at: user.created_at,
-          updated_at: user.updated_at,
-        }, request_id: requestId }, 200, requestId);
-      } catch {
-        return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId);
-      }
-    }
-    const licenseMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)$/);
-    if (licenseMatch) {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError;
-      if (!env.DB) return databaseUnavailable(requestId);
-      const licenseId = decodeURIComponent(licenseMatch[1]);
-      if (!licenseId || licenseId.length > 128) return json({ error: "INVALID_LICENSE_ID", request_id: requestId }, 400, requestId);
-      try {
-        const license = await env.DB.prepare("SELECT id, user_id, product_id, status, expires_at, created_at, max_devices, last_seen, redeem_count, reset_count FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first();
-        if (!license) return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId);
-        return json({ license: {
-          id: license.id,
-          user_id: license.user_id,
-          product_id: license.product_id,
-          status: license.status,
-          expires_at: license.expires_at,
-          created_at: license.created_at,
-          max_devices: license.max_devices,
-          last_seen: license.last_seen,
-          redeem_count: license.redeem_count,
-          reset_count: license.reset_count,
-        }, request_id: requestId }, 200, requestId);
-      } catch {
-        return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId);
-      }
-    }
-    if (url.pathname === "/access-denied") {
-      if (request.method !== "GET") return methodNotAllowed(requestId);
-      return json({ error: "UNAUTHENTICATED", message: "You can't access this link", request_id: requestId }, 401, requestId);
-    }
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...SECURITY_HEADERS, "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type,authorization,x-csrf-token,x-frezen-setup-secret", "access-control-max-age": "600" } });
+    if (url.pathname === "/api/v1/status") { if (request.method !== "GET") return methodNotAllowed(requestId); return json({ name: "Frezen Control System V3", status: "ok", environment: env.FREZEN_ENV ?? "unknown", database: env.DB ? "configured" : "not_configured", request_id: requestId }); }
+    if (url.pathname === "/api/v1/health/db") { if (request.method !== "GET") return methodNotAllowed(requestId); if (!env.DB) return databaseUnavailable(requestId); try { const result = await env.DB.prepare("SELECT 1 AS ok").first(); return json({ status: result?.ok === 1 ? "ok" : "error", request_id: requestId }, result?.ok === 1 ? 200 : 503, requestId); } catch { return json({ status: "error", request_id: requestId }, 503, requestId); } }
+    if (url.pathname === "/api/v1/setup/owner") { if (request.method !== "POST") return methodNotAllowed(requestId); return setupOwner(request, env, requestId, json); }
+    if (url.pathname === "/api/v1/auth/login") { if (request.method !== "POST") return methodNotAllowed(requestId); return login(request, env, requestId, json); }
+    if (url.pathname === "/api/v1/auth/logout") { if (request.method !== "POST") return methodNotAllowed(requestId); return logout(request, env, requestId, json); }
+    if (url.pathname === "/api/v1/auth/forgot-password") { if (request.method !== "POST") return methodNotAllowed(requestId); return forgotPassword(request, env, requestId, json); }
+    if (url.pathname === "/api/v1/auth/reset-password") { if (request.method !== "POST") return methodNotAllowed(requestId); return resetPassword(request, env, requestId, json); }
+    if (url.pathname === "/api/v1/auth/verify") { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await requireAuth(request, env, requestId); if (auth instanceof Response) return auth; return json({ authenticated: true, user: auth.user_id ? { id: auth.user_id, email: auth.email, username: auth.username, role: auth.role } : null, request_id: requestId }); }
+    if (url.pathname === "/api/v1/auth/sessions") { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await requireAuth(request, env, requestId); if (auth instanceof Response) return auth; if (!env.DB || !auth.user_id) return json({ error: "SESSION_AUTH_REQUIRED", request_id: requestId }, 401, requestId); return listSessions(request, env, requestId, json, auth); }
+    const revokeSessionMatch = url.pathname.match(/^\/api\/v1\/auth\/sessions\/([^/]+)$/); if (revokeSessionMatch) { if (request.method !== "DELETE") return methodNotAllowed(requestId); const auth = await requireAuth(request, env, requestId); if (auth instanceof Response) return auth; if (!env.DB || !auth.user_id) return json({ error: "SESSION_AUTH_REQUIRED", request_id: requestId }, 401, requestId); return revokeSession(request, env, requestId, json, auth, decodeURIComponent(revokeSessionMatch[1])); }
+    if (url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/")) { if (request.method !== "GET") return methodNotAllowed(requestId); const access = await requirePrivateAccess(request, env, requestId); if (access instanceof Response) return access; return json({ private: true, status: "authorized", user: { id: access.user_id, username: access.username }, request_id: requestId }); }
+    if (url.pathname === "/api/v1/dashboard" || url.pathname.startsWith("/api/v1/dashboard/")) { if (request.method !== "GET") return methodNotAllowed(requestId); const access = await requirePrivateAccess(request, env, requestId); if (access instanceof Response) return access; return json({ private: true, status: "authorized", user: { id: access.user_id, username: access.username }, request_id: requestId }); }
+    if (url.pathname === "/api/v1/licenses/validate") { if (request.method !== "POST") return methodNotAllowed(requestId); const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError; return validateLicense(request, env, requestId, json); }
+    const licenseStatusMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/status$/); if (licenseStatusMatch) { if (request.method !== "PATCH") return methodNotAllowed(requestId); const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError; return updateLicenseStatus(request, env, requestId, json, decodeURIComponent(licenseStatusMatch[1])); }
+    const licenseAuditMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)\/audit$/); if (licenseAuditMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError; return getLicenseAudit(request, env, requestId, json, decodeURIComponent(licenseAuditMatch[1])); }
+    const userLicenseSummaryMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)\/licenses$/); if (userLicenseSummaryMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError; return getUserLicenseSummary(request, env, requestId, json, decodeURIComponent(userLicenseSummaryMatch[1])); }
+    const userMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)$/); if (userMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError; if (!env.DB) return databaseUnavailable(requestId); const userId = decodeURIComponent(userMatch[1]); if (!userId || userId.length > 128) return json({ error: "INVALID_USER_ID", request_id: requestId }, 400, requestId); try { const user = await env.DB.prepare("SELECT id, email, username, role, status, created_at, updated_at FROM users WHERE id = ?1 LIMIT 1").bind(userId).first(); if (!user) return json({ error: "USER_NOT_FOUND", request_id: requestId }, 404, requestId); return json({ user: { id: user.id, email: user.email, username: user.username, role: user.role, status: user.status, created_at: user.created_at, updated_at: user.updated_at }, request_id: requestId }); } catch { return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId); } }
+    const licenseMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)$/); if (licenseMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const authError = await requireAuth(request, env, requestId); if (authError instanceof Response) return authError; if (!env.DB) return databaseUnavailable(requestId); const licenseId = decodeURIComponent(licenseMatch[1]); if (!licenseId || licenseId.length > 128) return json({ error: "INVALID_LICENSE_ID", request_id: requestId }, 400, requestId); try { const license = await env.DB.prepare("SELECT id, user_id, product_id, status, expires_at, created_at, max_devices, last_seen, redeem_count, reset_count FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first(); if (!license) return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId); return json({ license: { id: license.id, user_id: license.user_id, product_id: license.product_id, status: license.status, expires_at: license.expires_at, created_at: license.created_at, max_devices: license.max_devices, last_seen: license.last_seen, redeem_count: license.redeem_count, reset_count: license.reset_count }, request_id: requestId }); } catch { return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId); } }
+    if (url.pathname === "/access-denied") { if (request.method !== "GET") return methodNotAllowed(requestId); return json({ error: "UNAUTHENTICATED", message: "You can't access this link", request_id: requestId }, 401, requestId); }
     return notFound(requestId);
   },
 };
