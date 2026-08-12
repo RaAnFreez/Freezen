@@ -14,6 +14,7 @@ import { listHwid, bindHwid, validateHwid, resetHwid, blockHwid, unblockHwid } f
 import { getDashboardOverview } from "./dashboard-overview.js";
 import { listProducts, getProduct, createProduct, updateProduct, deleteProduct } from "./products.js";
 import { listScripts, getScript, createScript, uploadScriptVersion, setScriptVersionActive, updateScript, deleteScript } from "./scripts.js";
+import { authorizeScriptAccess } from "./security/script-authorization.js";
 
 const SECURITY_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "strict-transport-security": "max-age=31536000; includeSubDomains" };
 const json = (data, status = 200, requestId = crypto.randomUUID(), extraHeaders = {}) => new Response(JSON.stringify(data), { status, headers: { ...SECURITY_HEADERS, ...extraHeaders, "x-request-id": requestId } });
@@ -117,6 +118,8 @@ export default {
     if (scriptVersionUploadMatch) { if (request.method !== "POST") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "scripts:write"); if (auth instanceof Response) return auth; return uploadScriptVersion(request, env, requestId, json, auth, decodeURIComponent(scriptVersionUploadMatch[1])); }
     const scriptVersionActiveMatch = url.pathname.match(/^\/api\/v1\/scripts\/([^/]+)\/versions\/([^/]+)\/active$/);
     if (scriptVersionActiveMatch) { if (request.method !== "PATCH") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "scripts:write"); if (auth instanceof Response) return auth; return setScriptVersionActive(request, env, requestId, json, auth, decodeURIComponent(scriptVersionActiveMatch[1]), decodeURIComponent(scriptVersionActiveMatch[2])); }
+    const scriptAuthorizeMatch = url.pathname.match(/^\/api\/v1\/scripts\/([^/]+)\/authorize$/);
+    if (scriptAuthorizeMatch) { if (request.method !== "POST") return methodNotAllowed(requestId); const auth = await requireAuth(request, env, requestId); if (auth instanceof Response) return auth; return authorizeScriptAccess(request, env, requestId, json, auth, decodeURIComponent(scriptAuthorizeMatch[1])); }
 
     if (url.pathname === "/access-denied") { if (request.method !== "GET") return methodNotAllowed(requestId); return json({ error: "UNAUTHENTICATED", message: "You can't access this link", request_id: requestId }, 401, requestId); }
     return notFound(requestId);
