@@ -9,57 +9,60 @@ function createDb(initial = []) {
   const licenses = new Set();
   const scripts = new Set();
 
+  const statement = (sql, values = []) => ({
+    all: async () => {
+      if (sql.includes("FROM products WHERE status =")) {
+        return { results: [...products.values()].filter((p) => p.status === values[0]) };
+      }
+      if (sql.includes("FROM products ORDER BY")) return { results: [...products.values()] };
+      throw new Error(`Unexpected all SQL: ${sql}`);
+    },
+    first: async () => {
+      if (sql.includes("SELECT id FROM products WHERE lower(name) = lower(?1) AND id != ?2")) {
+        return [...products.values()].find((p) => p.name.toLowerCase() === String(values[0]).toLowerCase() && p.id !== values[1]) ?? null;
+      }
+      if (sql.includes("SELECT id FROM products WHERE lower(name) = lower(?1)")) {
+        return [...products.values()].find((p) => p.name.toLowerCase() === String(values[0]).toLowerCase()) ?? null;
+      }
+      if (sql.includes("SELECT id, name, description, version, status, created_at, updated_at FROM products WHERE id")) {
+        return products.get(values[0]) ?? null;
+      }
+      if (sql.includes("SELECT id FROM products WHERE id")) return products.has(values[0]) ? { id: values[0] } : null;
+      if (sql.includes("SELECT (SELECT COUNT(*) FROM licenses")) {
+        return { licenses: licenses.has(values[0]) ? 1 : 0, scripts: scripts.has(values[0]) ? 1 : 0 };
+      }
+      throw new Error(`Unexpected first SQL: ${sql}`);
+    },
+    run: async () => {
+      if (sql.includes("INSERT INTO products")) {
+        const [id, name, description, version, status] = values;
+        products.set(id, { id, name, description, version, status, created_at: "now", updated_at: "now" });
+        return { meta: { changes: 1 } };
+      }
+      if (sql.includes("UPDATE products SET")) {
+        const [name, description, version, status, id] = values;
+        const current = products.get(id);
+        if (!current) return { meta: { changes: 0 } };
+        products.set(id, { ...current, name, description, version, status, updated_at: "now" });
+        return { meta: { changes: 1 } };
+      }
+      if (sql.includes("DELETE FROM products")) {
+        const changed = products.delete(values[0]) ? 1 : 0;
+        return { meta: { changes: changed } };
+      }
+      if (sql.includes("INSERT INTO audit_logs")) return { meta: { changes: 1 } };
+      throw new Error(`Unexpected run SQL: ${sql}`);
+    },
+  });
+
   return {
     products,
     licenses,
     scripts,
     prepare(sql) {
       return {
-        bind: (...values) => ({
-          all: async () => {
-            if (sql.includes("FROM products WHERE status =")) {
-              return { results: [...products.values()].filter((p) => p.status === values[0]) };
-            }
-            if (sql.includes("FROM products ORDER BY")) return { results: [...products.values()] };
-            throw new Error(`Unexpected all SQL: ${sql}`);
-          },
-          first: async () => {
-            if (sql.includes("SELECT id FROM products WHERE lower(name) = lower(?1) AND id != ?2")) {
-              return [...products.values()].find((p) => p.name.toLowerCase() === String(values[0]).toLowerCase() && p.id !== values[1]) ?? null;
-            }
-            if (sql.includes("SELECT id FROM products WHERE lower(name) = lower(?1)")) {
-              return [...products.values()].find((p) => p.name.toLowerCase() === String(values[0]).toLowerCase()) ?? null;
-            }
-            if (sql.includes("SELECT id, name, description, version, status, created_at, updated_at FROM products WHERE id")) {
-              return products.get(values[0]) ?? null;
-            }
-            if (sql.includes("SELECT id FROM products WHERE id")) return products.has(values[0]) ? { id: values[0] } : null;
-            if (sql.includes("SELECT (SELECT COUNT(*) FROM licenses")) {
-              return { licenses: licenses.has(values[0]) ? 1 : 0, scripts: scripts.has(values[0]) ? 1 : 0 };
-            }
-            throw new Error(`Unexpected first SQL: ${sql}`);
-          },
-          run: async () => {
-            if (sql.includes("INSERT INTO products")) {
-              const [id, name, description, version, status] = values;
-              products.set(id, { id, name, description, version, status, created_at: "now", updated_at: "now" });
-              return { meta: { changes: 1 } };
-            }
-            if (sql.includes("UPDATE products SET")) {
-              const [name, description, version, status, id] = values;
-              const current = products.get(id);
-              if (!current) return { meta: { changes: 0 } };
-              products.set(id, { ...current, name, description, version, status, updated_at: "now" });
-              return { meta: { changes: 1 } };
-            }
-            if (sql.includes("DELETE FROM products")) {
-              const changed = products.delete(values[0]) ? 1 : 0;
-              return { meta: { changes: changed } };
-            }
-            if (sql.includes("INSERT INTO audit_logs")) return { meta: { changes: 1 } };
-            throw new Error(`Unexpected run SQL: ${sql}`);
-          },
-        }),
+        ...statement(sql),
+        bind: (...values) => statement(sql, values),
       };
     },
   };
