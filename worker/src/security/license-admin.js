@@ -20,6 +20,15 @@ export async function updateLicenseStatus(request, env, requestId, json, license
   }
 
   try {
+    const current = await env.DB
+      .prepare("SELECT status FROM licenses WHERE id = ?1 LIMIT 1")
+      .bind(licenseId)
+      .first();
+
+    if (!current) {
+      return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId);
+    }
+
     const result = await env.DB
       .prepare("UPDATE licenses SET status = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2")
       .bind(status, licenseId)
@@ -28,6 +37,11 @@ export async function updateLicenseStatus(request, env, requestId, json, license
     if (!result?.meta || result.meta.changes !== 1) {
       return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId);
     }
+
+    await env.DB
+      .prepare("INSERT INTO license_audit_log (id, license_id, previous_status, new_status) VALUES (?1, ?2, ?3, ?4)")
+      .bind(crypto.randomUUID(), licenseId, current.status, status)
+      .run();
 
     return json({
       updated: true,
