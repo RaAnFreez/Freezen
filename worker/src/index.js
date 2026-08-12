@@ -13,6 +13,7 @@ import { generateLicense, redeemLicense, extendLicense } from "./security/licens
 import { listHwid, bindHwid, validateHwid, resetHwid, blockHwid, unblockHwid } from "./security/hwid.js";
 import { getDashboardOverview } from "./dashboard-overview.js";
 import { listProducts, getProduct, createProduct, updateProduct, deleteProduct } from "./products.js";
+import { listScripts, getScript, createScript, uploadScriptVersion, setScriptVersionActive, updateScript, deleteScript } from "./scripts.js";
 
 const SECURITY_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "strict-transport-security": "max-age=31536000; includeSubDomains" };
 const json = (data, status = 200, requestId = crypto.randomUUID(), extraHeaders = {}) => new Response(JSON.stringify(data), { status, headers: { ...SECURITY_HEADERS, ...extraHeaders, "x-request-id": requestId } });
@@ -96,6 +97,27 @@ export default {
     const userLicenseSummaryMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)\/licenses$/); if (userLicenseSummaryMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "users:read"); if (auth instanceof Response) return auth; return getUserLicenseSummary(request, env, requestId, json, decodeURIComponent(userLicenseSummaryMatch[1])); }
     const userMatch = url.pathname.match(/^\/api\/v1\/users\/([^/]+)$/); if (userMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "users:read"); if (auth instanceof Response) return auth; if (!env.DB) return databaseUnavailable(requestId); const userId = decodeURIComponent(userMatch[1]); if (!userId || userId.length > 128) return json({ error: "INVALID_USER_ID", request_id: requestId }, 400, requestId); try { const user = await env.DB.prepare("SELECT id, email, username, role, status, created_at, updated_at FROM users WHERE id = ?1 LIMIT 1").bind(userId).first(); if (!user) return json({ error: "USER_NOT_FOUND", request_id: requestId }, 404, requestId); return json({ user: { id: user.id, email: user.email, username: user.username, role: user.role, status: user.status, created_at: user.created_at, updated_at: user.updated_at }, request_id: requestId }); } catch { return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId); } }
     const licenseMatch = url.pathname.match(/^\/api\/v1\/licenses\/([^/]+)$/); if (licenseMatch) { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "licenses:read"); if (auth instanceof Response) return auth; if (!env.DB) return databaseUnavailable(requestId); const licenseId = decodeURIComponent(licenseMatch[1]); if (!licenseId || licenseId.length > 128) return json({ error: "INVALID_LICENSE_ID", request_id: requestId }, 400, requestId); try { const license = await env.DB.prepare("SELECT id, user_id, product_id, status, expires_at, created_at, max_devices, last_seen, redeem_count, reset_count, hwid_reset_at, hwid_reset_cooldown_until FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first(); if (!license) return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId); return json({ license: { id: license.id, user_id: license.user_id, product_id: license.product_id, status: license.status, expires_at: license.expires_at, created_at: license.created_at, max_devices: license.max_devices, last_seen: license.last_seen, redeem_count: license.redeem_count, reset_count: license.reset_count, hwid_reset_at: license.hwid_reset_at, hwid_reset_cooldown_until: license.hwid_reset_cooldown_until }, request_id: requestId }); } catch { return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId); } }
+
+    if (url.pathname === "/api/v1/scripts") {
+      const auth = await authorize(request, env, requestId, request.method === "GET" ? "scripts:read" : "scripts:write");
+      if (auth instanceof Response) return auth;
+      if (request.method === "GET") return listScripts(request, env, requestId, json);
+      if (request.method === "POST") return createScript(request, env, requestId, json, auth);
+      return methodNotAllowed(requestId);
+    }
+    const scriptMatch = url.pathname.match(/^\/api\/v1\/scripts\/([^/]+)$/);
+    if (scriptMatch) {
+      const scriptId = decodeURIComponent(scriptMatch[1]);
+      if (request.method === "GET") { const auth = await authorize(request, env, requestId, "scripts:read"); if (auth instanceof Response) return auth; return getScript(request, env, requestId, json, scriptId); }
+      if (request.method === "PATCH") { const auth = await authorize(request, env, requestId, "scripts:write"); if (auth instanceof Response) return auth; return updateScript(request, env, requestId, json, auth, scriptId); }
+      if (request.method === "DELETE") { const auth = await authorize(request, env, requestId, "scripts:write"); if (auth instanceof Response) return auth; return deleteScript(request, env, requestId, json, auth, scriptId); }
+      return methodNotAllowed(requestId);
+    }
+    const scriptVersionUploadMatch = url.pathname.match(/^\/api\/v1\/scripts\/([^/]+)\/versions$/);
+    if (scriptVersionUploadMatch) { if (request.method !== "POST") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "scripts:write"); if (auth instanceof Response) return auth; return uploadScriptVersion(request, env, requestId, json, auth, decodeURIComponent(scriptVersionUploadMatch[1])); }
+    const scriptVersionActiveMatch = url.pathname.match(/^\/api\/v1\/scripts\/([^/]+)\/versions\/([^/]+)\/active$/);
+    if (scriptVersionActiveMatch) { if (request.method !== "PATCH") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "scripts:write"); if (auth instanceof Response) return auth; return setScriptVersionActive(request, env, requestId, json, auth, decodeURIComponent(scriptVersionActiveMatch[1]), decodeURIComponent(scriptVersionActiveMatch[2])); }
+
     if (url.pathname === "/access-denied") { if (request.method !== "GET") return methodNotAllowed(requestId); return json({ error: "UNAUTHENTICATED", message: "You can't access this link", request_id: requestId }, 401, requestId); }
     return notFound(requestId);
   },
