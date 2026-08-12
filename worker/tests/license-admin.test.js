@@ -8,10 +8,24 @@ const authHeaders = { Authorization: `Bearer ${TOKEN}`, "content-type": "applica
 const db = (changes = 1) => ({
   prepare: (sql) => ({
     bind: (...values) => ({
+      first: async () => {
+        expect(sql).toContain("SELECT status FROM licenses");
+        return changes === 1 ? { status: "active" } : null;
+      },
       run: async () => {
-        expect(sql).toContain("UPDATE licenses SET status");
-        expect(values[0]).toMatch(/^(active|revoked)$/);
-        return { meta: { changes } };
+        if (sql.includes("UPDATE licenses SET status")) {
+          expect(values[0]).toMatch(/^(active|revoked)$/);
+          return { meta: { changes } };
+        }
+
+        if (sql.includes("INSERT INTO license_audit_log")) {
+          expect(values[1]).toBe("demo");
+          expect(values[2]).toBe("active");
+          expect(values[3]).toMatch(/^(active|revoked)$/);
+          return { meta: { changes: 1 } };
+        }
+
+        throw new Error(`Unexpected SQL: ${sql}`);
       },
     }),
   }),
