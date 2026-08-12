@@ -9,7 +9,15 @@ const db = ({ user = { id: "u1", external_id: "demo-external", display_name: "De
   prepare: (sql) => ({
     bind: () => ({
       first: async () => user,
-      all: async () => ({ results: licenses }),
+      all: async () => ({
+        results: licenses.map(({ id, status, expires_at, created_at, updated_at }) => ({
+          id,
+          status,
+          expires_at,
+          created_at,
+          updated_at,
+        })),
+      }),
     }),
   }),
 });
