@@ -8,8 +8,24 @@ async function loadOverview(range = "7d") {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const metrics = data.metrics ?? {};
-    const cards = [["Total Licenses", metrics.total_licenses], ["Active Licenses", metrics.active_licenses], ["Users", metrics.users], ["Script Requests", metrics.script_requests]];
-    root.querySelectorAll(".stat-card").forEach((card, index) => { const value = card.querySelector("strong"); const note = card.querySelector("small"); if (cards[index]) { value.textContent = String(cards[index][1] ?? 0); note.textContent = `Live · ${RANGE_LABELS[data.range] ?? "7D"}`; } });
+    const cards = [
+      ["total_licenses", metrics.total_licenses],
+      ["active_licenses", metrics.active_licenses],
+      ["expired_licenses", metrics.expired_licenses],
+      ["revoked_licenses", metrics.revoked_licenses],
+      ["users", metrics.users],
+      ["script_requests", metrics.script_requests],
+      ["safelinku_claims", metrics.safelinku_claims],
+      ["hwid_resets", metrics.hwid_resets],
+    ];
+    root.querySelectorAll(".stat-card").forEach((card, index) => {
+      const value = card.querySelector("strong");
+      const note = card.querySelector("small");
+      if (cards[index]) {
+        value.textContent = String(cards[index][1] ?? 0);
+        note.textContent = `Live · ${RANGE_LABELS[data.range] ?? "7D"}`;
+      }
+    });
     const empty = root.querySelector(".empty");
     if (empty) empty.innerHTML = renderActivity(data.recent_activity ?? []);
     const activityPanel = root.querySelector(".panel-grid .panel");
