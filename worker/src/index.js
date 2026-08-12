@@ -6,6 +6,7 @@ import { setupOwner } from "./security/owner-setup.js";
 import { createInvite, listInvites, updateInvite, redeemInvite } from "./security/invite.js";
 import { validateLicense } from "./security/license.js";
 import { updateLicenseStatus } from "./security/license-admin.js";
+import { listLicenses } from "./security/license-list.js";
 import { getLicenseAudit } from "./security/license-audit.js";
 import { getUserLicenseSummary } from "./security/license-summary.js";
 import { generateLicense, redeemLicense, extendLicense, resetLicenseHwid } from "./security/license-lifecycle.js";
@@ -52,10 +53,17 @@ export default {
     if (url.pathname === "/api/v1/dashboard" || url.pathname.startsWith("/api/v1/dashboard/")) { if (request.method !== "GET") return methodNotAllowed(requestId); const access = await requirePrivateAccess(request, env, requestId); if (access instanceof Response) return access; return json({ private: true, status: "authorized", user: { id: access.user_id, username: access.username }, request_id: requestId }); }
 
     if (url.pathname === "/api/v1/licenses") {
-      if (request.method !== "POST") return methodNotAllowed(requestId);
-      const auth = await authorize(request, env, requestId, "licenses:write");
-      if (auth instanceof Response) return auth;
-      return generateLicense(request, env, requestId, json, auth);
+      if (request.method === "GET") {
+        const auth = await authorize(request, env, requestId, "licenses:read");
+        if (auth instanceof Response) return auth;
+        return listLicenses(request, env, requestId, json);
+      }
+      if (request.method === "POST") {
+        const auth = await authorize(request, env, requestId, "licenses:write");
+        if (auth instanceof Response) return auth;
+        return generateLicense(request, env, requestId, json, auth);
+      }
+      return methodNotAllowed(requestId);
     }
     if (url.pathname === "/api/v1/licenses/redeem") {
       if (request.method !== "POST") return methodNotAllowed(requestId);
