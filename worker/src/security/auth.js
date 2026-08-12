@@ -52,7 +52,15 @@ export async function requireAuth(request, env, requestId) {
     return json({ error: "UNAUTHORIZED", request_id: requestId }, 403, requestId);
   }
 
-  return { user_id: null, legacy: true };
+  // Legacy bearer authentication is intentionally restricted to non-production
+  // development/test environments. Give it a synthetic authenticated principal so
+  // permission middleware can still exercise the same 401/403 path. Production
+  // never reaches this branch and therefore never accepts this principal.
+  return {
+    user_id: "legacy-test-principal",
+    role: env.AUTH_ROLE ?? "ADMIN",
+    legacy: true,
+  };
 }
 
 export { getSession };
