@@ -44,6 +44,13 @@ export async function authorizeScriptAccess(request, env, requestId, json, auth,
   if (requestedVersionId && requestedVersionId.length > MAX_ID_LENGTH) return errorResponse(json, 400, "INVALID_VERSION_ID", requestId);
 
   try {
+    const user = await env.DB.prepare("SELECT id,status FROM users WHERE id=?1 LIMIT 1").bind(auth.user_id).first();
+    if (!user) return errorResponse(json, 401, "ACCOUNT_NOT_FOUND", requestId);
+    if (normalizeStatus(user.status) !== "ACTIVE") {
+      await audit(env, auth.user_id, "SCRIPT_AUTHORIZATION_DENIED", scriptId, "DENIED", requestId, { reason: "ACCOUNT_INACTIVE" });
+      return errorResponse(json, 403, "ACCOUNT_INACTIVE", requestId);
+    }
+
     const script = await env.DB.prepare(
       "SELECT s.id,s.product_id,s.status,p.status AS product_status FROM scripts s JOIN products p ON p.id=s.product_id WHERE s.id=?1 LIMIT 1",
     ).bind(scriptId).first();
