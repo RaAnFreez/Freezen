@@ -3,15 +3,13 @@ import { login, logout, listSessions, revokeSession, forgotPassword, resetPasswo
 import { validateLicense } from "./security/license.js";
 import { updateLicenseStatus } from "./security/license-admin.js";
 import { getLicenseAudit } from "./security/license-audit.js";
-import { getUserLicenseSummary } from "./security/license-summary.js";
+import { getUserLicenseSummary } from "./security/user-license-summary.js";
 
 const SECURITY_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
   "x-content-type-options": "nosniff",
   "referrer-policy": "no-referrer",
-  "permissions-policy": "camera=(), microphone=(), geolocation=()",
-  "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
   "strict-transport-security": "max-age=31536000; includeSubDomains",
 };
 
