@@ -19,10 +19,11 @@ const db = {
 describe("Phase 22 — Get Key", () => {
   it("serves the public get-key page without authentication", async () => {
     const response = await getKeyPage("req-page");
+    const body = await response.text();
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
-    expect(await response.text()).toContain("FREZEN");
-    expect(await response.text()).toContain("SafeLinkU verification");
+    expect(body).toContain("FREZEN");
+    expect(body).toContain("SafeLinkU verification");
   });
 
   it("lists only active public products without sensitive fields", async () => {
