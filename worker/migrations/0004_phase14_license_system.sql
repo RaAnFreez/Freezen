@@ -1,7 +1,6 @@
 -- Phase 14 license lifecycle schema reconciliation.
--- Rebuild the legacy licenses table into the Phase 14 shape.
--- This migration is intentionally preserved as a single historical step;
--- it reads the legacy key_hash column and writes the canonical license_key_hash.
+-- The original Phase 4 migration set is intentionally preserved; this migration
+-- upgrades the earlier minimal licenses table without storing plaintext keys.
 
 PRAGMA foreign_keys = OFF;
 
@@ -25,13 +24,24 @@ CREATE TABLE licenses_phase14 (
 );
 
 INSERT INTO licenses_phase14 (
-  id, license_key_hash, product_id, user_id, status, created_at, updated_at,
-  expires_at, max_devices, current_hwid, discord_user_id, last_seen,
-  redeem_count, reset_count
+  id,
+  license_key_hash,
+  product_id,
+  user_id,
+  status,
+  created_at,
+  updated_at,
+  expires_at,
+  max_devices,
+  current_hwid,
+  discord_user_id,
+  last_seen,
+  redeem_count,
+  reset_count
 )
 SELECT
   id,
-  key_hash,
+  license_key_hash,
   NULL,
   user_id,
   CASE LOWER(status)
