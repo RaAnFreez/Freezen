@@ -55,8 +55,11 @@ async function ensureAuthSchema(db) {
   )`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_auth_rate_limits_updated ON auth_rate_limits(updated_at)").run();
 
-  await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email_owner_setup ON users(email) WHERE email IS NOT NULL").run();
-  await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_username_owner_setup ON users(username) WHERE username IS NOT NULL").run();
+  // Legacy D1 databases can contain duplicate nullable values. Do not make
+  // first-owner setup fail while rebuilding a unique index over old data.
+  // The setup flow performs explicit email/username conflict checks below.
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_users_email_owner_setup ON users(email)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_users_username_owner_setup ON users(username)").run();
 
   return columns;
 }
@@ -110,6 +113,11 @@ export async function setupOwner(request, env, requestId, json) {
 
     const existingEmail = await env.DB.prepare("SELECT id FROM users WHERE email = ?1 LIMIT 1").bind(email).first();
     if (existingEmail) return json({ error: "EMAIL_ALREADY_EXISTS", request_id: requestId }, 409, requestId);
+
+    if (username) {
+      const existingUsername = await env.DB.prepare("SELECT id FROM users WHERE username = ?1 LIMIT 1").bind(username).first();
+      if (existingUsername) return json({ error: "USERNAME_ALREADY_EXISTS", request_id: requestId }, 409, requestId);
+    }
 
     const passwordHash = await hashPassword(password);
     const id = crypto.randomUUID();
