@@ -1,4 +1,4 @@
--- Frezen Control System V3
+-- FREZEN CONTROL SYSTEM V3
 -- Phase 5B test/provisioning foundation.
 -- Creates a deterministic demo user/license for integration testing.
 -- Demo license key: FREZEN-PHASE5B-DEMO
