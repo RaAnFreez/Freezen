@@ -1,15 +1,21 @@
 -- Phase 14 license lifecycle schema reconciliation.
 -- The original Phase 4 migration set is intentionally preserved; this migration
 -- upgrades the earlier minimal licenses table without storing plaintext keys.
+--
+-- IMPORTANT: 0001_phase4_database.sql uses `key_hash` and a NOT NULL
+-- `product_id`. The Phase 14 table becomes the canonical schema, so the
+-- legacy hash is copied into the canonical `key_hash` column and product_id
+-- is preserved when present. This keeps the migration chain compatible with
+-- the actual production foundation schema.
 
 PRAGMA foreign_keys = OFF;
 
 CREATE TABLE licenses_phase14 (
   id TEXT PRIMARY KEY,
-  license_key_hash TEXT NOT NULL UNIQUE,
+  key_hash TEXT NOT NULL UNIQUE,
   product_id TEXT,
   user_id TEXT,
-  status TEXT NOT NULL DEFAULT 'unused' CHECK (status IN ('unused','active','expired','revoked','banned')),
+  status TEXT NOT NULL DEFAULT 'UNUSED' CHECK (status IN ('UNUSED','ACTIVE','EXPIRED','REVOKED','BANNED')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires_at TEXT,
@@ -25,7 +31,7 @@ CREATE TABLE licenses_phase14 (
 
 INSERT INTO licenses_phase14 (
   id,
-  license_key_hash,
+  key_hash,
   product_id,
   user_id,
   status,
@@ -41,24 +47,25 @@ INSERT INTO licenses_phase14 (
 )
 SELECT
   id,
-  license_key_hash,
-  NULL,
+  key_hash,
+  product_id,
   user_id,
-  CASE LOWER(status)
-    WHEN 'active' THEN 'active'
-    WHEN 'revoked' THEN 'revoked'
-    WHEN 'expired' THEN 'expired'
-    ELSE 'unused'
+  CASE UPPER(status)
+    WHEN 'ACTIVE' THEN 'ACTIVE'
+    WHEN 'REVOKED' THEN 'REVOKED'
+    WHEN 'EXPIRED' THEN 'EXPIRED'
+    WHEN 'BANNED' THEN 'BANNED'
+    ELSE 'UNUSED'
   END,
   created_at,
   COALESCE(updated_at, created_at),
   expires_at,
-  1,
-  NULL,
-  NULL,
-  NULL,
-  0,
-  0
+  COALESCE(max_devices, 1),
+  current_hwid,
+  discord_user_id,
+  last_seen,
+  COALESCE(redeem_count, 0),
+  COALESCE(reset_count, 0)
 FROM licenses;
 
 DROP TABLE licenses;
