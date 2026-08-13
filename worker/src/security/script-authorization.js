@@ -1,3 +1,5 @@
+import { issueDeliveryToken } from "./secure-delivery.js";
+
 const encoder = new TextEncoder();
 const MAX_ID_LENGTH = 128;
 const MAX_HWID_LENGTH = 512;
@@ -122,6 +124,14 @@ export async function authorizeScriptAccess(request, env, requestId, json, auth,
       if (!version) return errorResponse(json, 409, "ACTIVE_SCRIPT_VERSION_NOT_FOUND", requestId);
     }
 
+    let deliveryToken;
+    try {
+      deliveryToken = await issueDeliveryToken(env, { user_id: auth.user_id, license_id: licenseId, script_id: scriptId, version_id: version.id, device_id: device.id });
+    } catch {
+      await audit(env, auth.user_id, "SCRIPT_AUTHORIZATION_DENIED", scriptId, "ERROR", requestId, { reason: "DELIVERY_SECRET_NOT_CONFIGURED" });
+      return errorResponse(json, 503, "DELIVERY_SECRET_NOT_CONFIGURED", requestId);
+    }
+
     await env.DB.batch([
       env.DB.prepare("UPDATE devices SET last_seen=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?1").bind(device.id),
       env.DB.prepare("UPDATE licenses SET current_hwid=?1,last_seen=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?2 AND user_id=?3").bind(hwidHash, licenseId, auth.user_id),
@@ -130,6 +140,7 @@ export async function authorizeScriptAccess(request, env, requestId, json, auth,
 
     return json({
       authorized: true,
+      delivery: { token: deliveryToken, expires_in: 60, method: "POST", endpoint: `/api/v1/scripts/${encodeURIComponent(scriptId)}/deliver` },
       license: { id: license.id, product_id: license.product_id, status: "ACTIVE", expires_at: license.expires_at },
       script: { id: script.id, product_id: script.product_id, status: "ACTIVE" },
       version: { id: version.id, version: version.version, status: "ACTIVE" },
