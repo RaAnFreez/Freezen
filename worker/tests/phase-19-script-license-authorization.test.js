@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { authorizeScriptAccess } from "../src/security/script-authorization.js";
 
 const auth = { user_id: "u1", role: "SUPPORT" };
+const DELIVERY_ENV = { FREZEN_MASTER_SECRET: "test-secret-abcdefghijklmnopqrstuvwxyz-0123456789" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status });
 const request = (body) => new Request("https://frezen.test/api/v1/scripts/s1/authorize", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
 
@@ -31,7 +32,6 @@ function dbMock(overrides = {}) {
   };
 }
 
-const env = {};
 const base = { license_id: "l1", hwid: "android-device-1" };
 
 describe("Phase 19 — Script ↔ License Authorization", () => {
@@ -98,7 +98,8 @@ describe("Phase 19 — Script ↔ License Authorization", () => {
   });
 
   it("authorizes only when every server-side condition matches", async () => {
-    const response = await authorizeScriptAccess(request(base), { DB: dbMock({ device: { id: "d1", status: "ACTIVE" } }) }, "req-ok", json, auth, "s1");
+    const env = { DB: dbMock({ device: { id: "d1", status: "ACTIVE" } }), ...DELIVERY_ENV };
+    const response = await authorizeScriptAccess(request(base), env, "req-ok", json, auth, "s1");
     const data = await response.json();
     expect(response.status).toBe(200);
     expect(data.authorized).toBe(true);
@@ -106,5 +107,7 @@ describe("Phase 19 — Script ↔ License Authorization", () => {
     expect(data.script.id).toBe("s1");
     expect(data.version.id).toBe("v1");
     expect(data.device.id).toBe("d1");
+    expect(data.delivery.expires_in).toBe(60);
+    expect(data.delivery.token).toEqual(expect.any(String));
   });
 });
