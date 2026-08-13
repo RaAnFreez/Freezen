@@ -3,6 +3,81 @@ import { hashPassword } from "./session-auth.js";
 const OWNER_ROLE = "OWNER";
 const ACTIVE_STATUS = "ACTIVE";
 
+const AUTH_COLUMNS = {
+  email: "email TEXT COLLATE NOCASE",
+  username: "username TEXT COLLATE NOCASE",
+  password_hash: "password_hash TEXT",
+  role: "role TEXT NOT NULL DEFAULT 'SUPPORT'",
+  status: "status TEXT NOT NULL DEFAULT 'ACTIVE'",
+  last_login_at: "last_login_at TEXT",
+};
+
+const ensureAuthSchema = async (db) => {
+  const result = await db.prepare("PRAGMA table_info(users)").all();
+  const columns = new Set((result?.results ?? []).map((row) => row.name));
+
+  for (const [name, definition] of Object.entries(AUTH_COLUMNS)) {
+    if (!columns.has(name)) await db.prepare(`ALTER TABLE users ADD COLUMN ${definition}`).run();
+  }
+
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      revoked_at TEXT,
+      last_seen_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)").run();
+
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      used_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_password_reset_user_expires ON password_reset_tokens(user_id, expires_at)").run();
+
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS auth_rate_limits (
+      identifier TEXT PRIMARY KEY,
+      window_started_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_auth_rate_limits_updated ON auth_rate_limits(updated_at)").run();
+
+  await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email_owner_setup ON users(email) WHERE email IS NOT NULL").run();
+  await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_username_owner_setup ON users(username) WHERE username IS NOT NULL").run();
+
+  return columns;
+};
+
+const insertOwner = async (db, columns, { id, email, username, passwordHash }) => {
+  const values = { id, email, username, password_hash: passwordHash, role: OWNER_ROLE, status: ACTIVE_STATUS };
+  if (columns.has("external_id")) values.external_id = `owner:${id}`;
+  if (columns.has("display_name")) values.display_name = username || email;
+
+  const orderedColumns = Object.keys(values).filter((column) => columns.has(column));
+  const placeholders = orderedColumns.map((_, index) => `?${index + 1}`).join(", ");
+  const params = orderedColumns.map((column) => values[column]);
+
+  await db.prepare(
+    `INSERT INTO users (${orderedColumns.join(", ")}) VALUES (${placeholders})`,
+  ).bind(...params).run();
+};
+
 export async function setupOwner(request, env, requestId, json) {
   if (!env.DB) return json({ error: "DATABASE_UNAVAILABLE", request_id: requestId }, 503, requestId);
 
@@ -42,6 +117,7 @@ export async function setupOwner(request, env, requestId, json) {
   }
 
   try {
+    const columns = await ensureAuthSchema(env.DB);
     const existingOwner = await env.DB.prepare("SELECT id FROM users WHERE role = ?1 LIMIT 1").bind(OWNER_ROLE).first();
     if (existingOwner) return json({ error: "OWNER_ALREADY_EXISTS", request_id: requestId }, 409, requestId);
 
@@ -50,9 +126,7 @@ export async function setupOwner(request, env, requestId, json) {
 
     const passwordHash = await hashPassword(password);
     const id = crypto.randomUUID();
-    await env.DB.prepare(
-      "INSERT INTO users (id, email, username, password_hash, role, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-    ).bind(id, email, username, passwordHash, OWNER_ROLE, ACTIVE_STATUS).run();
+    await insertOwner(env.DB, columns, { id, email, username, passwordHash });
 
     return json({ created: true, owner: { id, email, username, role: OWNER_ROLE, status: ACTIVE_STATUS }, request_id: requestId }, 201, requestId);
   } catch {
