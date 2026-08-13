@@ -85,7 +85,8 @@ describe("Phase 7 owner setup", () => {
     assert.ok(insert);
     assert.match(insert.sql, /external_id/);
     assert.match(insert.sql, /display_name/);
-    assert.match(insert.params[insert.params.length - 2], /^OWNER$/);
+    const roleIndex = insert.sql.split(", ").indexOf("role");
+    assert.equal(insert.params[roleIndex], "OWNER");
   });
 
   it("rejects setup when an owner already exists", async () => {
