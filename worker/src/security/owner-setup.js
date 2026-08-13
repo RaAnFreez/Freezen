@@ -17,7 +17,10 @@ async function ensureAuthSchema(db) {
   const columns = new Set((result?.results ?? []).map((row) => row.name));
 
   for (const [name, definition] of Object.entries(AUTH_COLUMNS)) {
-    if (!columns.has(name)) await db.prepare(`ALTER TABLE users ADD COLUMN ${definition}`).run();
+    if (!columns.has(name)) {
+      await db.prepare(`ALTER TABLE users ADD COLUMN ${definition}`).run();
+      columns.add(name);
+    }
   }
 
   await db.prepare(`CREATE TABLE IF NOT EXISTS sessions (
