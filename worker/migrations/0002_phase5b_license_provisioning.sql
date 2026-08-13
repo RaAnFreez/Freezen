@@ -1,8 +1,8 @@
--- FREZEN CONTROL SYSTEM V3
+-- Frezen Control System V3
 -- Phase 5B test/provisioning foundation.
--- At this point in the ordered migration chain the historical
--- 0001_initial.sql licenses table is still authoritative. Phase 14 later
--- reconciles it into the canonical lifecycle schema.
+-- Creates a deterministic demo user/license for integration testing.
+-- Demo license key: FREZEN-PHASE5B-DEMO
+-- Only its SHA-256 hash is stored in D1.
 
 INSERT OR IGNORE INTO users (id, external_id, display_name)
 VALUES ('demo-user-phase5b', 'demo-phase5b', 'Frezen Demo User');

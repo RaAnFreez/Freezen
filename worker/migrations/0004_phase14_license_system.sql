@@ -1,17 +1,15 @@
 -- Phase 14 license lifecycle schema reconciliation.
--- The repository contains a historical 0001_initial.sql migration whose
--- licenses table uses license_key_hash and does not have product_id or the
--- later lifecycle columns. Do not assume columns introduced by later phases
--- exist while reconciling that legacy table.
+-- The original Phase 4 migration set is intentionally preserved; this migration
+-- upgrades the earlier minimal licenses table without storing plaintext keys.
 
 PRAGMA foreign_keys = OFF;
 
 CREATE TABLE licenses_phase14 (
   id TEXT PRIMARY KEY,
-  key_hash TEXT NOT NULL UNIQUE,
+  license_key_hash TEXT NOT NULL UNIQUE,
   product_id TEXT,
   user_id TEXT,
-  status TEXT NOT NULL DEFAULT 'UNUSED' CHECK (status IN ('UNUSED','ACTIVE','EXPIRED','REVOKED','BANNED')),
+  status TEXT NOT NULL DEFAULT 'unused' CHECK (status IN ('unused','active','expired','revoked','banned')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires_at TEXT,
@@ -25,11 +23,9 @@ CREATE TABLE licenses_phase14 (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- Read only columns guaranteed by the historical 0001_initial schema.
--- Later lifecycle fields receive safe defaults in the canonical table.
 INSERT INTO licenses_phase14 (
   id,
-  key_hash,
+  license_key_hash,
   product_id,
   user_id,
   status,
@@ -49,10 +45,10 @@ SELECT
   NULL,
   user_id,
   CASE LOWER(status)
-    WHEN 'active' THEN 'ACTIVE'
-    WHEN 'revoked' THEN 'REVOKED'
-    WHEN 'expired' THEN 'EXPIRED'
-    ELSE 'UNUSED'
+    WHEN 'active' THEN 'active'
+    WHEN 'revoked' THEN 'revoked'
+    WHEN 'expired' THEN 'expired'
+    ELSE 'unused'
   END,
   created_at,
   COALESCE(updated_at, created_at),
