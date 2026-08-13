@@ -83,10 +83,11 @@ describe("Phase 7 owner setup", () => {
     assert.equal(body.created, true);
     const insert = db.calls.find((call) => call.op === "run" && call.sql.startsWith("INSERT INTO users"));
     assert.ok(insert);
-    assert.match(insert.sql, /external_id/);
-    assert.match(insert.sql, /display_name/);
-    const roleIndex = insert.sql.split(", ").indexOf("role");
-    assert.equal(insert.params[roleIndex], "OWNER");
+    const columnsPart = insert.sql.slice(insert.sql.indexOf("(") + 1, insert.sql.indexOf(")"));
+    const insertedColumns = columnsPart.split(", ");
+    assert.ok(insertedColumns.includes("external_id"));
+    assert.ok(insertedColumns.includes("display_name"));
+    assert.equal(insert.params[insertedColumns.indexOf("role")], "OWNER");
   });
 
   it("rejects setup when an owner already exists", async () => {
