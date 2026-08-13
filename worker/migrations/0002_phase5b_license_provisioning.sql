@@ -1,18 +1,16 @@
--- Frezen Control System V3
+-- FREZEN CONTROL SYSTEM V3
 -- Phase 5B test/provisioning foundation.
 -- Creates a deterministic demo user/license for integration testing.
--- Only the SHA-256 hash is stored in D1.
+-- Demo license key: FREZEN-PHASE5B-DEMO
+-- Only its SHA-256 hash is stored in D1.
 
--- The first Frezen foundation migration creates the legacy licenses table
--- with key_hash (not license_key_hash). Keep this migration compatible with
--- that durable schema so the chain can reach the later reconciliation step.
 INSERT OR IGNORE INTO users (id, external_id, display_name)
 VALUES ('demo-user-phase5b', 'demo-phase5b', 'Frezen Demo User');
 
 INSERT OR IGNORE INTO licenses (
   id,
   user_id,
-  key_hash,
+  license_key_hash,
   status,
   expires_at
 )
