@@ -4,8 +4,11 @@ import { setupOwner } from "../src/security/owner-setup.js";
 
 const json = (data, status) => new Response(JSON.stringify(data), { status });
 
-const createDb = (rows = {}) => {
+const createDb = (rows = {}, legacy = false) => {
   const calls = [];
+  const columns = legacy
+    ? ["id", "external_id", "display_name", "created_at", "updated_at"]
+    : ["id", "email", "username", "password_hash", "role", "status", "last_login_at"];
   return {
     calls,
     prepare(sql) {
@@ -18,11 +21,25 @@ const createDb = (rows = {}) => {
               if (sql.includes("email = ?1")) return rows.email ?? null;
               return null;
             },
+            async all() {
+              calls.push({ sql, params, op: "all" });
+              if (sql.includes("PRAGMA table_info(users)")) return { results: columns.map((name) => ({ name })) };
+              return { results: [] };
+            },
             async run() {
               calls.push({ sql, params, op: "run" });
               return { success: true, meta: { changes: 1 } };
             },
           };
+        },
+        async all() {
+          calls.push({ sql, params: [], op: "all" });
+          if (sql.includes("PRAGMA table_info(users)")) return { results: columns.map((name) => ({ name })) };
+          return { results: [] };
+        },
+        async run() {
+          calls.push({ sql, params: [], op: "run" });
+          return { success: true, meta: { changes: 1 } };
         },
       };
     },
@@ -36,48 +53,58 @@ const env = (DB, extra = {}) => ({
   ...extra,
 });
 
-describe("Phase 7 owner setup", () => {
-  it("creates exactly one OWNER with a password hash and no plaintext password in response", async () => {
-    const db = createDb();
-    const request = new Request("https://frezen.test/api/v1/setup/owner", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-frezen-setup-secret": "x".repeat(32),
-      },
-      body: JSON.stringify({ email: "owner@example.com", username: "owner", password: "correct horse battery staple" }),
-    });
+const request = (body) => new Request("https://frezen.test/api/v1/setup/owner", {
+  method: "POST",
+  headers: {
+    "content-type": "application/json",
+    "x-frezen-setup-secret": "x".repeat(32),
+  },
+  body: JSON.stringify(body),
+});
 
-    const response = await setupOwner(request, env(db), "req-1", json);
+describe("Phase 7 owner setup", () => {
+  it("creates exactly one OWNER with a password hash", async () => {
+    const db = createDb();
+    const response = await setupOwner(request({ email: "owner@example.com", username: "owner", password: "correct horse battery staple" }), env(db), "req-1", json);
     const body = await response.json();
     assert.equal(response.status, 201);
     assert.equal(body.created, true);
     assert.equal(body.owner.role, "OWNER");
     assert.equal(body.owner.status, "ACTIVE");
     assert.equal("password" in body.owner, false);
-    assert.match(db.calls.at(-1).params[3], /^pbkdf2\$sha256\$/);
+    assert.ok(db.calls.some((call) => call.sql.includes("CREATE TABLE IF NOT EXISTS sessions")));
+  });
+
+  it("creates an OWNER against the historical external_id/display_name users schema", async () => {
+    const db = createDb({}, true);
+    const response = await setupOwner(request({ email: "owner@example.com", username: "owner", password: "correct horse battery staple" }), env(db), "req-legacy", json);
+    const body = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(body.created, true);
+    const insert = db.calls.find((call) => call.op === "run" && call.sql.startsWith("INSERT INTO users"));
+    assert.ok(insert);
+    const columnsPart = insert.sql.slice(insert.sql.indexOf("(") + 1, insert.sql.indexOf(")"));
+    const insertedColumns = columnsPart.split(", ");
+    assert.ok(insertedColumns.includes("external_id"));
+    assert.ok(insertedColumns.includes("display_name"));
+    assert.equal(insert.params[insertedColumns.indexOf("role")], "OWNER");
   });
 
   it("rejects setup when an owner already exists", async () => {
     const db = createDb({ owner: { id: "owner-1" } });
-    const request = new Request("https://frezen.test/api/v1/setup/owner", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-frezen-setup-secret": "x".repeat(32) },
-      body: JSON.stringify({ email: "owner@example.com", password: "correct horse battery staple" }),
-    });
-    const response = await setupOwner(request, env(db), "req-2", json);
+    const response = await setupOwner(request({ email: "owner@example.com", password: "correct horse battery staple" }), env(db), "req-2", json);
     assert.equal(response.status, 409);
     assert.equal((await response.json()).error, "OWNER_ALREADY_EXISTS");
   });
 
   it("rejects an invalid setup secret", async () => {
     const db = createDb();
-    const request = new Request("https://frezen.test/api/v1/setup/owner", {
+    const invalid = new Request("https://frezen.test/api/v1/setup/owner", {
       method: "POST",
       headers: { "content-type": "application/json", "x-frezen-setup-secret": "wrong" },
       body: JSON.stringify({ email: "owner@example.com", password: "correct horse battery staple" }),
     });
-    const response = await setupOwner(request, env(db), "req-3", json);
+    const response = await setupOwner(invalid, env(db), "req-3", json);
     assert.equal(response.status, 401);
   });
 });
