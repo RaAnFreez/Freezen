@@ -1,5 +1,6 @@
 import worker from "./index.js";
 import { requirePrivateAccess } from "./security/private-access.js";
+import { runtimeDiagnostics } from "./security/runtime-diagnostics.js";
 
 const PAGE_HEADERS = {
   "content-type": "text/html; charset=utf-8",
@@ -11,6 +12,7 @@ const PAGE_HEADERS = {
 
 const html = (body, status = 200) => new Response(body, { status, headers: PAGE_HEADERS });
 const redirect = (location) => new Response(null, { status: 302, headers: { location, "cache-control": "no-store" } });
+const diagnostics = (env) => new Response(JSON.stringify({ ...runtimeDiagnostics(env, crypto.randomUUID()), temporary: true }), { status: 200, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" } });
 
 const shell = (title, content, script = "") => `<!doctype html>
 <html lang="en">
@@ -78,6 +80,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/") return redirect("/login");
     if (request.method === "GET" && (url.pathname === "/login" || url.pathname === "/login/")) return html(LOGIN_HTML);
     if (request.method === "GET" && (url.pathname === "/setup/owner" || url.pathname === "/setup/owner/")) return html(OWNER_SETUP_HTML);
+    if (request.method === "GET" && url.pathname === "/api/v1/setup/owner/diagnostics") return diagnostics(env);
 
     if (url.pathname === "/dashboard") {
       const access = await requirePrivateAccess(request, env, crypto.randomUUID());
