@@ -6,9 +6,9 @@ const json = (data, status) => new Response(JSON.stringify(data), { status });
 
 const createDb = (rows = {}, legacy = false) => {
   const calls = [];
-  const columns = legacy
+  const columns = new Set(legacy
     ? ["id", "external_id", "display_name", "created_at", "updated_at"]
-    : ["id", "email", "username", "password_hash", "role", "status", "last_login_at"];
+    : ["id", "email", "username", "password_hash", "role", "status", "last_login_at"]);
   return {
     calls,
     prepare(sql) {
@@ -23,18 +23,20 @@ const createDb = (rows = {}, legacy = false) => {
             },
             async all() {
               calls.push({ sql, params, op: "all" });
-              if (sql.includes("PRAGMA table_info(users)")) return { results: columns.map((name) => ({ name })) };
+              if (sql.includes("PRAGMA table_info(users)")) return { results: [...columns].map((name) => ({ name })) };
               return { results: [] };
             },
             async run() {
               calls.push({ sql, params, op: "run" });
+              const alter = sql.match(/^ALTER TABLE users ADD COLUMN (\w+)/i);
+              if (alter) columns.add(alter[1]);
               return { success: true, meta: { changes: 1 } };
             },
           };
         },
         async all() {
           calls.push({ sql, params: [], op: "all" });
-          if (sql.includes("PRAGMA table_info(users)")) return { results: columns.map((name) => ({ name })) };
+          if (sql.includes("PRAGMA table_info(users)")) return { results: [...columns].map((name) => ({ name })) };
           return { results: [] };
         },
         async run() {
