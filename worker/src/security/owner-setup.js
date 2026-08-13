@@ -12,56 +12,95 @@ const AUTH_COLUMNS = {
   last_login_at: "last_login_at TEXT",
 };
 
-async function ensureAuthSchema(db) {
-  const result = await db.prepare("PRAGMA table_info(users)").all();
-  const columns = new Set((result?.results ?? []).map((row) => row.name));
+async function tableColumns(db, tableName) {
+  const result = await db.prepare(`PRAGMA table_info(${tableName})`).all();
+  return new Set((result?.results ?? []).map((row) => row.name));
+}
 
-  for (const [name, definition] of Object.entries(AUTH_COLUMNS)) {
+async function ensureColumns(db, tableName, definitions) {
+  const columns = await tableColumns(db, tableName);
+  for (const [name, definition] of Object.entries(definitions)) {
     if (!columns.has(name)) {
-      await db.prepare(`ALTER TABLE users ADD COLUMN ${definition}`).run();
+      await db.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`).run();
       columns.add(name);
     }
   }
+  return columns;
+}
 
+async function ensureAuthSchema(db) {
+  let users = await tableColumns(db, "users");
+  if (!users.size) throw new Error("USERS_TABLE_MISSING");
+
+  for (const [name, definition] of Object.entries(AUTH_COLUMNS)) {
+    if (!users.has(name)) {
+      await db.prepare(`ALTER TABLE users ADD COLUMN ${definition}`).run();
+      users.add(name);
+    }
+  }
+
+  // Older production databases may already contain these tables with a
+  // slightly different shape. CREATE TABLE IF NOT EXISTS alone does not
+  // reconcile an existing table, so inspect it and add only missing,
+  // nullable-compatible columns. This avoids rebuilding or deleting data.
   await db.prepare(`CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    token_hash TEXT NOT NULL UNIQUE,
-    expires_at TEXT NOT NULL,
+    user_id TEXT,
+    token_hash TEXT,
+    expires_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     revoked_at TEXT,
-    last_seen_at TEXT,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    last_seen_at TEXT
   )`).run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)").run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)").run();
+  const sessions = await ensureColumns(db, "sessions", {
+    user_id: "user_id TEXT",
+    token_hash: "token_hash TEXT",
+    expires_at: "expires_at TEXT",
+    created_at: "created_at TEXT",
+    revoked_at: "revoked_at TEXT",
+    last_seen_at: "last_seen_at TEXT",
+  });
+  if (sessions.has("user_id")) await db.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)").run();
+  if (sessions.has("expires_at")) await db.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)").run();
 
   await db.prepare(`CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    token_hash TEXT NOT NULL UNIQUE,
-    expires_at TEXT NOT NULL,
+    user_id TEXT,
+    token_hash TEXT,
+    expires_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    used_at TEXT,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    used_at TEXT
   )`).run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS idx_password_reset_user_expires ON password_reset_tokens(user_id, expires_at)").run();
+  const resetTokens = await ensureColumns(db, "password_reset_tokens", {
+    user_id: "user_id TEXT",
+    token_hash: "token_hash TEXT",
+    expires_at: "expires_at TEXT",
+    created_at: "created_at TEXT",
+    used_at: "used_at TEXT",
+  });
+  if (resetTokens.has("user_id") && resetTokens.has("expires_at")) {
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_password_reset_user_expires ON password_reset_tokens(user_id, expires_at)").run();
+  }
 
   await db.prepare(`CREATE TABLE IF NOT EXISTS auth_rate_limits (
     identifier TEXT PRIMARY KEY,
-    window_started_at TEXT NOT NULL,
-    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    window_started_at TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`).run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS idx_auth_rate_limits_updated ON auth_rate_limits(updated_at)").run();
+  const rateLimits = await ensureColumns(db, "auth_rate_limits", {
+    window_started_at: "window_started_at TEXT",
+    attempts: "attempts INTEGER NOT NULL DEFAULT 0",
+    updated_at: "updated_at TEXT",
+  });
+  if (rateLimits.has("updated_at")) await db.prepare("CREATE INDEX IF NOT EXISTS idx_auth_rate_limits_updated ON auth_rate_limits(updated_at)").run();
 
   // Legacy D1 databases can contain duplicate nullable values. Do not make
   // first-owner setup fail while rebuilding a unique index over old data.
-  // The setup flow performs explicit email/username conflict checks below.
-  await db.prepare("CREATE INDEX IF NOT EXISTS idx_users_email_owner_setup ON users(email)").run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS idx_users_username_owner_setup ON users(username)").run();
+  if (users.has("email")) await db.prepare("CREATE INDEX IF NOT EXISTS idx_users_email_owner_setup ON users(email)").run();
+  if (users.has("username")) await db.prepare("CREATE INDEX IF NOT EXISTS idx_users_username_owner_setup ON users(username)").run();
 
-  return columns;
+  return users;
 }
 
 async function insertOwner(db, columns, values) {
@@ -106,25 +145,34 @@ export async function setupOwner(request, env, requestId, json) {
   if (password.length < 12 || password.length > 256) return json({ error: "INVALID_PASSWORD", request_id: requestId }, 400, requestId);
   if (username && (username.length < 3 || username.length > 64)) return json({ error: "INVALID_USERNAME", request_id: requestId }, 400, requestId);
 
+  let stage = "schema";
   try {
     const columns = await ensureAuthSchema(env.DB);
+
+    stage = "owner-check";
     const existingOwner = await env.DB.prepare("SELECT id FROM users WHERE role = ?1 LIMIT 1").bind(OWNER_ROLE).first();
     if (existingOwner) return json({ error: "OWNER_ALREADY_EXISTS", request_id: requestId }, 409, requestId);
 
+    stage = "email-check";
     const existingEmail = await env.DB.prepare("SELECT id FROM users WHERE email = ?1 LIMIT 1").bind(email).first();
     if (existingEmail) return json({ error: "EMAIL_ALREADY_EXISTS", request_id: requestId }, 409, requestId);
 
     if (username) {
+      stage = "username-check";
       const existingUsername = await env.DB.prepare("SELECT id FROM users WHERE username = ?1 LIMIT 1").bind(username).first();
       if (existingUsername) return json({ error: "USERNAME_ALREADY_EXISTS", request_id: requestId }, 409, requestId);
     }
 
+    stage = "password-hash";
     const passwordHash = await hashPassword(password);
     const id = crypto.randomUUID();
+
+    stage = "owner-insert";
     await insertOwner(env.DB, columns, { id, email, username, passwordHash });
 
     return json({ created: true, owner: { id, email, username, role: OWNER_ROLE, status: ACTIVE_STATUS }, request_id: requestId }, 201, requestId);
-  } catch {
-    return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId);
+  } catch (error) {
+    console.error("Owner setup failed", { request_id: requestId, stage, error: error instanceof Error ? error.message : String(error) });
+    return json({ error: "DATABASE_ERROR", stage, request_id: requestId }, 503, requestId);
   }
 }
