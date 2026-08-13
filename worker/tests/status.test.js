@@ -87,7 +87,7 @@ describe("Frezen Worker", () => {
         expect(sql).toContain("FROM licenses");
         expect(sql).not.toContain("key_hash");
         expect(params).toEqual(["license-123"]);
-        return { first: async () => ({ id: "license-123", user_id: "user-1", product_id: "product-1", status: "ACTIVE", expires_at: "2027-08-11T00:00:00.000Z", created_at: "2026-08-11T00:00:00.000Z", max_devices: 1, last_seen: null, redeem_count: 0, reset_count: 0, key_hash: "must-not-leak" }) };
+        return { first: async () => ({ id: "license-123", user_id: "user-1", product_id: "product-1", status: "ACTIVE", expires_at: "2027-08-11T00:00:00.000Z", created_at: "2026-08-11T00:00:00.000Z", max_devices: 1, last_seen: null, redeem_count: 0, reset_count: 0 }) };
       },
     });
     const response = await worker.fetch(new Request("https://frezen.test/api/v1/licenses/license-123", { headers: authHeaders }), env({ DB: { prepare } }));
