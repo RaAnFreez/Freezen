@@ -1,12 +1,8 @@
 -- Phase 14 license lifecycle schema reconciliation.
--- The original Phase 4 migration set is intentionally preserved; this migration
--- upgrades the earlier minimal licenses table without storing plaintext keys.
---
--- IMPORTANT: 0001_phase4_database.sql uses `key_hash` and a NOT NULL
--- `product_id`. The Phase 14 table becomes the canonical schema, so the
--- legacy hash is copied into the canonical `key_hash` column and product_id
--- is preserved when present. This keeps the migration chain compatible with
--- the actual production foundation schema.
+-- The repository contains a historical 0001_initial.sql migration whose
+-- licenses table uses license_key_hash and does not have product_id or the
+-- later lifecycle columns. Do not assume columns introduced by later phases
+-- exist while reconciling that legacy table.
 
 PRAGMA foreign_keys = OFF;
 
@@ -29,6 +25,8 @@ CREATE TABLE licenses_phase14 (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
+-- Read only columns guaranteed by the historical 0001_initial schema.
+-- Later lifecycle fields receive safe defaults in the canonical table.
 INSERT INTO licenses_phase14 (
   id,
   key_hash,
@@ -47,25 +45,24 @@ INSERT INTO licenses_phase14 (
 )
 SELECT
   id,
-  key_hash,
-  product_id,
+  license_key_hash,
+  NULL,
   user_id,
-  CASE UPPER(status)
-    WHEN 'ACTIVE' THEN 'ACTIVE'
-    WHEN 'REVOKED' THEN 'REVOKED'
-    WHEN 'EXPIRED' THEN 'EXPIRED'
-    WHEN 'BANNED' THEN 'BANNED'
+  CASE LOWER(status)
+    WHEN 'active' THEN 'ACTIVE'
+    WHEN 'revoked' THEN 'REVOKED'
+    WHEN 'expired' THEN 'EXPIRED'
     ELSE 'UNUSED'
   END,
   created_at,
   COALESCE(updated_at, created_at),
   expires_at,
-  COALESCE(max_devices, 1),
-  current_hwid,
-  discord_user_id,
-  last_seen,
-  COALESCE(redeem_count, 0),
-  COALESCE(reset_count, 0)
+  1,
+  NULL,
+  NULL,
+  NULL,
+  0,
+  0
 FROM licenses;
 
 DROP TABLE licenses;
