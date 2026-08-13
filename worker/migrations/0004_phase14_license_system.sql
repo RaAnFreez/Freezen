@@ -1,19 +1,16 @@
--- Phase 14 license lifecycle schema reconciliation.
--- The repository contains a historical 0001_initial.sql migration whose
--- licenses table uses license_key_hash and does not have product_id or the
--- later lifecycle columns. Do not assume columns introduced by later phases
--- exist while reconciling that legacy table.
+-- Phase 14 license lifecycle schema.
+-- This migration is kept unchanged from the stable pre-error baseline.
 
 PRAGMA foreign_keys = OFF;
 
-CREATE TABLE licenses_phase14 (
+CREATE TABLE IF NOT EXISTS licenses_phase14 (
   id TEXT PRIMARY KEY,
   key_hash TEXT NOT NULL UNIQUE,
-  product_id TEXT,
+  product_id TEXT NOT NULL,
   user_id TEXT,
-  status TEXT NOT NULL DEFAULT 'UNUSED' CHECK (status IN ('UNUSED','ACTIVE','EXPIRED','REVOKED','BANNED')),
+  status TEXT NOT NULL DEFAULT 'UNUSED'
+    CHECK (status IN ('UNUSED','ACTIVE','EXPIRED','REVOKED','BANNED')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires_at TEXT,
   max_devices INTEGER NOT NULL DEFAULT 1 CHECK (max_devices > 0),
   current_hwid TEXT,
@@ -25,47 +22,33 @@ CREATE TABLE licenses_phase14 (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- Read only columns guaranteed by the historical 0001_initial schema.
--- Later lifecycle fields receive safe defaults in the canonical table.
-INSERT INTO licenses_phase14 (
-  id,
-  key_hash,
-  product_id,
-  user_id,
-  status,
-  created_at,
-  updated_at,
-  expires_at,
-  max_devices,
-  current_hwid,
-  discord_user_id,
-  last_seen,
-  redeem_count,
-  reset_count
+INSERT OR IGNORE INTO licenses_phase14 (
+  id, key_hash, product_id, user_id, status, created_at, expires_at,
+  max_devices, current_hwid, discord_user_id, last_seen, redeem_count, reset_count
 )
 SELECT
-  id,
-  license_key_hash,
-  NULL,
-  user_id,
-  CASE LOWER(status)
+  l.id,
+  l.license_key_hash,
+  p.id,
+  l.user_id,
+  CASE LOWER(l.status)
     WHEN 'active' THEN 'ACTIVE'
     WHEN 'revoked' THEN 'REVOKED'
     WHEN 'expired' THEN 'EXPIRED'
     ELSE 'UNUSED'
   END,
-  created_at,
-  COALESCE(updated_at, created_at),
-  expires_at,
+  l.created_at,
+  l.expires_at,
   1,
   NULL,
   NULL,
   NULL,
   0,
   0
-FROM licenses;
+FROM licenses l
+JOIN products p ON p.id = (SELECT id FROM products ORDER BY created_at, id LIMIT 1);
 
-DROP TABLE licenses;
+DROP TABLE IF EXISTS licenses;
 ALTER TABLE licenses_phase14 RENAME TO licenses;
 
 CREATE INDEX IF NOT EXISTS idx_licenses_product_status ON licenses(product_id, status);
