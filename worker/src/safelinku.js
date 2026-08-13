@@ -1,9 +1,5 @@
 const DEFAULT_TIMEOUT_MS = 8000;
 
-function safeJson(value) {
-  try { return JSON.stringify(value); } catch { return "{}"; }
-}
-
 function configured(env) {
   return Boolean(env?.SAFELINKU_API_KEY && env?.SAFELINKU_API_BASE_URL);
 }
@@ -33,10 +29,7 @@ async function requestSafeLinkU(env, path = "/", options = {}) {
         ...(options.headers ?? {}),
       },
     });
-    const text = await response.text();
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text.slice(0, 1000) }; }
-    return { configured: true, status: response.status, ok: response.ok, data };
+    return { configured: true, status: response.status, ok: response.ok };
   } catch (error) {
     return { configured: true, status: 503, ok: false, error: error?.name === "AbortError" ? "SAFELINKU_TIMEOUT" : "SAFELINKU_NETWORK_ERROR" };
   } finally {
@@ -57,45 +50,38 @@ export function safelinkuConfigStatus(env) {
 export async function testSafeLinkUConnection(env) {
   if (!configured(env)) return { status: "not_configured", ...safelinkuConfigStatus(env) };
   const result = await requestSafeLinkU(env, "/");
-  return {
-    status: result.ok ? "ok" : "error",
-    http_status: result.status,
-    configured: result.configured,
-    error: result.error ?? null,
-  };
+  return { status: result.ok ? "ok" : "error", http_status: result.status, configured: result.configured, error: result.error ?? null };
 }
 
 export async function recordSafeLinkURequest(env, requestId, outcome) {
   if (!env?.DB) return;
   try {
-    await env.DB.prepare(`INSERT INTO security_events (id, event_type, request_id, metadata, created_at) VALUES (?1, ?2, ?3, ?4, datetime('now'))`)
-      .bind(crypto.randomUUID(), outcome === "success" ? "SAFE_LINK_CLAIM" : "SAFE_LINK_CLAIM_FAILED", requestId, safeJson({ provider: "safelinku" }))
-      .run();
+    await env.DB.prepare(`INSERT INTO safelinku_events (id, outcome, request_id, created_at) VALUES (?1, ?2, ?3, datetime('now'))`)
+      .bind(crypto.randomUUID(), outcome, requestId).run();
   } catch {
-    // Telemetry must never break the claim/request flow.
+    // Provider telemetry must never break the main request flow.
   }
 }
 
 export async function getSafeLinkUStats(env) {
   if (!env?.DB) return { successful_claims: 0, failed_claims: 0, last_request: null };
   try {
-    const rows = await env.DB.prepare(`SELECT event_type, request_id, created_at FROM security_events WHERE event_type IN ('SAFE_LINK_CLAIM', 'SAFE_LINK_CLAIM_FAILED') ORDER BY created_at DESC LIMIT 1000`).all();
+    const rows = await env.DB.prepare(`SELECT outcome, request_id, created_at FROM safelinku_events ORDER BY created_at DESC LIMIT 1000`).all();
     const results = rows?.results ?? [];
     return {
-      successful_claims: results.filter((row) => row.event_type === "SAFE_LINK_CLAIM").length,
-      failed_claims: results.filter((row) => row.event_type === "SAFE_LINK_CLAIM_FAILED").length,
-      last_request: results[0] ? { request_id: results[0].request_id, created_at: results[0].created_at, status: results[0].event_type === "SAFE_LINK_CLAIM" ? "success" : "failed" } : null,
+      successful_claims: results.filter((row) => row.outcome === "success").length,
+      failed_claims: results.filter((row) => row.outcome === "failed").length,
+      last_request: results[0] ? { request_id: results[0].request_id, created_at: results[0].created_at, status: results[0].outcome } : null,
     };
   } catch {
     return { successful_claims: 0, failed_claims: 0, last_request: null };
   }
 }
 
-// Phase 21 deliberately does not invent a SafeLinkU claim/checkpoint endpoint.
-// When SafeLinkU provides the official API contract, add the exact documented path
-// and payload here without exposing SAFELINKU_API_KEY to clients.
-export async function createClaim(env, requestId, payload) {
-  void payload;
+// SafeLinkU's public site does not expose a machine-readable claim/checkpoint
+// contract in the documentation available to this build. Do not invent an API path.
+// This guarded placeholder cannot be used to bypass or fake a provider checkpoint.
+export async function createClaim(env, requestId) {
   await recordSafeLinkURequest(env, requestId, "failed");
   return { ok: false, status: 501, error: "SAFELINKU_CLAIM_ENDPOINT_NOT_CONFIGURED", request_id: requestId };
 }
