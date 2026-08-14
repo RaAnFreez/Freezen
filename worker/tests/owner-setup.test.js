@@ -110,6 +110,6 @@ describe("Private owner bootstrap", () => {
     assert.equal(insert.params[1], "owner@example.com");
     assert.equal(insert.params[2], "owner");
     assert.notEqual(insert.params[3], "attacker-controlled-password");
-    assert.ok(insert.params[3].startsWith("pbkdf2_sha256$"));
+    assert.ok(insert.params[3].startsWith("pbkdf2$sha256$120000$"));
   });
 });
