@@ -14,13 +14,24 @@ describe("Phase 13 audit and security surfaces", () => {
     expect(module).toContain("(id, user_id, event_type, severity, request_id, metadata_json)");
   });
 
-  it("connects both production dashboard panels", () => {
+  it("keeps the dashboard scoped to the four requested core controls", () => {
     const html = read("public/dashboard/index.html");
     const main = read("public/dashboard/main.js");
-    expect(html).toContain("audit-panel.js?v=phase13");
-    expect(html).toContain("security-panel.js?v=phase13");
-    expect(main).toContain("FrezenDashboardPanels?.audit");
-    expect(main).toContain("FrezenDashboardPanels?.security");
+
+    expect(html).toContain("license-panel.js?v=core-controls");
+    expect(html).toContain("hwid-panel.js?v=core-controls");
+    expect(html).toContain("scripts-panel.js?v=core-controls");
+    expect(html).toContain("safelinku-panel.js?v=core-controls");
+
+    expect(main).toContain("['licenses','Key Control'");
+    expect(main).toContain("['hwid','HWID Control'");
+    expect(main).toContain("['scripts','Script Control'");
+    expect(main).toContain("['safelinku','SafeLinkU'");
+
+    expect(html).not.toContain("audit-panel.js");
+    expect(html).not.toContain("security-panel.js");
+    expect(main).not.toContain("FrezenDashboardPanels?.audit");
+    expect(main).not.toContain("FrezenDashboardPanels?.security");
   });
 
   it("records failed and successful login security events", () => {
