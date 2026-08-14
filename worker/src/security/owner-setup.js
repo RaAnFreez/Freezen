@@ -31,19 +31,17 @@ export async function setupOwner(request, env, requestId, json) {
   if (!env.DB) return json({ error: "DATABASE_UNAVAILABLE", request_id: requestId }, 503, requestId);
 
   const masterSecret = env.FREZEN_MASTER_SECRET;
+  const suppliedSecret = request.headers.get("x-frezen-setup-secret") ?? "";
+  if (typeof masterSecret !== "string" || masterSecret.length < 32 || !suppliedSecret || suppliedSecret !== masterSecret) {
+    return json({ error: "UNAUTHORIZED", request_id: requestId }, 401, requestId);
+  }
+
   const bootstrapPassword = env.OWNER_BOOTSTRAP_PASSWORD;
   const configuredEmail = typeof env.OWNER_EMAIL === "string" ? env.OWNER_EMAIL.trim().toLowerCase() : "";
   const configuredUsername = typeof env.OWNER_BOOTSTRAP_USERNAME === "string" ? env.OWNER_BOOTSTRAP_USERNAME.trim() : "";
 
-  if (typeof masterSecret !== "string" || masterSecret.length < 32 ||
-      typeof bootstrapPassword !== "string" || bootstrapPassword.length < 12 ||
-      !configuredEmail || !configuredUsername) {
+  if (typeof bootstrapPassword !== "string" || bootstrapPassword.length < 12 || !configuredEmail || !configuredUsername) {
     return json({ error: "OWNER_BOOTSTRAP_NOT_CONFIGURED", request_id: requestId }, 503, requestId);
-  }
-
-  const suppliedSecret = request.headers.get("x-frezen-setup-secret") ?? "";
-  if (!suppliedSecret || suppliedSecret !== masterSecret) {
-    return json({ error: "UNAUTHORIZED", request_id: requestId }, 401, requestId);
   }
 
   let stage = "users-schema";
