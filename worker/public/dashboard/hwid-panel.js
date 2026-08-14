@@ -125,16 +125,7 @@ function mount() {
   loadLicenses();
 }
 
-// main.js owns navigation. This listener replaces only the HWID section with the real panel.
-document.addEventListener('click', (event) => {
-  const trigger = event.target.closest('[data-section="hwid"]');
-  if (!trigger) return;
-  setTimeout(mount, 0);
-});
-
-// Support direct navigation when the current title already indicates HWID.
-const observer = new MutationObserver(() => {
-  const title = document.querySelector('#title');
-  if (title?.textContent === 'HWID' && !document.querySelector('.hwid-toolbar')) mount();
-});
-if (root) observer.observe(root, { childList: true, subtree: true });
+// The dashboard router is the single navigation owner. Export only the panel
+// mount function; do not attach navigation listeners or MutationObservers here.
+window.FrezenDashboardPanels = window.FrezenDashboardPanels || {};
+window.FrezenDashboardPanels.hwid = mount;
