@@ -12,7 +12,7 @@ async function loadDiscordPanel() {
   const content = document.querySelector('#content');
   content.innerHTML = `<section class="panel loading"><div class="spinner"></div><b>Loading Discord integration…</b><span>Reading protected server-side configuration.</span></section>`;
   try {
-    const response = await fetch('/api/v1/dashboard/overview?range=24h', { credentials: 'same-origin', headers: { accept: 'application/json' } });
+    const response = await fetch('/api/v1/dashboard/overview?view=discord', { credentials: 'same-origin', headers: { accept: 'application/json' } });
     if (response.status === 401 || response.status === 403) { location.href = '/login'; return; }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
@@ -48,7 +48,7 @@ async function loadDiscordPanel() {
       </div>
       <section class="panel">
         <div class="panel-head"><div><p class="eyebrow">SECURITY</p><h3>Integration boundary</h3></div>${badge('Protected', true)}</div>
-        <div class="empty"><b>No Discord secrets are exposed in this dashboard.</b><span>The panel only receives boolean configuration state and safe status metadata from the authenticated overview API.</span></div>
+        <div class="empty"><b>No Discord secrets are exposed in this dashboard.</b><span>The panel only receives boolean configuration state and safe status metadata from the authenticated dashboard endpoint.</span></div>
       </section>`;
   } catch (error) {
     content.innerHTML = `<section class="hero error"><div><p class="eyebrow">DISCORD ERROR</p><h2>Unable to load integration status</h2><p>${esc(error.message)}</p></div><button class="primary" id="discord-retry">Retry</button></section>`;
