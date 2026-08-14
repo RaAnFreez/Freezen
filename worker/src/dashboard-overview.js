@@ -8,7 +8,6 @@ async function series(db, sql, windowSql) { const result = await db.prepare(sql)
 async function optionalSeries(db, sql, windowSql) { try { return await series(db, sql, windowSql); } catch { return []; } }
 
 export async function getDashboardOverview(request, env, requestId, json, auth) {
-  if (!env.DB) return json({ error: "DATABASE_UNAVAILABLE", request_id: requestId }, 503, requestId);
   const url = new URL(request.url);
   const requestedWindow = url.searchParams.get("range")?.toLowerCase() ?? "7d";
   const range = WINDOW_SQL[requestedWindow] ? requestedWindow : "7d";
@@ -16,6 +15,25 @@ export async function getDashboardOverview(request, env, requestId, json, auth) 
   const view = url.searchParams.get("view")?.toLowerCase();
 
   if (view === "discord") return json({ view: "discord", discord: discordConfigStatus(env), viewer: { user_id: auth.user_id, role: auth.role }, request_id: requestId }, 200, requestId);
+
+  // Analytics is deliberately renderable even if the production D1 binding is unavailable.
+  // This avoids turning the entire UI into a 503 and clearly marks the data source as degraded.
+  if (view === "analytics" && !env.DB) {
+    return json({
+      view: "analytics",
+      range,
+      degraded: true,
+      database: "unavailable",
+      metrics: { total_licenses: 0, active_licenses: 0, expired_licenses: 0, revoked_licenses: 0, users: 0, script_requests: 0, safelinku_claims: 0, hwid_resets: 0 },
+      charts: { license_activity: [], script_requests: [] },
+      recent_activity: [],
+      environment: env.FREZEN_ENV ?? "unknown",
+      viewer: { user_id: auth.user_id, role: auth.role },
+      request_id: requestId,
+    }, 200, requestId);
+  }
+
+  if (!env.DB) return json({ error: "DATABASE_UNAVAILABLE", request_id: requestId }, 503, requestId);
 
   if (view === "analytics") {
     const [totalLicenses, activeLicenses, expiredLicenses, revokedLicenses, users, scriptRequests, safelinkuClaims, hwidResets, licenseActivity, scriptActivity, recentActivity] = await Promise.all([
@@ -31,7 +49,7 @@ export async function getDashboardOverview(request, env, requestId, json, auth) 
       optionalSeries(env.DB, "SELECT strftime('%Y-%m-%d', created_at) AS date, COUNT(*) AS count FROM audit_logs WHERE action = 'SCRIPT_REQUESTED' AND created_at >= datetime('now', ?1) GROUP BY strftime('%Y-%m-%d', created_at) ORDER BY date", windowSql),
       env.DB.prepare("SELECT id, action, resource_type, resource_id, status, request_id, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 10").all().then((r) => r.results ?? []).catch(() => []),
     ]);
-    return json({ range, metrics: { total_licenses: totalLicenses, active_licenses: activeLicenses, expired_licenses: expiredLicenses, revoked_licenses: revokedLicenses, users, script_requests: scriptRequests, safelinku_claims: safelinkuClaims, hwid_resets: hwidResets }, charts: { license_activity: licenseActivity, script_requests: scriptActivity }, recent_activity: recentActivity, database: "Production D1", environment: "production", viewer: { user_id: auth.user_id, role: auth.role }, request_id: requestId }, 200, requestId);
+    return json({ view: "analytics", range, metrics: { total_licenses: totalLicenses, active_licenses: activeLicenses, expired_licenses: expiredLicenses, revoked_licenses: revokedLicenses, users, script_requests: scriptRequests, safelinku_claims: safelinkuClaims, hwid_resets: hwidResets }, charts: { license_activity: licenseActivity, script_requests: scriptActivity }, recent_activity: recentActivity, database: "Production D1", environment: "production", viewer: { user_id: auth.user_id, role: auth.role }, request_id: requestId }, 200, requestId);
   }
 
   try {
