@@ -16,12 +16,13 @@ describe('Provider and SafeLinkU dashboard scope', () => {
     expect(html).toContain('service-panel.js?v=core-controls');
     expect(main).toContain("['provider','Provider'");
     expect(main).toContain("['services','Services'");
-    expect(main).toContain("provider: 'provider'");
     expect(main).toContain("services: 'services'");
+    expect(main).toContain("provider: 'provider'");
     expect(provider).toContain('New Provider');
     expect(provider).toContain('Custom slug');
     expect(provider).toContain('/get-key/');
     expect(provider).toContain('service_id');
+    expect(provider).toContain('SafeLinkU integration');
     expect(services).toContain('New Service');
     expect(services).toContain('Keyless Mode');
     expect(safe).not.toContain('Partner Programs');
