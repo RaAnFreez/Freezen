@@ -18,7 +18,6 @@ const sections = [
 const app = document.querySelector('#app');
 const esc = (v) => String(v ?? '—').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 const number = (v) => typeof v === 'number' ? v.toLocaleString() : String(v ?? '—');
-const icon = (id) => sections.find((s) => s[0] === id)?.[2] ?? '•';
 
 app.innerHTML = `
 <div class="shell">
@@ -48,7 +47,7 @@ const overlay = document.querySelector('#overlay');
 
 nav.innerHTML = sections.map(([id, label, glyph]) => `<button class="nav-item ${id === 'overview' ? 'active' : ''}" data-section="${id}" title="${esc(label)}"><i>${glyph}</i><span>${esc(label)}</span></button>`).join('');
 
-const stat = (label, value, note, glyph) => `<article class="stat"><div class="stat-icon">${glyph}</div><p>${esc(label)}</p><strong>${esc(number(value))}</strong><small>${esc(note)}</small></article>`;
+const stat = (label, value, note, glyph = '') => `<article class="stat"><div class="stat-icon">${glyph}</div><p>${esc(label)}</p><strong>${esc(number(value))}</strong><small>${esc(note)}</small></article>`;
 const service = (label, value, ok = true) => `<div class="service"><span><i class="dot"></i>${esc(label)}</span><b class="${ok ? '' : 'warn'}">${esc(value)}</b></div>`;
 const feature = ([id, label, glyph, description]) => `<button class="feature" data-section="${id}"><span class="feature-icon">${glyph}</span><span><b>${esc(label)}</b><small>${esc(description)}</small></span><em>›</em></button>`;
 
@@ -108,8 +107,6 @@ function renderOverview(data = {}) {
 function renderSection(id) {
   if (id === 'overview') return loadOverview();
 
-  // HWID and Scripts own their complete UI and data lifecycle. The dashboard
-  // router only selects the panel; it must never render a placeholder first.
   if (id === 'hwid') {
     if (window.FrezenDashboardPanels?.hwid) return window.FrezenDashboardPanels.hwid();
     content.innerHTML = `<section class="panel loading"><b>HWID panel is still loading…</b><span>Please try again.</span></section>`;
@@ -120,6 +117,11 @@ function renderSection(id) {
     content.innerHTML = `<section class="panel loading"><b>Scripts panel is still loading…</b><span>Please try again.</span></section>`;
     return;
   }
+  if (id === 'safelinku') {
+    if (window.FrezenDashboardPanels?.safelinku) return window.FrezenDashboardPanels.safelinku();
+    content.innerHTML = `<section class="panel loading"><b>SafeLinkU panel is still loading…</b><span>Please try again.</span></section>`;
+    return;
+  }
 
   const item = sections.find((s) => s[0] === id);
   const implementation = {
@@ -127,7 +129,6 @@ function renderSection(id) {
     keys: ['Key Management','Secure license/key operations will use the existing server-side authorization boundary.'],
     products: ['Products','Create, edit, disable and safely delete unused products through the authenticated product API.'],
     users: ['Users','Manage authenticated accounts, roles and status without trusting client-side permissions.'],
-    safelinku: ['SafeLinkU','Claim and integration controls will appear here when the SafeLinkU phase is connected.'],
     discord: ['Discord','Discord integration status, linking and service controls will appear here when connected.'],
     analytics: ['Analytics','Usage and operational insights will be populated from production events without fabricated metrics.'],
     audit: ['Audit Logs','Immutable-style activity history and security-relevant actions will be surfaced here.'],
