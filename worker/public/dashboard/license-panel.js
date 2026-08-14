@@ -1,5 +1,5 @@
 (() => {
-  const esc = (v) => String(v ?? '—').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const esc = (v) => String(v ?? '—').replace(/[&<>\"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;' }[c]));
   const content = () => document.querySelector('#content');
   let page = 1;
   let search = '';
@@ -22,7 +22,7 @@
 
   function shell() {
     const root = content();
-    root.innerHTML = `<section class="panel"><div class="section-heading"><div><p class="eyebrow">LICENSE MANAGEMENT</p><h2>Licenses</h2><p>Create, search and safely manage the license lifecycle from one authenticated control panel.</p></div><span class="badge"><span class="dot"></span>Protected</span></div><div id="license-message"></div><div class="license-toolbar"><input id="license-search" placeholder="Search ID, email, username or product…"><select id="license-status"><option value="">All statuses</option><option value="unused">Unused</option><option value="active">Active</option><option value="expired">Expired</option><option value="revoked">Revoked</option><option value="banned">Banned</option></select><button id="license-refresh">Refresh</button><button id="license-create" class="primary">+ Create license</button></div><div id="license-create-form"></div><div id="license-table" class="license-table"></div></section>`;
+    root.innerHTML = `<section class="panel"><div class="section-heading"><div><p class="eyebrow">KEY CONTROL</p><h2>Key Control</h2><p>Create, search and safely manage the license/key lifecycle from one authenticated control panel.</p></div><span class="badge"><span class="dot"></span>Protected</span></div><div id="license-message"></div><div class="license-toolbar"><input id="license-search" placeholder="Search ID, email, username or product…"><select id="license-status"><option value="">All statuses</option><option value="unused">Unused</option><option value="active">Active</option><option value="expired">Expired</option><option value="revoked">Revoked</option><option value="banned">Banned</option></select><button id="license-refresh">Refresh</button><button id="license-create" class="primary">+ Create license</button></div><div id="license-create-form"></div><div id="license-table" class="license-table"></div></section>`;
     document.querySelector('#license-search').value = search;
     document.querySelector('#license-status').value = status;
     document.querySelector('#license-search').onkeydown = (e) => { if (e.key === 'Enter') { search = e.target.value.trim(); page = 1; load(); } };
@@ -73,14 +73,14 @@
   async function load() {
     const table = document.querySelector('#license-table');
     if (!table) return;
-    table.innerHTML = `<div class="license-empty">Loading licenses…</div>`;
+    table.innerHTML = `<div class="license-empty">Loading keys…</div>`;
     try {
       const params = new URLSearchParams({page:String(page),page_size:'20'});
       if (search) params.set('q', search);
       if (status) params.set('status', status);
       const data = await api(`/api/v1/licenses?${params}`);
       const licenses = data?.licenses || [];
-      if (!licenses.length) { table.innerHTML = `<div class="license-empty">No licenses found.</div>`; return; }
+      if (!licenses.length) { table.innerHTML = `<div class="license-empty">No keys found.</div>`; return; }
       table.innerHTML = `<table><thead><tr><th>ID</th><th>Product</th><th>Owner</th><th>Status</th><th>Expires</th><th>Devices</th><th>Actions</th></tr></thead><tbody>${licenses.map(row).join('')}</tbody></table><div class="license-pagination"><span>Page ${esc(data.pagination?.page)} of ${esc(data.pagination?.total_pages || 1)} · ${esc(data.pagination?.total || 0)} total</span><span><button id="license-prev" ${page <= 1 ? 'disabled' : ''}>‹</button> <button id="license-next" ${page >= (data.pagination?.total_pages || 1) ? 'disabled' : ''}>›</button></span></div>`;
       document.querySelector('#license-prev').onclick = () => { if (page > 1) { page--; load(); } };
       document.querySelector('#license-next').onclick = () => { if (page < (data.pagination?.total_pages || 1)) { page++; load(); } };
@@ -93,18 +93,16 @@
         if (actionName === 'hwid') action(`/api/v1/licenses/${encodeURIComponent(id)}/hwid/reset`, 'POST');
       });
     } catch (error) {
-      table.innerHTML = `<div class="license-empty">Unable to load licenses: ${esc(error.message)}</div>`;
+      table.innerHTML = `<div class="license-empty">Unable to load keys: ${esc(error.message)}</div>`;
     }
   }
 
-  document.addEventListener('click', (event) => {
-    const target = event.target.closest('[data-section="licenses"]');
-    if (!target) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    document.querySelectorAll('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.section === 'licenses'));
-    const title = document.querySelector('#title');
-    if (title) title.textContent = 'Licenses';
+  function mount() {
+    const root = content();
+    if (!root) return;
     shell();
-  }, true);
+  }
+
+  window.FrezenDashboardPanels = window.FrezenDashboardPanels || {};
+  window.FrezenDashboardPanels.licenses = mount;
 })();
