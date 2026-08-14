@@ -2,12 +2,7 @@ import { discordConfigStatus } from "./discord.js";
 
 const WINDOW_SQL = { "24h": "-24 hours", "7d": "-7 days", "30d": "-30 days", "90d": "-90 days" };
 const safeNumber = (value) => Number(value ?? 0);
-
-async function count(db, sql, binds = []) {
-  const statement = db.prepare(sql);
-  const result = binds.length ? await statement.bind(...binds).first() : await statement.first();
-  return safeNumber(result?.count);
-}
+async function count(db, sql, binds = []) { const statement = db.prepare(sql); const result = binds.length ? await statement.bind(...binds).first() : await statement.first(); return safeNumber(result?.count); }
 async function optionalCount(db, sql, binds = []) { try { return await count(db, sql, binds); } catch { return 0; } }
 async function series(db, sql, windowSql) { const result = await db.prepare(sql).bind(windowSql).all(); return (result.results ?? []).map((row) => ({ date: row.date, count: safeNumber(row.count) })); }
 async function optionalSeries(db, sql, windowSql) { try { return await series(db, sql, windowSql); } catch { return []; } }
@@ -20,16 +15,13 @@ export async function getDashboardOverview(request, env, requestId, json, auth) 
   const windowSql = WINDOW_SQL[range];
   const view = url.searchParams.get("view")?.toLowerCase();
 
-  if (view === "discord") {
-    return json({ view: "discord", discord: discordConfigStatus(env), viewer: { user_id: auth.user_id, role: auth.role }, request_id: requestId }, 200, requestId);
-  }
+  if (view === "discord") return json({ view: "discord", discord: discordConfigStatus(env), viewer: { user_id: auth.user_id, role: auth.role }, request_id: requestId }, 200, requestId);
 
   if (view === "analytics") {
-    // Analytics is telemetry: one incompatible/legacy metric must never make the entire panel 503.
     const [totalLicenses, activeLicenses, expiredLicenses, revokedLicenses, users, scriptRequests, safelinkuClaims, hwidResets, licenseActivity, scriptActivity, recentActivity] = await Promise.all([
       optionalCount(env.DB, "SELECT COUNT(*) AS count FROM licenses"),
       optionalCount(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'ACTIVE'"),
-      optionalCount(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'EXPIRED' OR (expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP AND status = 'ACTIVE'')"),
+      optionalCount(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'EXPIRED' OR (expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP AND status = 'ACTIVE')"),
       optionalCount(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'REVOKED'"),
       optionalCount(env.DB, "SELECT COUNT(*) AS count FROM users WHERE status = 'ACTIVE'"),
       optionalCount(env.DB, "SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'SCRIPT_REQUESTED' AND created_at >= datetime('now', ?1)", [windowSql]),
