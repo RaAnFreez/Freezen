@@ -49,7 +49,7 @@ async function createScriptModal(){
 }
 
 async function scriptAction(action,id){
-  if(action==='details'){ try{const d=await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}`); const versions=d.versions||[]; const m=modal(d.script?.name||'Script details',`<p>${html(d.script?.description||'No description')}</p><div class="script-meta"><span>Status: ${html(d.script?.status)}</span><span>Product: ${html(d.script?.product_name||d.script?.product_id)}</span></div><div class="version-list">${versions.length?versions.map(v=>`<div class="version-row"><span><b>${html(v.version)}</b><small>${html(v.release_notes||'No release notes')}</small></span><span>${html(v.status)}</span></div>`).join(''):'<div class="empty"><b>No versions</b></div>'}</div>`); return;}catch(e){alert(e.message);return;} }
+  if(action==='details'){ try{const d=await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}`); const versions=d.versions||[]; modal(d.script?.name||'Script details',`<p>${html(d.script?.description||'No description')}</p><div class="script-meta"><span>Status: ${html(d.script?.status)}</span><span>Product: ${html(d.script?.product_name||d.script?.product_id)}</span></div><div class="version-list">${versions.length?versions.map(v=>`<div class="version-row"><span><b>${html(v.version)}</b><small>${html(v.release_notes||'No release notes')}</small></span><span>${html(v.status)}</span></div>`).join(''):'<div class="empty"><b>No versions</b></div>'}</div>`); return;}catch(e){alert(e.message);return;} }
   if(action==='toggle'){const s=scriptItems.find(x=>x.id===id);if(!s)return;if(!confirm(`${s.status==='ACTIVE'?'Disable':'Enable'} ${s.name}?`))return;try{await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({status:s.status==='ACTIVE'?'DISABLED':'ACTIVE'})});loadScripts();}catch(e){alert(e.message);}return;}
   if(action==='version'){ uploadVersionModal(id); }
 }
@@ -61,6 +61,8 @@ function uploadVersionModal(id){
 }
 
 function mountScripts(){ if(!scriptsRoot)return; scriptPage(); }
-document.addEventListener('click',e=>{if(e.target.closest('[data-section="scripts"]'))setTimeout(mountScripts,0);});
-const scriptsObserver=new MutationObserver(()=>{const t=document.querySelector('#title');if(t?.textContent==='Scripts'&&!document.querySelector('.scripts-toolbar'))mountScripts();});
-if(scriptsRoot)scriptsObserver.observe(scriptsRoot,{childList:true,subtree:true});
+
+// The dashboard router is the single navigation owner. Export only the panel
+// mount function; do not attach navigation listeners or MutationObservers here.
+window.FrezenDashboardPanels = window.FrezenDashboardPanels || {};
+window.FrezenDashboardPanels.scripts = mountScripts;
