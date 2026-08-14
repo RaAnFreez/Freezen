@@ -6,7 +6,7 @@ const sections = [
 ];
 
 const app = document.querySelector('#app');
-const esc = (v) => String(v ?? '—').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const esc = (v) => String(v ?? '—').replace(/[&<>\"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;' }[c]));
 
 app.innerHTML = `<div class="shell"><aside class="sidebar" id="sidebar" aria-label="Frezen navigation"><div class="brand"><span class="mark">F</span><span>FREZEN</span></div><div class="nav" id="nav"></div><div class="side-foot"><span class="dot"></span>System protected</div></aside><div class="overlay" id="overlay"></div><main class="main"><header class="top"><div class="top-left"><button class="menu" id="menu" aria-label="Open navigation">☰</button><div><p class="eyebrow">CONTROL SYSTEM V3</p><h1 id="title">Key Control</h1></div></div><div class="top-right"><span id="user-name" class="eyebrow">Owner</span><div id="avatar" class="avatar">O</div></div></header><section class="content" id="content"></section></main></div>`;
 
@@ -20,11 +20,7 @@ nav.innerHTML = sections.map(([id, label, glyph]) => `<button class="nav-item ${
 function loading(message = 'Loading…') { content.innerHTML = `<section class="panel loading"><div class="spinner"></div><b>${esc(message)}</b><span>Reading authenticated production data.</span></section>`; }
 
 function renderSection(id) {
-  if (id === 'licenses') {
-    const button = document.querySelector('[data-section="licenses"]');
-    if (button) return button.click();
-  }
-  const panelName = { hwid: 'hwid', scripts: 'scripts', safelinku: 'safelinku' }[id];
+  const panelName = { licenses: 'licenses', hwid: 'hwid', scripts: 'scripts', safelinku: 'safelinku' }[id];
   if (panelName && window.FrezenDashboardPanels?.[panelName]) return window.FrezenDashboardPanels[panelName]();
   loading(`${sections.find((s) => s[0] === id)?.[1] || 'Panel'} is still loading…`);
 }
@@ -53,10 +49,6 @@ function select(id) {
 }
 
 document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => select(button.dataset.section)));
-document.addEventListener('click', (event) => {
-  const button = event.target.closest('[data-section]');
-  if (button && sections.some((s) => s[0] === button.dataset.section)) select(button.dataset.section);
-});
 document.querySelector('#menu').onclick = () => { sidebar.classList.add('open'); overlay.classList.add('show'); };
 overlay.onclick = () => { sidebar.classList.remove('open'); overlay.classList.remove('show'); };
 
