@@ -39,5 +39,8 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Apply production D1 migrations
+        run: npx wrangler d1 migrations apply frezen-production --remote --env production
+
       - name: Deploy Worker
         run: npx wrangler deploy --env production
