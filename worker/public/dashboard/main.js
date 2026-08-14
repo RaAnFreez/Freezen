@@ -58,75 +58,20 @@ function loading(message = 'Loading Frezen data…') {
 function renderOverview(data = {}) {
   const s = data?.stats || data?.metrics || {};
   const values = {
-    total: Number(s.total_licenses ?? 0),
-    active: Number(s.active_licenses ?? 0),
-    expired: Number(s.expired_licenses ?? 0),
-    revoked: Number(s.revoked_licenses ?? 0),
-    users: Number(s.users ?? 0),
-    requests: Number(s.script_requests ?? 0),
-    claims: Number(s.safelinku_claims ?? 0),
-    resets: Number(s.hwid_resets ?? 0),
+    total: Number(s.total_licenses ?? 0), active: Number(s.active_licenses ?? 0), expired: Number(s.expired_licenses ?? 0), revoked: Number(s.revoked_licenses ?? 0), users: Number(s.users ?? 0), requests: Number(s.script_requests ?? 0), claims: Number(s.safelinku_claims ?? 0), resets: Number(s.hwid_resets ?? 0),
   };
   const activity = Array.isArray(data?.recent_activity) ? data.recent_activity : [];
   const max = Math.max(1, ...Object.values(values));
-
-  content.innerHTML = `
-  <div class="hero">
-    <div><p class="eyebrow">PRIVATE ADMIN AREA</p><h2>Frezen Control Center</h2><p>One secure workspace for licenses, products, scripts, users, devices and integrations.</p></div>
-    <span class="badge"><span class="dot"></span>Protected</span>
-  </div>
-  <div class="stats">
-    ${stat('Total Licenses', values.total, 'All license records', '◇')}
-    ${stat('Active Licenses', values.active, 'Currently valid', '✓')}
-    ${stat('Expired Licenses', values.expired, 'Past expiration', '◷')}
-    ${stat('Revoked Licenses', values.revoked, 'Revoked or disabled', '⊘')}
-    ${stat('Users', values.users, 'Registered accounts', '♙')}
-    ${stat('Script Requests', values.requests, 'Authorized requests', '{}')}
-    ${stat('SafeLinkU Claims', values.claims, 'Successful claims', '↗')}
-    ${stat('HWID Resets', values.resets, 'Reset operations', '⌘')}
-  </div>
-  <div class="columns">
-    <section class="panel">
-      <div class="panel-head"><div><p class="eyebrow">ACTIVITY</p><h3>License activity</h3></div><div class="tabs"><button class="active">24H</button><button>7D</button><button>30D</button><button>90D</button></div></div>
-      <div class="chart">${Object.values(values).map((v) => `<i style="height:${Math.max(8, Math.round(v / max * 100))}%"></i>`).join('')}</div>
-      <p class="chart-note">Live trend data is rendered only from the authenticated overview API.</p>
-    </section>
-    <section class="panel"><div class="panel-head"><div><p class="eyebrow">SYSTEM</p><h3>Service status</h3></div></div>
-      ${service('Authentication','Protected')}
-      ${service('Authorization','Server enforced')}
-      ${service('Database',data?.database || 'Connected')}
-      ${service('Environment',data?.environment || 'production')}
-    </section>
-  </div>
-  <section class="panel quick-panel"><div class="panel-head"><div><p class="eyebrow">CONTROL CENTER</p><h3>Manage Frezen</h3></div></div><div class="feature-grid">${sections.slice(1).map(feature).join('')}</div></section>
-  <section class="panel recent-panel"><div class="panel-head"><div><p class="eyebrow">AUDIT</p><h3>Recent activity</h3></div><button class="ghost" data-section="audit">View logs</button></div>
-    ${activity.length ? activity.slice(0,8).map((a) => `<div class="activity"><span>${esc(a.action || a.event || 'Activity')}<small>${esc(a.resource || a.user || 'Frezen')}</small></span><small>${esc(a.created_at || a.timestamp || '')}</small></div>`).join('') : `<div class="empty"><b>No recent activity</b><span>Activity will appear here when events are recorded.</span></div>`}
-  </section>`;
+  content.innerHTML = `<div class="hero"><div><p class="eyebrow">PRIVATE ADMIN AREA</p><h2>Frezen Control Center</h2><p>One secure workspace for licenses, products, scripts, users, devices and integrations.</p></div><span class="badge"><span class="dot"></span>Protected</span></div><div class="stats">${stat('Total Licenses', values.total, 'All license records', '◇')}${stat('Active Licenses', values.active, 'Currently valid', '✓')}${stat('Expired Licenses', values.expired, 'Past expiration', '◷')}${stat('Revoked Licenses', values.revoked, 'Revoked or disabled', '⊘')}${stat('Users', values.users, 'Registered accounts', '♙')}${stat('Script Requests', values.requests, 'Authorized requests', '{}')}${stat('SafeLinkU Claims', values.claims, 'Successful claims', '↗')}${stat('HWID Resets', values.resets, 'Reset operations', '⌘')}</div><div class="columns"><section class="panel"><div class="panel-head"><div><p class="eyebrow">ACTIVITY</p><h3>License activity</h3></div></div><div class="chart">${Object.values(values).map((v) => `<i style="height:${Math.max(8, Math.round(v / max * 100))}%"></i>`).join('')}</div><p class="chart-note">Live trend data is rendered only from the authenticated overview API.</p></section><section class="panel"><div class="panel-head"><div><p class="eyebrow">SYSTEM</p><h3>Service status</h3></div></div>${service('Authentication','Protected')}${service('Authorization','Server enforced')}${service('Database',data?.database || 'Connected')}${service('Environment',data?.environment || 'production')}</section></div><section class="panel quick-panel"><div class="panel-head"><div><p class="eyebrow">CONTROL CENTER</p><h3>Manage Frezen</h3></div></div><div class="feature-grid">${sections.slice(1).map(feature).join('')}</div></section><section class="panel recent-panel"><div class="panel-head"><div><p class="eyebrow">AUDIT</p><h3>Recent activity</h3></div><button class="ghost" data-section="audit">View logs</button></div>${activity.length ? activity.slice(0,8).map((a) => `<div class="activity"><span>${esc(a.action || a.event || 'Activity')}<small>${esc(a.resource || a.user || 'Frezen')}</small></span><small>${esc(a.created_at || a.timestamp || '')}</small></div>`).join('') : `<div class="empty"><b>No recent activity</b><span>Activity will appear here when events are recorded.</span></div>`}</section>`;
 }
 
 function renderSection(id) {
   if (id === 'overview') return loadOverview();
-
-  if (id === 'hwid') {
-    if (window.FrezenDashboardPanels?.hwid) return window.FrezenDashboardPanels.hwid();
-    content.innerHTML = `<section class="panel loading"><b>HWID panel is still loading…</b><span>Please try again.</span></section>`;
-    return;
-  }
-  if (id === 'scripts') {
-    if (window.FrezenDashboardPanels?.scripts) return window.FrezenDashboardPanels.scripts();
-    content.innerHTML = `<section class="panel loading"><b>Scripts panel is still loading…</b><span>Please try again.</span></section>`;
-    return;
-  }
-  if (id === 'safelinku') {
-    if (window.FrezenDashboardPanels?.safelinku) return window.FrezenDashboardPanels.safelinku();
-    content.innerHTML = `<section class="panel loading"><b>SafeLinkU panel is still loading…</b><span>Please try again.</span></section>`;
-    return;
-  }
-  if (id === 'discord') {
-    if (window.FrezenDashboardPanels?.discord) return window.FrezenDashboardPanels.discord();
-    content.innerHTML = `<section class="panel loading"><b>Discord panel is still loading…</b><span>Please try again.</span></section>`;
-    return;
-  }
+  if (id === 'hwid') { if (window.FrezenDashboardPanels?.hwid) return window.FrezenDashboardPanels.hwid(); content.innerHTML = `<section class="panel loading"><b>HWID panel is still loading…</b><span>Please try again.</span></section>`; return; }
+  if (id === 'scripts') { if (window.FrezenDashboardPanels?.scripts) return window.FrezenDashboardPanels.scripts(); content.innerHTML = `<section class="panel loading"><b>Scripts panel is still loading…</b><span>Please try again.</span></section>`; return; }
+  if (id === 'safelinku') { if (window.FrezenDashboardPanels?.safelinku) return window.FrezenDashboardPanels.safelinku(); content.innerHTML = `<section class="panel loading"><b>SafeLinkU panel is still loading…</b><span>Please try again.</span></section>`; return; }
+  if (id === 'discord') { if (window.FrezenDashboardPanels?.discord) return window.FrezenDashboardPanels.discord(); content.innerHTML = `<section class="panel loading"><b>Discord panel is still loading…</b><span>Please try again.</span></section>`; return; }
+  if (id === 'analytics') { if (window.FrezenDashboardPanels?.analytics) return window.FrezenDashboardPanels.analytics(); content.innerHTML = `<section class="panel loading"><b>Analytics panel is still loading…</b><span>Please try again.</span></section>`; return; }
 
   const item = sections.find((s) => s[0] === id);
   const implementation = {
@@ -134,8 +79,6 @@ function renderSection(id) {
     keys: ['Key Management','Secure license/key operations will use the existing server-side authorization boundary.'],
     products: ['Products','Create, edit, disable and safely delete unused products through the authenticated product API.'],
     users: ['Users','Manage authenticated accounts, roles and status without trusting client-side permissions.'],
-    discord: ['Discord','Discord integration status, linking and service controls will appear here when connected.'],
-    analytics: ['Analytics','Usage and operational insights will be populated from production events without fabricated metrics.'],
     audit: ['Audit Logs','Immutable-style activity history and security-relevant actions will be surfaced here.'],
     invites: ['Invites','Private invitation management for controlled team access.'],
     security: ['Security Center','Authentication events, rate limits and suspicious activity will be surfaced here.'],
@@ -153,11 +96,7 @@ async function loadOverview() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const user = data.user || data.current_user;
-    if (user) {
-      const display = user.username || user.email || 'Owner';
-      document.querySelector('#user-name').textContent = display;
-      document.querySelector('#avatar').textContent = display.slice(0,1).toUpperCase();
-    }
+    if (user) { const display = user.username || user.email || 'Owner'; document.querySelector('#user-name').textContent = display; document.querySelector('#avatar').textContent = display.slice(0,1).toUpperCase(); }
     renderOverview(data);
   } catch (error) {
     content.innerHTML = `<section class="hero error"><div><p class="eyebrow">DASHBOARD ERROR</p><h2>Unable to load live data</h2><p>The authenticated dashboard API returned an error: ${esc(error.message)}</p></div><button class="primary" id="retry">Retry</button></section>`;
@@ -165,17 +104,9 @@ async function loadOverview() {
   }
 }
 
-function select(id) {
-  document.querySelectorAll('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.section === id));
-  title.textContent = sections.find((s) => s[0] === id)?.[1] || id;
-  renderSection(id);
-  sidebar.classList.remove('open');
-  overlay.classList.remove('show');
-}
-
+function select(id) { document.querySelectorAll('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.section === id)); title.textContent = sections.find((s) => s[0] === id)?.[1] || id; renderSection(id); sidebar.classList.remove('open'); overlay.classList.remove('show'); }
 document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => select(button.dataset.section)));
 document.addEventListener('click', (event) => { const button = event.target.closest('[data-section]'); if (button) select(button.dataset.section); });
 document.querySelector('#menu').onclick = () => { sidebar.classList.add('open'); overlay.classList.add('show'); };
 overlay.onclick = () => { sidebar.classList.remove('open'); overlay.classList.remove('show'); };
-
 loadOverview();
