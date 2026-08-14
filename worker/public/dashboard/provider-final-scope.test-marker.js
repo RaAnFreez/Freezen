@@ -1,1 +1,0 @@
-// Provider scope is covered by repository tests; no runtime behavior here.
