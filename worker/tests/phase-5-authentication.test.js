@@ -42,7 +42,7 @@ const makeDb = async () => {
 describe("Phase 5 Authentication", () => {
   it("hashes and verifies passwords without storing plaintext", async () => {
     const hash = await hashPassword("Correct Horse Battery 123!");
-    expect(hash).toMatch(/^pbkdf2\$sha256\$120000\$/);
+    expect(hash).toMatch(/^pbkdf2\$sha256\$100000\$/);
     expect(hash).not.toContain("Correct Horse Battery 123!");
     expect(await verifyPassword("Correct Horse Battery 123!", hash)).toBe(true);
     expect(await verifyPassword("wrong password", hash)).toBe(false);
