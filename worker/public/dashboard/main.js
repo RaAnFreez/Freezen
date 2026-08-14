@@ -2,8 +2,9 @@ const sections = [
   ['licenses','Key Control','◇','License/key control'],
   ['hwid','HWID Control','⌘','Device binding and control'],
   ['scripts','Script Control','{}','Script delivery and authorization'],
-  ['safelinku','SafeLinkU','↗','Get-key integration'],
-  ['provider','Provider','⌁','Provider management'],
+  ['safelinku','SafeLinkU','↗','SafeLinkU integration'],
+  ['services','Services','▦','Service configuration'],
+  ['provider','Provider','⌁','Key-link provider configuration'],
 ];
 
 const app = document.querySelector('#app');
@@ -21,7 +22,7 @@ nav.innerHTML = sections.map(([id, label, glyph]) => `<button class="nav-item ${
 function loading(message = 'Loading…') { content.innerHTML = `<section class="panel loading"><div class="spinner"></div><b>${esc(message)}</b><span>Reading authenticated production data.</span></section>`; }
 
 function renderSection(id) {
-  const panelName = { licenses: 'licenses', hwid: 'hwid', scripts: 'scripts', safelinku: 'safelinku', provider: 'provider' }[id];
+  const panelName = { licenses: 'licenses', hwid: 'hwid', scripts: 'scripts', safelinku: 'safelinku', services: 'services', provider: 'provider' }[id];
   if (panelName && window.FrezenDashboardPanels?.[panelName]) return window.FrezenDashboardPanels[panelName]();
   loading(`${sections.find((s) => s[0] === id)?.[1] || 'Panel'} is still loading…`);
 }
@@ -54,4 +55,4 @@ document.querySelector('#menu').onclick = () => { sidebar.classList.add('open');
 overlay.onclick = () => { sidebar.classList.remove('open'); overlay.classList.remove('show'); };
 
 loadCurrentUser();
-select('licenses');
+setTimeout(() => select('licenses'), 0);
