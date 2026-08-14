@@ -39,23 +39,19 @@
     const content = document.querySelector('#content');
     content.innerHTML = `<section class="panel loading"><div class="spinner"></div><b>Loading API management…</b><span>Reading authenticated API key access.</span></section>`;
     try {
-      const [matrix, keyData] = await Promise.all([
-        api('/api/v1/roles/matrix'),
-        api('/api/v1/api-keys'),
-      ]);
+      const [matrix, keyData] = await Promise.all([api('/api/v1/roles/matrix'), api('/api/v1/api-keys')]);
       if (!matrix || !keyData) return;
       const roles = matrix.roles || {};
       const current = matrix.current_role || 'UNKNOWN';
       const scopes = Array.isArray(roles[current]) ? roles[current] : [];
       const keys = Array.isArray(keyData.api_keys) ? keyData.api_keys : [];
-      const keyCount = keys.length;
 
       content.innerHTML = `<section class="panel section-page">
         <div class="section-heading"><div><p class="eyebrow">API MANAGEMENT</p><h2>API Access Center</h2><p>Manage authenticated API keys without exposing secrets.</p></div><span class="badge"><span class="dot"></span>Protected</span></div>
         <div class="stats">
           <article class="stat"><div class="stat-icon">⌁</div><p>Current role</p><strong>${esc(current)}</strong><small>Server-enforced role</small></article>
           <article class="stat"><div class="stat-icon">◇</div><p>Granted scopes</p><strong>${esc(scopes.includes('*') ? 'ALL' : scopes.length)}</strong><small>Resolved from role matrix</small></article>
-          <article class="stat"><div class="stat-icon">◉</div><p>API keys</p><strong>${esc(keyCount)}</strong><small>Owner-scoped active/revoked records</small></article>
+          <article class="stat"><div class="stat-icon">◉</div><p>API keys</p><strong>${esc(keys.length)}</strong><small>Owner-scoped active/revoked records</small></article>
           <article class="stat"><div class="stat-icon">↻</div><p>Secrets</p><strong>One-time</strong><small>Never returned by list/usage APIs</small></article>
         </div>
         <div class="columns">
@@ -83,8 +79,8 @@
         status.innerHTML = '<b>Creating…</b><span>Generating and hashing the secret server-side.</span>';
         try {
           const data = await api('/api/v1/api-keys', { method: 'POST', body: JSON.stringify({ name: form.get('name'), scopes: scopesInput, expires_at: expiresRaw ? new Date(expiresRaw).toISOString() : null }) });
-          showSecret(content, data);
           await load();
+          showSecret(content, data);
         } catch (error) {
           status.innerHTML = `<b>Unable to create API key</b><span>${esc(error.message)}</span>`;
         }
@@ -98,7 +94,7 @@
 
       content.querySelectorAll('.api-key-rotate').forEach((button) => button.addEventListener('click', async () => {
         if (!confirm('Rotate this API key? The current key will be revoked.')) return;
-        try { const data = await api(`/api/v1/api-keys/${encodeURIComponent(button.dataset.id)}/rotate`, { method: 'POST', body: '{}' }); showSecret(content, data); await load(); }
+        try { const data = await api(`/api/v1/api-keys/${encodeURIComponent(button.dataset.id)}/rotate`, { method: 'POST', body: '{}' }); await load(); showSecret(content, data); }
         catch (error) { alert(`Unable to rotate API key: ${error.message}`); }
       }));
 
