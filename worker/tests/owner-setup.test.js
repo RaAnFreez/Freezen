@@ -107,7 +107,9 @@ describe("Private owner bootstrap", () => {
     assert.equal(response.status, 201);
     const insert = db.calls.find((call) => call.op === "run" && call.sql.startsWith("INSERT INTO users"));
     assert.ok(insert);
-    assert.equal(insert.params[1], "owner");
+    assert.equal(insert.params[1], "owner@example.com");
+    assert.equal(insert.params[2], "owner");
     assert.notEqual(insert.params[3], "attacker-controlled-password");
+    assert.ok(insert.params[3].startsWith("pbkdf2_sha256$"));
   });
 });
