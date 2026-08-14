@@ -18,6 +18,7 @@ import { authorizeScriptAccess } from "./security/script-authorization.js";
 import { deliverScript } from "./security/secure-delivery.js";
 import { safelinkuConfigStatus, testSafeLinkUConnection, getSafeLinkUStats } from "./safelinku.js";
 import { getKeyPage, listPublicProducts, claimPublicKey } from "./get-key.js";
+import { listApiKeys, createApiKey, revokeApiKey, rotateApiKey, getApiKeyUsage } from "./security/api-keys-api.js";
 
 const SECURITY_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "strict-transport-security": "max-age=31536000; includeSubDomains" };
 const json = (data, status = 200, requestId = crypto.randomUUID(), extraHeaders = {}) => new Response(JSON.stringify(data), { status, headers: { ...SECURITY_HEADERS, ...extraHeaders, "x-request-id": requestId } });
@@ -56,6 +57,23 @@ export default {
     if (url.pathname === "/api/v1/safelinku/status") { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "safelinku:read"); if (auth instanceof Response) return auth; return json({ provider: "safelinku", ...safelinkuConfigStatus(env), request_id: requestId }); }
     if (url.pathname === "/api/v1/safelinku/test-connection") { if (request.method !== "POST") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "safelinku:write"); if (auth instanceof Response) return auth; return json({ provider: "safelinku", ...(await testSafeLinkUConnection(env)), request_id: requestId }); }
     if (url.pathname === "/api/v1/safelinku/stats") { if (request.method !== "GET") return methodNotAllowed(requestId); const auth = await authorize(request, env, requestId, "safelinku:read"); if (auth instanceof Response) return auth; return json({ provider: "safelinku", ...(await getSafeLinkUStats(env)), request_id: requestId }); }
+
+    if (url.pathname === "/api/v1/api-keys") {
+      const auth = await authorize(request, env, requestId, request.method === "GET" ? "keys:read" : "keys:write");
+      if (auth instanceof Response) return auth;
+      if (request.method === "GET") return listApiKeys(request, env, requestId, json, auth);
+      if (request.method === "POST") return createApiKey(request, env, requestId, json, auth);
+      return methodNotAllowed(requestId);
+    }
+    const apiKeyMatch = url.pathname.match(/^\/api\/v1\/api-keys\/([^/]+)\/(revoke|rotate|usage)$/);
+    if (apiKeyMatch) {
+      const auth = await authorize(request, env, requestId, apiKeyMatch[2] === "usage" ? "keys:read" : "keys:write");
+      if (auth instanceof Response) return auth;
+      const keyId = decodeURIComponent(apiKeyMatch[1]);
+      if (apiKeyMatch[2] === "usage") { if (request.method !== "GET") return methodNotAllowed(requestId); return getApiKeyUsage(request, env, requestId, json, auth, keyId); }
+      if (request.method !== "POST") return methodNotAllowed(requestId);
+      return apiKeyMatch[2] === "revoke" ? revokeApiKey(request, env, requestId, json, auth, keyId) : rotateApiKey(request, env, requestId, json, auth, keyId);
+    }
 
     if (url.pathname === "/get-key" || url.pathname === "/get-key/") { if (request.method !== "GET") return methodNotAllowed(requestId); return getKeyPage(requestId); }
     if (url.pathname === "/api/v1/get-key/products") { if (request.method !== "GET") return methodNotAllowed(requestId); return listPublicProducts(env, requestId); }
