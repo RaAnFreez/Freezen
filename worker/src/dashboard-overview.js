@@ -30,7 +30,7 @@ export async function getDashboardOverview(request, env, requestId, json, auth) 
     const [totalLicenses, activeLicenses, expiredLicenses, revokedLicenses, users, scriptRequests, safelinkuClaims, hwidResets] = await Promise.all([
       count(env.DB, "SELECT COUNT(*) AS count FROM licenses"),
       count(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'ACTIVE'"),
-      count(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'EXPIRED' OR (expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP AND status = 'ACTIVE'"),
+      count(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'EXPIRED' OR (expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP AND status = 'ACTIVE')"),
       count(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'REVOKED'"),
       count(env.DB, "SELECT COUNT(*) AS count FROM users WHERE status = 'ACTIVE'"),
       count(env.DB, "SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'SCRIPT_REQUESTED' AND created_at >= datetime('now', ?1)", [windowSql]),
