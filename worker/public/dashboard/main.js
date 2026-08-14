@@ -122,6 +122,11 @@ function renderSection(id) {
     content.innerHTML = `<section class="panel loading"><b>SafeLinkU panel is still loading…</b><span>Please try again.</span></section>`;
     return;
   }
+  if (id === 'discord') {
+    if (window.FrezenDashboardPanels?.discord) return window.FrezenDashboardPanels.discord();
+    content.innerHTML = `<section class="panel loading"><b>Discord panel is still loading…</b><span>Please try again.</span></section>`;
+    return;
+  }
 
   const item = sections.find((s) => s[0] === id);
   const implementation = {
