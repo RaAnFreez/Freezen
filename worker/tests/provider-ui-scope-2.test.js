@@ -20,7 +20,6 @@ describe('Provider UI scope', () => {
     expect(provider).toContain('Generated key link');
     expect(provider).toContain('SafeLinkU integration');
     expect(provider).not.toContain('SafeLinkU API Key');
-    expect(provider).not.toContain('Generate');
 
     expect(safe).toContain('SafeLinkU API Key');
     expect(safe).toContain('Salt');
