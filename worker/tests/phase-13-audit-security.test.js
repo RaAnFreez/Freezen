@@ -14,7 +14,7 @@ describe("Phase 13 audit and security surfaces", () => {
     expect(module).toContain("(id, user_id, event_type, severity, request_id, metadata_json)");
   });
 
-  it("keeps the dashboard scoped to the four requested core controls", () => {
+  it("keeps the dashboard core controls and categorized navigation compatible", () => {
     const html = read("public/dashboard/index.html");
     const main = read("public/dashboard/main.js");
     const keyPanel = read("public/dashboard/license-panel.js");
@@ -24,10 +24,17 @@ describe("Phase 13 audit and security surfaces", () => {
     expect(html).toContain("scripts-panel.js?v=core-controls");
     expect(html).toContain("safelinku-panel.js?v=core-controls");
 
-    expect(main).toContain("['licenses','Key Control'");
-    expect(main).toContain("['hwid','HWID Control'");
-    expect(main).toContain("['scripts','Script Control'");
+    // The navigation labels are now grouped for the JNKIE-inspired sidebar,
+    // while the existing route IDs and panel contracts remain unchanged.
+    expect(main).toContain("['licenses','Keys'");
+    expect(main).toContain("['hwid','HWIDs'");
+    expect(main).toContain("['scripts','Lua Scripts'");
     expect(main).toContain("['safelinku','SafeLinkU'");
+    expect(main).toContain("['services','Services'");
+    expect(main).toContain("['provider','Provider'");
+    expect(main).toContain("label: 'KEY SYSTEM'");
+    expect(main).toContain("label: 'SCRIPTS'");
+    expect(main).toContain("label: 'MODERATION'");
     expect(main).toContain("licenses: 'licenses'");
     expect(keyPanel).toContain("KEY CONTROL");
     expect(keyPanel).toContain("window.FrezenDashboardPanels.licenses = mount");
