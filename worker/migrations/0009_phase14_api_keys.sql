@@ -1,12 +1,28 @@
 -- FREZEN CONTROL SYSTEM V3
 -- Phase 14: API key lifecycle storage.
--- The original Phase 4 schema already created a legacy api_keys table with a
--- different shape. This migration is the first production application of the
--- Phase 14 key lifecycle schema, so preserve that legacy table rather than
--- attempting to ALTER it in-place or discard existing rows.
+-- The original Phase 4 schema created a legacy api_keys table with a
+-- different shape. Some production databases may legitimately be missing
+-- that legacy table because their historical migration chain predates that
+-- schema. In that case, create an empty compatibility shell before renaming
+-- it so this migration can still establish the new production schema without
+-- inventing or assigning legacy key ownership.
 
 PRAGMA foreign_keys = ON;
 PRAGMA defer_foreign_keys = ON;
+
+-- Compatibility shell for production databases that do not contain the
+-- historical Phase 4 api_keys table. When the legacy table already exists,
+-- IF NOT EXISTS leaves it untouched and the rename below preserves its rows.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  key_hash TEXT NOT NULL UNIQUE,
+  scope TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TEXT,
+  last_used TEXT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REVOKED','EXPIRED'))
+);
 
 ALTER TABLE api_keys RENAME TO api_keys_legacy;
 
