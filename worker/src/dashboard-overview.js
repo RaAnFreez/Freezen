@@ -19,7 +19,6 @@ async function optionalCount(db, sql, binds = []) {
   try {
     return await count(db, sql, binds);
   } catch {
-    // Optional integration telemetry must never make the whole dashboard unavailable.
     return 0;
   }
 }
@@ -34,6 +33,18 @@ export async function getDashboardOverview(request, env, requestId, json, auth) 
   const requestedWindow = new URL(request.url).searchParams.get("range")?.toLowerCase() ?? "7d";
   const range = WINDOW_SQL[requestedWindow] ? requestedWindow : "7d";
   const windowSql = WINDOW_SQL[range];
+  const view = new URL(request.url).searchParams.get("view")?.toLowerCase();
+
+  // Integration panels must not depend on unrelated dashboard telemetry queries.
+  // This keeps Discord status available even when an optional/historical metric schema differs.
+  if (view === "discord") {
+    return json({
+      view: "discord",
+      discord: discordConfigStatus(env),
+      viewer: { user_id: auth.user_id, role: auth.role },
+      request_id: requestId,
+    }, 200, requestId);
+  }
 
   try {
     const [totalLicenses, activeLicenses, expiredLicenses, revokedLicenses, users, scriptRequests, safelinkuClaims, hwidResets] = await Promise.all([
