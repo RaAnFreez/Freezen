@@ -8,7 +8,7 @@ const sections = [
 const app = document.querySelector('#app');
 const esc = (v) => String(v ?? '—').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
-app.innerHTML = `<div class="shell"><aside class="sidebar" id="sidebar" aria-label="Frezen navigation"><div class="brand"><span class="mark">F</span><span>FREZEN</span></div><div class="nav" id="nav"></div><div class="side-foot"><span class="dot"></span>System protected</div></aside><div class="overlay" id="overlay"></div><main class="main"><header class="top"><div class="top-left"><button class="menu" id="menu" aria-label="Open navigation">☰</button><div><p class="eyebrow">CONTROL SYSTEM V3</p><h1 id="title">Key Control</h1></div></div><div class="top-right"><span id="user-name" class="eyebrow">Owner</span><div id="avatar" class="avatar">O</div></div></div></header><section class="content" id="content"></section></main></div>`;
+app.innerHTML = `<div class="shell"><aside class="sidebar" id="sidebar" aria-label="Frezen navigation"><div class="brand"><span class="mark">F</span><span>FREZEN</span></div><div class="nav" id="nav"></div><div class="side-foot"><span class="dot"></span>System protected</div></aside><div class="overlay" id="overlay"></div><main class="main"><header class="top"><div class="top-left"><button class="menu" id="menu" aria-label="Open navigation">☰</button><div><p class="eyebrow">CONTROL SYSTEM V3</p><h1 id="title">Key Control</h1></div></div><div class="top-right"><span id="user-name" class="eyebrow">Owner</span><div id="avatar" class="avatar">O</div></div></header><section class="content" id="content"></section></main></div>`;
 
 const nav = document.querySelector('#nav');
 const content = document.querySelector('#content');
