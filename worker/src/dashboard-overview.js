@@ -1,3 +1,5 @@
+import { discordConfigStatus } from "./discord.js";
+
 const WINDOW_SQL = {
   "24h": "-24 hours",
   "7d": "-7 days",
@@ -28,7 +30,7 @@ export async function getDashboardOverview(request, env, requestId, json, auth) 
     const [totalLicenses, activeLicenses, expiredLicenses, revokedLicenses, users, scriptRequests, safelinkuClaims, hwidResets] = await Promise.all([
       count(env.DB, "SELECT COUNT(*) AS count FROM licenses"),
       count(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'ACTIVE'"),
-      count(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'EXPIRED' OR (expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP AND status = 'ACTIVE')"),
+      count(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'EXPIRED' OR (expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP AND status = 'ACTIVE'"),
       count(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'REVOKED'"),
       count(env.DB, "SELECT COUNT(*) AS count FROM users WHERE status = 'ACTIVE'"),
       count(env.DB, "SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'SCRIPT_REQUESTED' AND created_at >= datetime('now', ?1)", [windowSql]),
@@ -47,6 +49,7 @@ export async function getDashboardOverview(request, env, requestId, json, auth) 
       metrics: { total_licenses: totalLicenses, active_licenses: activeLicenses, expired_licenses: expiredLicenses, revoked_licenses: revokedLicenses, users, script_requests: scriptRequests, safelinku_claims: safelinkuClaims, hwid_resets: hwidResets },
       charts: { license_activity: licenseActivity, script_requests: scriptActivity },
       recent_activity: recentActivity.results ?? [],
+      discord: discordConfigStatus(env),
       viewer: { user_id: auth.user_id, role: auth.role },
       request_id: requestId,
     }, 200, requestId);
