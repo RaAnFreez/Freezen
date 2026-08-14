@@ -8,7 +8,13 @@ async function asset(request, env, pathname) {
   }
   const url = new URL(request.url);
   url.pathname = pathname;
-  return env.ASSETS.fetch(new Request(url, request));
+  const response = await env.ASSETS.fetch(new Request(url, request));
+  if (pathname.endsWith(".html")) {
+    const headers = new Headers(response.headers);
+    headers.set("cache-control", "no-store, max-age=0");
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  }
+  return response;
 }
 
 export default {
