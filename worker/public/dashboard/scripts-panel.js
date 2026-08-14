@@ -48,8 +48,35 @@ async function createScriptModal(){
   m.querySelector('#save').onclick=async()=>{ try { await scriptRequest('/api/v1/scripts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({product_id:m.querySelector('#new-product').value,name:m.querySelector('#new-name').value,description:m.querySelector('#new-description').value})}); closeModal(); loadScripts(); } catch(e){ alert(`Create failed: ${e.message}`); } };
 }
 
+function renderVersions(script, versions) {
+  return versions.length ? versions.map(v => {
+    const active = String(v.status || '').toUpperCase() === 'ACTIVE';
+    const disabled = String(v.status || '').toUpperCase() === 'DISABLED';
+    const action = active ? '' : disabled ? '' : `<button class="ghost version-action" data-version="${html(v.id)}" data-action="activate">Activate</button><button class="ghost version-action" data-version="${html(v.id)}" data-action="disable">Disable</button>`;
+    return `<div class="version-row"><span><b>${html(v.version)}</b><small>${html(v.release_notes||'No release notes')}</small></span><span>${html(v.status)}</span><span class="version-actions">${action}</span></div>`;
+  }).join('') : '<div class="empty"><b>No versions</b><span>Upload a Lua version to begin a release lifecycle.</span></div>';
+}
+
+async function openScriptDetails(id){
+  try {
+    const d=await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}`);
+    const m=modal(d.script?.name||'Script details',`<p>${html(d.script?.description||'No description')}</p><div class="script-meta"><span>Status: ${html(d.script?.status)}</span><span>Product: ${html(d.script?.product_name||d.script?.product_id)}</span></div><div class="version-list" id="version-list">${renderVersions(d.script,d.versions||[])}</div>`);
+    m.querySelectorAll('.version-action').forEach(b=>b.onclick=()=>changeVersionState(id,b.dataset.version,b.dataset.action));
+  } catch(e){ alert(e.message); }
+}
+
+async function changeVersionState(scriptId, versionId, action){
+  const verb = action === 'activate' ? 'Activate' : 'Disable';
+  if(!confirm(`${verb} this script version?`)) return;
+  const endpoint = action === 'activate'
+    ? `/api/v1/scripts/${encodeURIComponent(scriptId)}/versions/${encodeURIComponent(versionId)}/active`
+    : `/api/v1/scripts/${encodeURIComponent(scriptId)}/versions/${encodeURIComponent(versionId)}/disabled`;
+  try { await scriptRequest(endpoint,{method:'PATCH'}); closeModal(); await openScriptDetails(scriptId); loadScripts(); }
+  catch(e){ alert(`${verb} failed: ${e.message}`); }
+}
+
 async function scriptAction(action,id){
-  if(action==='details'){ try{const d=await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}`); const versions=d.versions||[]; modal(d.script?.name||'Script details',`<p>${html(d.script?.description||'No description')}</p><div class="script-meta"><span>Status: ${html(d.script?.status)}</span><span>Product: ${html(d.script?.product_name||d.script?.product_id)}</span></div><div class="version-list">${versions.length?versions.map(v=>`<div class="version-row"><span><b>${html(v.version)}</b><small>${html(v.release_notes||'No release notes')}</small></span><span>${html(v.status)}</span></div>`).join(''):'<div class="empty"><b>No versions</b></div>'}</div>`); return;}catch(e){alert(e.message);return;} }
+  if(action==='details'){ await openScriptDetails(id); return; }
   if(action==='toggle'){const s=scriptItems.find(x=>x.id===id);if(!s)return;if(!confirm(`${s.status==='ACTIVE'?'Disable':'Enable'} ${s.name}?`))return;try{await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({status:s.status==='ACTIVE'?'DISABLED':'ACTIVE'})});loadScripts();}catch(e){alert(e.message);}return;}
   if(action==='version'){ uploadVersionModal(id); }
 }
@@ -57,7 +84,7 @@ async function scriptAction(action,id){
 function uploadVersionModal(id){
  const m=modal('Upload Script Version',`<p class="eyebrow">Lua files only • maximum 512 KB</p><div class="field"><label>Version</label><input id="version" placeholder="v1.0.0"></div><div class="field"><label>Lua file</label><input id="lua" type="file" accept=".lua,text/plain"></div><div class="field"><label>Release notes</label><textarea id="notes"></textarea></div><div class="modal-actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="upload">Upload</button></div>`);
  m.querySelector('#cancel').onclick=closeModal;
- m.querySelector('#upload').onclick=async()=>{const file=m.querySelector('#lua').files[0];if(!file){alert('Select a .lua file');return;}const form=new FormData();form.append('file',file);form.append('version',m.querySelector('#version').value);form.append('release_notes',m.querySelector('#notes').value);try{await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}/versions`,{method:'POST',body:form});closeModal();alert('Version uploaded. Activate it from the script release controls when ready.');}catch(e){alert(`Upload failed: ${e.message}`);}};
+ m.querySelector('#upload').onclick=async()=>{const file=m.querySelector('#lua').files[0];if(!file){alert('Select a .lua file');return;}const form=new FormData();form.append('file',file);form.append('version',m.querySelector('#version').value);form.append('release_notes',m.querySelector('#notes').value);try{await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}/versions`,{method:'POST',body:form});closeModal();alert('Version uploaded as ARCHIVED. Open Details to activate it when ready.');loadScripts();}catch(e){alert(`Upload failed: ${e.message}`);}};
 }
 
 function mountScripts(){ if(!scriptsRoot)return; scriptPage(); }
