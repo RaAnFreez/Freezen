@@ -55,4 +55,4 @@ document.querySelector('#menu').onclick = () => { sidebar.classList.add('open');
 overlay.onclick = () => { sidebar.classList.remove('open'); overlay.classList.remove('show'); };
 
 loadCurrentUser();
-select('licenses');
+setTimeout(() => select('licenses'), 0);
