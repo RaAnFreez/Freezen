@@ -1,5 +1,5 @@
 const encoder = new TextEncoder();
-const ITERATIONS = 120000;
+const ITERATIONS = 100000;
 const HASH_BYTES = 32;
 const SESSION_BYTES = 32;
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
