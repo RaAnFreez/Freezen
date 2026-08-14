@@ -15,6 +15,15 @@ async function count(db, sql, binds = []) {
   return safeNumber(result?.count);
 }
 
+async function optionalCount(db, sql, binds = []) {
+  try {
+    return await count(db, sql, binds);
+  } catch {
+    // Optional integration telemetry must never make the whole dashboard unavailable.
+    return 0;
+  }
+}
+
 async function series(db, sql, windowSql) {
   const result = await db.prepare(sql).bind(windowSql).all();
   return (result.results ?? []).map((row) => ({ date: row.date, count: safeNumber(row.count) }));
@@ -34,7 +43,7 @@ export async function getDashboardOverview(request, env, requestId, json, auth) 
       count(env.DB, "SELECT COUNT(*) AS count FROM licenses WHERE status = 'REVOKED'"),
       count(env.DB, "SELECT COUNT(*) AS count FROM users WHERE status = 'ACTIVE'"),
       count(env.DB, "SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'SCRIPT_REQUESTED' AND created_at >= datetime('now', ?1)", [windowSql]),
-      count(env.DB, "SELECT COUNT(*) AS count FROM claims WHERE provider = 'safelinku' AND status = 'SUCCESS' AND created_at >= datetime('now', ?1)", [windowSql]),
+      optionalCount(env.DB, "SELECT COUNT(*) AS count FROM claims WHERE provider = 'safelinku' AND status = 'SUCCESS' AND created_at >= datetime('now', ?1)", [windowSql]),
       count(env.DB, "SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'HWID_RESET' AND created_at >= datetime('now', ?1)", [windowSql]),
     ]);
 
