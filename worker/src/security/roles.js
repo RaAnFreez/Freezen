@@ -11,6 +11,7 @@ export const ROLE_PERMISSIONS = Object.freeze({
     "hwid:read", "hwid:write",
     "analytics:read",
     "safelinku:read", "safelinku:write",
+    "discord:read", "discord:write",
   ]),
   SUPPORT: Object.freeze([
     "users:read",
