@@ -107,14 +107,26 @@ function renderOverview(data = {}) {
 
 function renderSection(id) {
   if (id === 'overview') return loadOverview();
+
+  // HWID and Scripts own their complete UI and data lifecycle. The dashboard
+  // router only selects the panel; it must never render a placeholder first.
+  if (id === 'hwid') {
+    if (window.FrezenDashboardPanels?.hwid) return window.FrezenDashboardPanels.hwid();
+    content.innerHTML = `<section class="panel loading"><b>HWID panel is still loading…</b><span>Please try again.</span></section>`;
+    return;
+  }
+  if (id === 'scripts') {
+    if (window.FrezenDashboardPanels?.scripts) return window.FrezenDashboardPanels.scripts();
+    content.innerHTML = `<section class="panel loading"><b>Scripts panel is still loading…</b><span>Please try again.</span></section>`;
+    return;
+  }
+
   const item = sections.find((s) => s[0] === id);
   const implementation = {
     licenses: ['License Management','Search, status filters, pagination, detail metadata and safe lifecycle actions are the next connected license surface.'],
     keys: ['Key Management','Secure license/key operations will use the existing server-side authorization boundary.'],
     products: ['Products','Create, edit, disable and safely delete unused products through the authenticated product API.'],
-    scripts: ['Script Delivery','Manage script records, versions and protected delivery as the script roadmap becomes active.'],
     users: ['Users','Manage authenticated accounts, roles and status without trusting client-side permissions.'],
-    hwid: ['HWID','Inspect device bindings and perform authorized reset operations.'],
     safelinku: ['SafeLinkU','Claim and integration controls will appear here when the SafeLinkU phase is connected.'],
     discord: ['Discord','Discord integration status, linking and service controls will appear here when connected.'],
     analytics: ['Analytics','Usage and operational insights will be populated from production events without fabricated metrics.'],
