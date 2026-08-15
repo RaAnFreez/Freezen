@@ -12,8 +12,8 @@ describe('Provider and Service dashboard scope', () => {
     const services = read('public/dashboard/service-panel.js');
     const safe = read('public/dashboard/safelinku-panel.js');
 
-    expect(html).toContain('provider-panel.js?v=service-provider-separation-1');
-    expect(html).toContain('service-panel.js?v=service-provider-separation-1');
+    expect(html).toContain('provider-panel.js?v=provider-getkey-v2');
+    expect(html).toContain('service-panel.js?v=provider-getkey-v2');
     expect(main).toContain("['provider','Provider'");
     expect(main).toContain("['services','Services'");
     expect(main).toContain("services: 'services'");
