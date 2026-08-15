@@ -12,8 +12,8 @@ describe('Provider and Service dashboard scope', () => {
     const services = read('public/dashboard/service-panel.js');
     const safe = read('public/dashboard/safelinku-panel.js');
 
-    expect(html).toContain('provider-panel.js?v=core-controls');
-    expect(html).toContain('service-panel.js?v=core-controls');
+    expect(html).toContain('provider-panel.js?v=service-provider-separation-1');
+    expect(html).toContain('service-panel.js?v=service-provider-separation-1');
     expect(main).toContain("['provider','Provider'");
     expect(main).toContain("['services','Services'");
     expect(main).toContain("services: 'services'");
@@ -28,9 +28,9 @@ describe('Provider and Service dashboard scope', () => {
 
     expect(services).toContain('New Service');
     expect(services).toContain('Service Slug');
-    expect(services).toContain('Generated key link');
+    expect(services).toContain('Configured Link');
     expect(services).toContain('/get-key/');
-    expect(services).toContain('Copy Link');
+    expect(services).toContain('Copy');
     expect(services).toContain('Keyless Mode');
 
     expect(safe).not.toContain('Partner Programs');

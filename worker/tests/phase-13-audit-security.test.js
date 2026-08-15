@@ -19,13 +19,13 @@ describe("Phase 13 audit and security surfaces", () => {
     const main = read("public/dashboard/main.js");
     const keyPanel = read("public/dashboard/license-panel.js");
 
-    expect(html).toContain("license-panel.js?v=core-controls");
-    expect(html).toContain("hwid-panel.js?v=core-controls");
-    expect(html).toContain("scripts-panel.js?v=core-controls");
-    expect(html).toContain("safelinku-panel.js?v=core-controls");
+    expect(html).toContain("license-panel.js?v=service-provider-separation-1");
+    expect(html).toContain("hwid-panel.js?v=service-provider-separation-1");
+    expect(html).toContain("scripts-panel.js?v=service-provider-separation-1");
+    expect(html).toContain("safelinku-panel.js?v=service-provider-separation-1");
+    expect(html).toContain("provider-panel.js?v=service-provider-separation-1");
+    expect(html).toContain("service-panel.js?v=service-provider-separation-1");
 
-    // The navigation labels are now grouped for the JNKIE-inspired sidebar,
-    // while the existing route IDs and panel contracts remain unchanged.
     expect(main).toContain("['licenses','Keys'");
     expect(main).toContain("['hwid','HWIDs'");
     expect(main).toContain("['scripts','Lua Scripts'");
