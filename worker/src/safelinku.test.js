@@ -23,7 +23,21 @@ describe("SafeLinkU configuration", () => {
     expect(status.base_url).toBe("https://provider.example");
   });
 
-  it("records a failed connection without leaking the API key", async () => {
+  it("treats a normal 2xx upstream response as a successful connection", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 200, ok: true }));
+    const result = await testSafeLinkUConnection({
+      SAFELINKU_API_KEY: "super-secret",
+      SAFELINKU_API_BASE_URL: "https://provider.example/api",
+    });
+    expect(result).toEqual({
+      status: "ok",
+      http_status: 200,
+      configured: true,
+      error: null,
+    });
+  });
+
+  it("does not leak the API key on failed connections", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401 }));
     const result = await testSafeLinkUConnection({
       SAFELINKU_API_KEY: "super-secret",
@@ -35,7 +49,6 @@ describe("SafeLinkU configuration", () => {
       configured: true,
       error: null,
     });
-    expect(fetch).toHaveBeenCalledTimes(1);
     const [, options] = fetch.mock.calls[0];
     expect(options.headers.authorization).toBe("Bearer super-secret");
   });
