@@ -4,6 +4,8 @@ import path from 'node:path';
 
 const read = (file) => fs.readFileSync(path.resolve(process.cwd(), file), 'utf8');
 
+const hasDashboardAsset = (html, asset) => new RegExp(`/dashboard/${asset}\\?v=provider-getkey-v\\d+`).test(html);
+
 describe('Provider and Service dashboard scope', () => {
   it('keeps configured key links owned by Service and Provider free of link configuration', () => {
     const html = read('public/dashboard/index.html');
@@ -12,8 +14,8 @@ describe('Provider and Service dashboard scope', () => {
     const services = read('public/dashboard/service-panel.js');
     const safe = read('public/dashboard/safelinku-panel.js');
 
-    expect(html).toContain('provider-panel.js?v=provider-getkey-v2');
-    expect(html).toContain('service-panel.js?v=provider-getkey-v2');
+    expect(hasDashboardAsset(html, 'provider-panel.js')).toBe(true);
+    expect(hasDashboardAsset(html, 'service-panel.js')).toBe(true);
     expect(main).toContain("['provider','Provider'");
     expect(main).toContain("['services','Services'");
     expect(main).toContain("services: 'services'");
