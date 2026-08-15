@@ -52,7 +52,9 @@ export default {
     if (request.method === "GET" && publicServiceConfig) return getPublicServiceConfig(env, decodeURIComponent(publicServiceConfig[1]));
 
     if (request.method === "POST" && url.pathname === "/api/v1/get-key/flow/start") {
-      const slug = url.searchParams.get("slug") || "";
+      let body = {};
+      try { body = await request.clone().json(); } catch {}
+      const slug = url.searchParams.get("slug") || body?.slug || "";
       return startPublicFlow(request, env, slug);
     }
 
