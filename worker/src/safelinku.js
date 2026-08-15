@@ -2,7 +2,21 @@ const DEFAULT_TIMEOUT_MS = 8000;
 const SAFELINKU_LINKS_ENDPOINT = "https://safelinku.com/api/v1/links";
 
 function configured(env) {
+  // The documented SafeLinkU REST API authenticates with the API token
+  // directly against the fixed /api/v1/links endpoint. A separate base URL
+  // is therefore not required for the real integration.
   return Boolean(env?.SAFELINKU_API_KEY);
+}
+
+function legacyBaseUrl(env) {
+  if (!env?.SAFELINKU_API_BASE_URL) return null;
+  try {
+    const url = new URL(env.SAFELINKU_API_BASE_URL);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
 }
 
 function isHttpSuccess(status) {
@@ -31,7 +45,7 @@ async function requestSafeLinkU(env, options = {}) {
     });
     const status = response.status;
     const data = await response.json().catch(() => ({}));
-    const ok = isHttpSuccess(status);
+    const ok = isHttpSuccess(status) || response.ok === true;
     return {
       configured: true,
       status,
@@ -53,10 +67,17 @@ async function requestSafeLinkU(env, options = {}) {
 }
 
 export function safelinkuConfigStatus(env) {
+  const legacyBase = legacyBaseUrl(env);
   return {
     configured: configured(env),
     api_key_configured: Boolean(env?.SAFELINKU_API_KEY),
     endpoint: SAFELINKU_LINKS_ENDPOINT,
+    ...(legacyBase
+      ? {
+          base_url_configured: true,
+          base_url: new URL(legacyBase).origin,
+        }
+      : {}),
   };
 }
 
@@ -80,7 +101,11 @@ export async function createSafeLinkUShortLink(env, targetUrl, options = {}, req
   if (options.passcode) body.passcode = String(options.passcode).slice(0, 120);
 
   const result = await requestSafeLinkU(env, { body });
-  const shortUrl = typeof result.data?.url === "string" ? result.data.url : typeof result.data?.short_url === "string" ? result.data.short_url : null;
+  const shortUrl = typeof result.data?.url === "string"
+    ? result.data.url
+    : typeof result.data?.short_url === "string"
+      ? result.data.short_url
+      : null;
   const status = result.ok && shortUrl ? "ok" : "error";
   if (requestId) await recordSafeLinkURequest(env, requestId, status === "ok" ? "success" : "failed");
 
@@ -94,8 +119,9 @@ export async function createSafeLinkUShortLink(env, targetUrl, options = {}, req
 }
 
 export async function testSafeLinkUConnection(env, requestId = null) {
-  // The documented SafeLinkU API exposes link creation as the authenticated
-  // operation. A real test therefore uses the same endpoint, not GET `/`.
+  // The real Provider Test uses the same authenticated link-creation API as
+  // production. The generated URL is returned to the dashboard so the Test
+  // button can open the actual SafeLinkU checkpoint instead of a fake URL.
   const target = `https://example.com/?frezen_api_test=${crypto.randomUUID()}`;
   const result = await createSafeLinkUShortLink(env, target, {}, requestId);
   return {
