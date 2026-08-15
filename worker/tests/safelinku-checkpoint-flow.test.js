@@ -27,7 +27,7 @@ describe('SafeLinkU checkpoint link flow', () => {
     expect(panel).toContain('/api/v1/safelinku/checkpoints/create');
     expect(panel).toContain('reference = result.url');
     expect(panel).toContain('checkpoint-url');
-    expect(provider).toContain('configured SafeLinkU checkpoint URL');
+    expect(provider).toContain('no SafeLinkU checkpoint URL configured');
     expect(provider).toContain('window.open(target.toString()');
   });
 
