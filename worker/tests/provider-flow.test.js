@@ -10,10 +10,12 @@ describe('Provider SafeLinkU checkpoint test flow', () => {
   it('adds the provider Test action without moving Configured Link out of Services', () => {
     const provider = read('public/dashboard/provider-flow-enhancer.js');
     const service = read('public/dashboard/service-panel.js');
-    expect(provider).toContain("/api/v1/safelinku/test-connection");
-    expect(provider).toContain("crypto.randomUUID()");
+    expect(provider).toContain('runProviderTest');
+    expect(provider).toContain('crypto.randomUUID()');
     expect(provider).toContain('window.open');
     expect(provider).toContain('frezen_flow');
+    expect(provider).toContain('checkpoint_index');
+    expect(provider).toContain('checkpoint_total');
     expect(service).toContain('Configured Link');
   });
 
