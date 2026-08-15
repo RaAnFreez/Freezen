@@ -10,17 +10,20 @@ async function api(path, options = {}) {
 
 const META_KEY = 'frezen.safelinku.integration.meta';
 const CHECKPOINTS_KEY = 'frezen.safelinku.checkpoints.v1';
+const PROVIDERS_KEY = 'frezen.providers.v1';
 const readMeta = () => { try { const value = JSON.parse(localStorage.getItem(META_KEY) || 'null'); return value && typeof value === 'object' ? value : null; } catch { return null; } };
 const writeMeta = (meta) => { try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch {} };
 const readCheckpoints = () => { try { const value = JSON.parse(localStorage.getItem(CHECKPOINTS_KEY) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
 const writeCheckpoints = (value) => { try { localStorage.setItem(CHECKPOINTS_KEY, JSON.stringify(value)); } catch {} };
+const readProviders = () => { try { const value = JSON.parse(localStorage.getItem(PROVIDERS_KEY) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
+const writeProviders = (value) => { try { localStorage.setItem(PROVIDERS_KEY, JSON.stringify(value)); } catch {} };
 const generateSalt = () => { const bytes = new Uint8Array(16); crypto.getRandomValues(bytes); return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join(''); };
 const makeId = () => crypto.randomUUID();
 
 function openIntegrationModal({ edit = false, meta = null, configured = false }) {
   const backdrop = document.createElement('div');
   backdrop.className = 'safelinku-modal-backdrop';
-  backdrop.innerHTML = `<section class="safelinku-modal" role="dialog" aria-modal="true" aria-labelledby="safelinku-modal-title"><div class="safelinku-modal-head"><div><div class="safelinku-brand-icon">⌁</div><h3 id="safelinku-modal-title">${edit ? 'Edit integration' : 'New Integration'}</h3><p>${edit ? 'Update integration settings' : 'Connect new integration service'}</p></div><button class="safelinku-modal-close" type="button" aria-label="Close">×</button></div><form class="safelinku-form"><div class="safelinku-field"><label class="safelinku-label" for="safelinku-name">Name <span class="safelinku-required">*</span></label><input class="safelinku-input" id="safelinku-name" maxlength="80" required value="${esc(meta?.name || '')}" placeholder="Getkey system"></div><div class="safelinku-field"><label class="safelinku-label" for="safelinku-key">SafeLinkU API Key <span class="safelinku-required">*</span></label><input class="safelinku-input" id="safelinku-key" type="password" autocomplete="new-password" ${edit ? '' : 'required'} placeholder="${edit ? 'Leave blank to keep current key' : 'Paste your SafeLinkU API key'}"></div><div class="safelinku-field"><label class="safelinku-label" for="safelinku-salt">Salt <span class="safelinku-required">*</span></label><div class="safelinku-salt-row"><input class="safelinku-input" id="safelinku-salt" maxlength="128" required value="${esc(meta?.salt || '')}" placeholder="Generate a secure salt"><button class="secondary safelinku-generate" id="safelinku-generate" type="button">Generate</button></div></div><p class="safelinku-note">The API key is never written to browser storage. Provider credentials remain controlled by the Worker-side configuration.</p><div class="safelinku-form-actions"><button class="primary" type="submit">${edit ? 'Update' : 'Create'}</button><button class="secondary" type="button" id="safelinku-cancel">Cancel</button></div></form></section>`;
+  backdrop.innerHTML = `<section class="safelinku-modal" role="dialog" aria-modal="true" aria-labelledby="safelinku-modal-title"><div class="safelinku-modal-head"><div><div class="safelinku-brand-icon">⌁</div><h3 id="safelinku-modal-title">${edit ? 'Edit integration' : 'New Integration'}</h3><p>${edit ? 'Update integration settings' : 'Connect new integration service'}</p></div><button class="safelinku-modal-close" type="button" aria-label="Close">×</button></div><form class="safelinku-form"><div class="safelinku-field"><label class="safelinku-label" for="safelinku-name">Name <span class="safelinku-required">*</span></label><input class="safelinku-input" id="safelinku-name" maxlength="80" required value="${esc(meta?.name || '')}" placeholder="Getkey system"></div><div class="safelinku-field"><label class="safelinku-label" for="safelinku-key">SafeLinkU API Key <span class="safelinku-required">*</span></label><input class="safelinku-input" id="safelinku-key" type="password" autocomplete="new-password" ${edit ? '' : 'required'} placeholder="${edit ? 'Leave blank to keep current key' : 'Paste your SafeLinkU API key'}"></div><div class="safelinku-field"><label class="safelinku-label" for="safelinku-salt">Salt <span class="safelinku-required">*</span></label><div class="safelinku-salt-row"><input class="safelinku-input" id="safelinku-salt" maxlength="128" required value="${esc(meta?.salt || '')}" placeholder="Generate a secure salt"><button class="secondary safelinku-generate" id="safelinku-generate" type="button">Generate</button></div></div><p class="safelinku-note">The API key is never written to browser storage. Worker-side provider credentials remain separate.</p><div class="safelinku-form-actions"><button class="primary" type="submit">${edit ? 'Update' : 'Create'}</button><button class="secondary" type="button" id="safelinku-cancel">Cancel</button></div></form></section>`;
   document.body.appendChild(backdrop);
   const close = () => backdrop.remove();
   backdrop.querySelector('.safelinku-modal-close').onclick = close;
@@ -39,10 +42,22 @@ function openIntegrationModal({ edit = false, meta = null, configured = false })
   });
 }
 
+function deleteIntegration() {
+  const meta = readMeta();
+  const name = meta?.name || 'SafeLinkU integration';
+  if (!confirm(`Delete "${name}" and all Frezen-side SafeLinkU checkpoint definitions?`)) return;
+  localStorage.removeItem(META_KEY);
+  localStorage.removeItem(CHECKPOINTS_KEY);
+  // Detach existing local Provider selections so they do not keep stale checkpoint IDs.
+  const providers = readProviders().map((provider) => ({ ...provider, checkpoints: [] }));
+  writeProviders(providers);
+  mountSafeLinkU();
+}
+
 function openCheckpointModal({ checkpoint = null, meta = null }) {
   const backdrop = document.createElement('div');
   backdrop.className = 'safelinku-modal-backdrop';
-  backdrop.innerHTML = `<section class="safelinku-modal" role="dialog" aria-modal="true"><div class="safelinku-modal-head"><div><div class="safelinku-brand-icon">+</div><h3>${checkpoint ? 'Edit checkpoint' : 'New checkpoint'}</h3><p>Create a checkpoint definition that Providers can select in sequence.</p></div><button class="safelinku-modal-close" type="button">×</button></div><form class="safelinku-form"><div class="safelinku-field"><label class="safelinku-label">Checkpoint name <span class="safelinku-required">*</span></label><input class="safelinku-input" id="checkpoint-name" maxlength="100" required value="${esc(checkpoint?.name || '')}" placeholder="Getkey system"></div><div class="safelinku-field"><label class="safelinku-label">SafeLinkU reference</label><input class="safelinku-input" id="checkpoint-ref" maxlength="120" value="${esc(checkpoint?.reference || '')}" placeholder="#38153 or external checkpoint ID"></div><div class="safelinku-field"><label class="safelinku-label">Checkpoint type</label><select class="safelinku-input" id="checkpoint-type"><option value="getkey" ${checkpoint?.type === 'getkey' || !checkpoint ? 'selected' : ''}>Getkey system</option><option value="safelinku" ${checkpoint?.type === 'safelinku' ? 'selected' : ''}>SafeLinkU checkpoint</option></select></div><p class="safelinku-note">This creates a Frezen-side checkpoint definition linked to the SafeLinkU integration. It does not claim to call an undocumented SafeLinkU endpoint.</p><div class="safelinku-form-actions"><button class="primary" type="submit">${checkpoint ? 'Save' : 'Create'}</button><button class="secondary" type="button" id="checkpoint-cancel">Cancel</button></div></form></section>`;
+  backdrop.innerHTML = `<section class="safelinku-modal" role="dialog" aria-modal="true"><div class="safelinku-modal-head"><div><div class="safelinku-brand-icon">+</div><h3>${checkpoint ? 'Edit checkpoint' : 'New checkpoint'}</h3><p>Manage a SafeLinkU checkpoint definition for the Provider sequence.</p></div><button class="safelinku-modal-close" type="button">×</button></div><form class="safelinku-form"><div class="safelinku-field"><label class="safelinku-label">Checkpoint name <span class="safelinku-required">*</span></label><input class="safelinku-input" id="checkpoint-name" maxlength="100" required value="${esc(checkpoint?.name || '')}" placeholder="Getkey system"></div><div class="safelinku-field"><label class="safelinku-label">SafeLinkU checkpoint URL</label><input class="safelinku-input" id="checkpoint-ref" maxlength="500" value="${esc(checkpoint?.reference || '')}" placeholder="https://safelinku.com/..." type="url" inputmode="url" autocomplete="off"></div><div class="safelinku-field"><label class="safelinku-label">Checkpoint type</label><select class="safelinku-input" id="checkpoint-type"><option value="safelinku" ${checkpoint?.type === 'safelinku' || !checkpoint ? 'selected' : ''}>SafeLinkU checkpoint</option></select></div><p class="safelinku-note">Use the actual SafeLinkU URL generated by your integration. Frezen does not fake completion.</p><div class="safelinku-form-actions"><button class="primary" type="submit">${checkpoint ? 'Save' : 'Create'}</button><button class="secondary" type="button" id="checkpoint-cancel">Cancel</button></div></form></section>`;
   document.body.appendChild(backdrop);
   const close = () => backdrop.remove();
   backdrop.querySelector('.safelinku-modal-close').onclick = close;
@@ -51,9 +66,10 @@ function openCheckpointModal({ checkpoint = null, meta = null }) {
   backdrop.querySelector('form').onsubmit = (event) => {
     event.preventDefault();
     const name = backdrop.querySelector('#checkpoint-name').value.trim();
-    if (!name) return;
+    const reference = backdrop.querySelector('#checkpoint-ref').value.trim();
+    if (!name || !/^https:\/\//i.test(reference)) return;
     const list = readCheckpoints();
-    const item = { id: checkpoint?.id || makeId(), name, reference: backdrop.querySelector('#checkpoint-ref').value.trim(), type: backdrop.querySelector('#checkpoint-type').value, integration: meta?.name || 'Getkey system', enabled: true, updated_at: new Date().toISOString() };
+    const item = { id: checkpoint?.id || makeId(), name, reference, type: 'safelinku', integration: meta?.name || 'Getkey system', enabled: true, updated_at: new Date().toISOString() };
     writeCheckpoints(checkpoint ? list.map((row) => row.id === item.id ? item : row) : [item, ...list]);
     close();
     mountSafeLinkU();
@@ -62,7 +78,7 @@ function openCheckpointModal({ checkpoint = null, meta = null }) {
 
 function renderCheckpoints(meta) {
   const checkpoints = readCheckpoints();
-  return `<section class="safelinku-checkpoints"><div class="safelinku-checkpoints-head"><div><h3>Checkpoints</h3><p>SafeLinkU checkpoints available to the Provider sequence.</p></div><button class="secondary" id="safelinku-new-checkpoint" type="button">＋ New Checkpoint</button></div>${checkpoints.length ? `<div class="safelinku-checkpoint-list">${checkpoints.map((checkpoint) => `<article class="safelinku-checkpoint-card" data-id="${esc(checkpoint.id)}"><div><b>${esc(checkpoint.name)}</b><small>${esc(checkpoint.type || 'SafeLinkU checkpoint')} · ${esc(checkpoint.reference || checkpoint.id)}</small><span>Integration: ${esc(checkpoint.integration || meta?.name || 'Getkey system')}</span></div><div class="safelinku-checkpoint-actions"><button class="secondary checkpoint-edit" type="button">Edit</button><button class="secondary checkpoint-delete" type="button">Delete</button></div></article>`).join('')}</div>` : '<div class="safelinku-empty safelinku-checkpoint-empty"><b>No checkpoints yet</b><span>Create the first checkpoint for the GetKey provider flow.</span></div>'}</section>`;
+  return `<section class="safelinku-checkpoints"><div class="safelinku-checkpoints-head"><div><h3>Checkpoints</h3><p>SafeLinkU checkpoints available to the Provider sequence.</p></div><button class="secondary" id="safelinku-new-checkpoint" type="button">＋ New Checkpoint</button></div>${checkpoints.length ? `<div class="safelinku-checkpoint-list">${checkpoints.map((checkpoint) => `<article class="safelinku-checkpoint-card" data-id="${esc(checkpoint.id)}"><div><b>${esc(checkpoint.name)}</b><small>SafeLinkU checkpoint · ${esc(checkpoint.reference || checkpoint.id)}</small><span>Integration: ${esc(checkpoint.integration || meta?.name || 'Getkey system')}</span></div><div class="safelinku-checkpoint-actions"><button class="secondary checkpoint-edit" type="button">Edit</button><button class="secondary checkpoint-delete" type="button">Delete</button></div></article>`).join('')}</div>` : '<div class="safelinku-empty safelinku-checkpoint-empty"><b>No checkpoints yet</b><span>Add the real SafeLinkU checkpoint URL used by the GetKey flow.</span></div>'}</section>`;
 }
 
 async function mountSafeLinkU() {
@@ -77,7 +93,17 @@ async function mountSafeLinkU() {
     root.innerHTML = `<div class="safelinku-page"><section class="safelinku-hero"><div class="safelinku-brand"><div class="safelinku-brand-icon">⌁</div><div><h2>SafeLinkU</h2><p>Connect and manage the SafeLinkU integration used by Frezen.</p></div></div></section><button class="primary safelinku-new" id="safelinku-new">＋ <span>New Integration</span></button><div class="safelinku-filters"><select class="safelinku-select" aria-label="Integration type"><option selected>SafeLinkU</option></select><select class="safelinku-select" aria-label="Integration status"><option selected>All</option><option>Active</option><option>Pending</option></select></div>${current ? `<article class="safelinku-card"><div class="safelinku-card-head"><div class="safelinku-provider-logo">S</div><div><h3>${esc(current.name)}</h3><div class="safelinku-provider">SafeLinkU</div></div></div><div class="safelinku-badges"><span class="safelinku-badge ${configured ? '' : 'pending'}"><span class="safelinku-badge-dot"></span>${configured ? 'Active' : 'Pending'}</span><span class="safelinku-badge"><span class="safelinku-badge-dot">✓</span>Flow-Ready</span></div><div class="safelinku-actions"><button class="primary safelinku-edit" id="safelinku-edit">✎ <span>Edit</span></button><button class="secondary safelinku-more" id="safelinku-more" aria-label="More options">•••</button></div></article>` : `<div class="safelinku-empty"><b>No SafeLinkU integration yet</b><span>Tap “New Integration” to create one.</span></div>`}${renderCheckpoints(current)}</div>`;
     document.querySelector('#safelinku-new')?.addEventListener('click', () => openIntegrationModal({ configured }));
     document.querySelector('#safelinku-edit')?.addEventListener('click', () => openIntegrationModal({ edit: true, meta: current, configured }));
-    document.querySelector('#safelinku-more')?.addEventListener('click', () => { const card = document.querySelector('.safelinku-card'); if (!card) return; const existing = card.querySelector('.safelinku-status'); if (existing) return existing.remove(); const info = document.createElement('div'); info.className = 'safelinku-status'; info.textContent = 'Additional integration actions are intentionally not enabled yet.'; card.appendChild(info); });
+    document.querySelector('#safelinku-more')?.addEventListener('click', () => {
+      const card = document.querySelector('.safelinku-card');
+      if (!card) return;
+      let statusBox = card.querySelector('.safelinku-status');
+      if (statusBox) { statusBox.remove(); return; }
+      statusBox = document.createElement('div');
+      statusBox.className = 'safelinku-status';
+      statusBox.innerHTML = '<button class="secondary safelinku-delete-integration" type="button">Delete Integration</button><p>Removes the Frezen-side integration metadata and checkpoint definitions. The Worker Secret itself is not exposed to the browser.</p>';
+      card.appendChild(statusBox);
+      statusBox.querySelector('.safelinku-delete-integration')?.addEventListener('click', deleteIntegration);
+    });
     document.querySelector('#safelinku-new-checkpoint')?.addEventListener('click', () => openCheckpointModal({ meta: current }));
     document.querySelectorAll('.checkpoint-edit').forEach((button) => button.addEventListener('click', () => { const checkpoint = readCheckpoints().find((row) => row.id === button.closest('.safelinku-checkpoint-card')?.dataset.id); if (checkpoint) openCheckpointModal({ checkpoint, meta: current }); }));
     document.querySelectorAll('.checkpoint-delete').forEach((button) => button.addEventListener('click', () => { const id = button.closest('.safelinku-checkpoint-card')?.dataset.id; if (!id) return; if (!confirm('Delete this checkpoint definition?')) return; writeCheckpoints(readCheckpoints().filter((row) => row.id !== id)); mountSafeLinkU(); }));
