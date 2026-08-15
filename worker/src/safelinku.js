@@ -15,6 +15,10 @@ function baseUrl(env) {
   }
 }
 
+function isHttpSuccess(status) {
+  return Number.isInteger(status) && status >= 200 && status < 300;
+}
+
 async function requestSafeLinkU(env, path = "/", options = {}) {
   const base = baseUrl(env);
   if (!base || !env?.SAFELINKU_API_KEY) {
@@ -37,7 +41,12 @@ async function requestSafeLinkU(env, path = "/", options = {}) {
       signal: controller.signal,
       headers,
     });
-    return { configured: true, status: response.status, ok: response.ok };
+    const status = response.status;
+    // Cloudflare's Fetch Response is the source of truth, but classify by the
+    // HTTP status as well so an otherwise-valid 2xx response cannot become a
+    // false negative because of an incomplete/mocked `ok` property.
+    const ok = isHttpSuccess(status) || response.ok === true;
+    return { configured: true, status, ok, error: null };
   } catch (error) {
     return {
       configured: true,
