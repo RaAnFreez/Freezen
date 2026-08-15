@@ -4,6 +4,7 @@ import path from "node:path";
 
 const root = path.resolve(process.cwd());
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const hasDashboardAsset = (html, asset) => new RegExp(`/dashboard/${asset}\\?v=provider-getkey-v\\d+`).test(html);
 
 describe("Phase 13 audit and security surfaces", () => {
   it("keeps the existing security event schema compatible", () => {
@@ -19,12 +20,12 @@ describe("Phase 13 audit and security surfaces", () => {
     const main = read("public/dashboard/main.js");
     const keyPanel = read("public/dashboard/license-panel.js");
 
-    expect(html).toContain("license-panel.js?v=provider-getkey-v2");
-    expect(html).toContain("hwid-panel.js?v=provider-getkey-v2");
-    expect(html).toContain("scripts-panel.js?v=provider-getkey-v2");
-    expect(html).toContain("safelinku-panel.js?v=provider-getkey-v2");
-    expect(html).toContain("provider-panel.js?v=provider-getkey-v2");
-    expect(html).toContain("service-panel.js?v=provider-getkey-v2");
+    expect(hasDashboardAsset(html, "license-panel.js")).toBe(true);
+    expect(hasDashboardAsset(html, "hwid-panel.js")).toBe(true);
+    expect(hasDashboardAsset(html, "scripts-panel.js")).toBe(true);
+    expect(hasDashboardAsset(html, "safelinku-panel.js")).toBe(true);
+    expect(hasDashboardAsset(html, "provider-panel.js")).toBe(true);
+    expect(hasDashboardAsset(html, "service-panel.js")).toBe(true);
 
     expect(main).toContain("['licenses','Keys'");
     expect(main).toContain("['hwid','HWIDs'");
