@@ -19,12 +19,12 @@ describe("Phase 13 audit and security surfaces", () => {
     const main = read("public/dashboard/main.js");
     const keyPanel = read("public/dashboard/license-panel.js");
 
-    expect(html).toContain("license-panel.js?v=service-provider-separation-1");
-    expect(html).toContain("hwid-panel.js?v=service-provider-separation-1");
-    expect(html).toContain("scripts-panel.js?v=service-provider-separation-1");
-    expect(html).toContain("safelinku-panel.js?v=service-provider-separation-1");
-    expect(html).toContain("provider-panel.js?v=service-provider-separation-1");
-    expect(html).toContain("service-panel.js?v=service-provider-separation-1");
+    expect(html).toContain("license-panel.js?v=provider-getkey-v2");
+    expect(html).toContain("hwid-panel.js?v=provider-getkey-v2");
+    expect(html).toContain("scripts-panel.js?v=provider-getkey-v2");
+    expect(html).toContain("safelinku-panel.js?v=provider-getkey-v2");
+    expect(html).toContain("provider-panel.js?v=provider-getkey-v2");
+    expect(html).toContain("service-panel.js?v=provider-getkey-v2");
 
     expect(main).toContain("['licenses','Keys'");
     expect(main).toContain("['hwid','HWIDs'");
