@@ -33,6 +33,15 @@ async function audit(env, auth, action, resourceType, resourceId, status, reques
   } catch { /* audit failure must not expose database details to clients */ }
 }
 
+async function scriptSchemaStatus(env) {
+  if (!env.DB) return { available: false, reason: "DATABASE_UNAVAILABLE", tables: [] };
+  const result = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('scripts','script_versions','script_files') ORDER BY name").all();
+  const tables = (result?.results ?? []).map((row) => String(row.name));
+  const required = ["scripts", "script_versions", "script_files"];
+  const available = required.every((table) => tables.includes(table));
+  return { available, reason: available ? null : "SCRIPT_SCHEMA_UNAVAILABLE", tables };
+}
+
 async function parseUpload(request) {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("multipart/form-data")) return { error: "MULTIPART_FORM_DATA_REQUIRED" };
@@ -48,6 +57,10 @@ async function parseUpload(request) {
 }
 
 export async function listScripts(request, env, requestId, json) {
+  if (new URL(request.url).searchParams.get("health") === "1") {
+    try { return json({ script_system: await scriptSchemaStatus(env), request_id: requestId }); }
+    catch { return bad(json, requestId, "DATABASE_ERROR", 503); }
+  }
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
@@ -73,6 +86,8 @@ export async function listScripts(request, env, requestId, json) {
 
 export async function createScript(request, env, requestId, json, auth) {
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
+  const schema = await scriptSchemaStatus(env).catch(() => ({ available: false }));
+  if (!schema.available) return bad(json, requestId, "SCRIPT_SCHEMA_UNAVAILABLE", 503, { available_tables: schema.tables ?? [] });
   let body;
   try { body = await request.json(); } catch { return bad(json, requestId, "INVALID_JSON"); }
   const productId = String(body?.product_id ?? "").trim();
@@ -95,6 +110,8 @@ export async function createScript(request, env, requestId, json, auth) {
 
 export async function uploadScriptVersion(request, env, requestId, json, auth, scriptId) {
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
+  const schema = await scriptSchemaStatus(env).catch(() => ({ available: false }));
+  if (!schema.available) return bad(json, requestId, "SCRIPT_SCHEMA_UNAVAILABLE", 503, { available_tables: schema.tables ?? [] });
   const parsed = await parseUpload(request);
   if (parsed.error) return bad(json, requestId, parsed.error);
   if (!parsed.version) return bad(json, requestId, "INVALID_VERSION");
@@ -117,6 +134,8 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
 
 export async function setScriptVersionActive(request, env, requestId, json, auth, scriptId, versionId) {
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
+  const schema = await scriptSchemaStatus(env).catch(() => ({ available: false }));
+  if (!schema.available) return bad(json, requestId, "SCRIPT_SCHEMA_UNAVAILABLE", 503, { available_tables: schema.tables ?? [] });
   const version = await env.DB.prepare("SELECT id,script_id,version,status FROM script_versions WHERE id=?1 AND script_id=?2 LIMIT 1").bind(versionId, scriptId).first();
   if (!version) return bad(json, requestId, "SCRIPT_VERSION_NOT_FOUND", 404);
   if (version.status === "DISABLED") return bad(json, requestId, "SCRIPT_VERSION_DISABLED", 409);
@@ -133,6 +152,8 @@ export async function setScriptVersionActive(request, env, requestId, json, auth
 
 export async function setScriptVersionDisabled(request, env, requestId, json, auth, scriptId, versionId) {
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
+  const schema = await scriptSchemaStatus(env).catch(() => ({ available: false }));
+  if (!schema.available) return bad(json, requestId, "SCRIPT_SCHEMA_UNAVAILABLE", 503, { available_tables: schema.tables ?? [] });
   const version = await env.DB.prepare("SELECT id,script_id,version,status FROM script_versions WHERE id=?1 AND script_id=?2 LIMIT 1").bind(versionId, scriptId).first();
   if (!version) return bad(json, requestId, "SCRIPT_VERSION_NOT_FOUND", 404);
   if (version.status === "ACTIVE") return bad(json, requestId, "ACTIVE_VERSION_MUST_BE_ARCHIVED_OR_REPLACED", 409);
@@ -145,6 +166,8 @@ export async function setScriptVersionDisabled(request, env, requestId, json, au
 
 export async function updateScript(request, env, requestId, json, auth, scriptId) {
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
+  const schema = await scriptSchemaStatus(env).catch(() => ({ available: false }));
+  if (!schema.available) return bad(json, requestId, "SCRIPT_SCHEMA_UNAVAILABLE", 503, { available_tables: schema.tables ?? [] });
   let body;
   try { body = await request.json(); } catch { return bad(json, requestId, "INVALID_JSON"); }
   if (!["ACTIVE", "DISABLED"].includes(body?.status)) return bad(json, requestId, "INVALID_SCRIPT_STATUS");
@@ -156,6 +179,8 @@ export async function updateScript(request, env, requestId, json, auth, scriptId
 
 export async function deleteScript(request, env, requestId, json, auth, scriptId) {
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
+  const schema = await scriptSchemaStatus(env).catch(() => ({ available: false }));
+  if (!schema.available) return bad(json, requestId, "SCRIPT_SCHEMA_UNAVAILABLE", 503, { available_tables: schema.tables ?? [] });
   const result = await env.DB.prepare("DELETE FROM scripts WHERE id=?1").bind(scriptId).run();
   if (!result?.meta?.changes) return bad(json, requestId, "SCRIPT_NOT_FOUND", 404);
   await audit(env, auth, "SCRIPT_DELETED", "script", scriptId, "SUCCESS", requestId);
@@ -164,6 +189,8 @@ export async function deleteScript(request, env, requestId, json, auth, scriptId
 
 export async function getScript(request, env, requestId, json, scriptId) {
   if (!env.DB) return bad(json, requestId, "DATABASE_UNAVAILABLE", 503);
+  const schema = await scriptSchemaStatus(env).catch(() => ({ available: false }));
+  if (!schema.available) return bad(json, requestId, "SCRIPT_SCHEMA_UNAVAILABLE", 503, { available_tables: schema.tables ?? [] });
   const script = await env.DB.prepare("SELECT s.id,s.product_id,s.name,s.description,s.status,s.created_at,s.updated_at,p.name AS product_name FROM scripts s JOIN products p ON p.id=s.product_id WHERE s.id=?1 LIMIT 1").bind(scriptId).first();
   if (!script) return bad(json, requestId, "SCRIPT_NOT_FOUND", 404);
   const versions = await env.DB.prepare("SELECT id,version,file_reference,release_notes,status,created_at FROM script_versions WHERE script_id=?1 ORDER BY created_at DESC").bind(scriptId).all();
