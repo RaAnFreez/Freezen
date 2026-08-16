@@ -40,7 +40,7 @@
   function toggleCreate() {
     const node = document.querySelector('#license-create-form');
     if (node.innerHTML) { node.innerHTML = ''; return; }
-    node.innerHTML = `<section class="panel" style="margin-bottom:18px"><div class="panel-head"><div><p class="eyebrow">NEW LICENSE</p><h3>Create license</h3></div></div><form id="license-form"><div class="license-toolbar"><input name="product_id" required placeholder="Product ID"><input name="duration_days" type="number" min="1" max="3650" placeholder="Duration days"><input name="max_devices" type="number" min="1" max="100" value="1" placeholder="Max devices"><button class="primary" type="submit">Generate</button></div></form></section>`;
+    node.innerHTML = `<section class="panel" style="margin-bottom:18px"><div class="panel-head"><div><p class="eyebrow">NEW LICENSE</p><h3>Create license</h3><p class="eyebrow">Product metadata is optional; keys can be created directly in the existing licenses table.</p></div></div><form id="license-form"><div class="license-toolbar"><input name="duration_days" type="number" min="1" max="3650" placeholder="Duration days"><input name="max_devices" type="number" min="1" max="100" value="1" placeholder="Max devices"><button class="primary" type="submit">Generate</button></div></form></section>`;
     document.querySelector('#license-form').onsubmit = async (event) => {
       event.preventDefault();
       const body = Object.fromEntries(new FormData(event.currentTarget));
@@ -67,7 +67,7 @@
   function row(license) {
     const statusClass = esc(license.status);
     const id = encodeURIComponent(license.id);
-    return `<tr><td><span class="license-id">${esc(license.id)}</span></td><td>${esc(license.product_name || license.product_id)}</td><td>${esc(license.username || license.email || 'Unassigned')}</td><td><span class="license-status ${statusClass}">${esc(license.status)}</span></td><td>${esc(license.expires_at || 'No expiry')}</td><td>${esc(license.max_devices)}</td><td><div class="license-actions">${license.status !== 'revoked' ? `<button data-action="revoke" data-id="${id}" class="danger">Revoke</button>` : ''}${license.status !== 'active' && license.status !== 'banned' ? `<button data-action="activate" data-id="${id}">Activate</button>` : ''}<button data-action="extend" data-id="${id}">+30d</button><button data-action="hwid" data-id="${id}">Reset HWID</button></div></td></tr>`;
+    return `<tr><td><span class="license-id">${esc(license.id)}</span></td><td>${esc(license.product_name || license.product_id || 'Unassigned')}</td><td>${esc(license.username || license.email || 'Unassigned')}</td><td><span class="license-status ${statusClass}">${esc(license.status)}</span></td><td>${esc(license.expires_at || 'No expiry')}</td><td>${esc(license.max_devices)}</td><td><div class="license-actions">${license.status !== 'revoked' ? `<button data-action="revoke" data-id="${id}" class="danger">Revoke</button>` : ''}${license.status !== 'active' && license.status !== 'banned' ? `<button data-action="activate" data-id="${id}">Activate</button>` : ''}<button data-action="extend" data-id="${id}">+30d</button><button data-action="hwid" data-id="${id}">Reset HWID</button></div></td></tr>`;
   }
 
   async function load() {
@@ -81,7 +81,7 @@
       const data = await api(`/api/v1/licenses?${params}`);
       const licenses = data?.licenses || [];
       if (!licenses.length) { table.innerHTML = `<div class="license-empty">No keys found.</div>`; return; }
-      table.innerHTML = `<table><thead><tr><th>ID</th><th>Product</th><th>Owner</th><th>Status</th><th>Expires</th><th>Devices</th><th>Actions</th></tr></thead><tbody>${licenses.map(row).join('')}</tbody></table><div class="license-pagination"><span>Page ${esc(data.pagination?.page)} of ${esc(data.pagination?.total_pages || 1)} · ${esc(data.pagination?.total || 0)} total</span><span><button id="license-prev" ${page <= 1 ? 'disabled' : ''}>‹</button> <button id="license-next" ${page >= (data.pagination?.total_pages || 1) ? 'disabled' : ''}>›</button></span></div>`;
+      table.innerHTML = `<table><thead><tr><th>ID</th><th>Product</th><th>Owner</th><th>Status</th><th>Expires</th><th>Devices</th><th>Actions</th></tr></thead><tbody>${licenses.map(row).join('')}</tbody></table><div class="license-pagination"><span>Page ${esc(data.pagination?.page)} of ${esc(data.pagination?.total_pages || 1)} · ${esc(data.pagination?.total || 0)} total${data.degraded ? ' · product metadata unavailable' : ''}</span><span><button id="license-prev" ${page <= 1 ? 'disabled' : ''}>‹</button> <button id="license-next" ${page >= (data.pagination?.total_pages || 1) ? 'disabled' : ''}>›</button></span></div>`;
       document.querySelector('#license-prev').onclick = () => { if (page > 1) { page--; load(); } };
       document.querySelector('#license-next').onclick = () => { if (page < (data.pagination?.total_pages || 1)) { page++; load(); } };
       table.querySelectorAll('[data-action]').forEach((button) => button.onclick = () => {
