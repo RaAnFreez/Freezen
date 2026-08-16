@@ -42,7 +42,7 @@ export async function generateLicense(request, env, requestId, json, auth) {
   const productId = typeof body?.product_id === "string" ? body.product_id.trim() : "";
   const days = body?.duration_days == null ? null : parseDays(body.duration_days);
   const maxDevices = body?.max_devices == null ? 1 : Number(body.max_devices);
-  if (!productId || productId.length > 128) return json({ error: "INVALID_PRODUCT_ID", request_id: requestId }, 400, requestId);
+  if (productId.length > 128) return json({ error: "INVALID_PRODUCT_ID", request_id: requestId }, 400, requestId);
   if (body?.duration_days != null && days == null) return json({ error: "INVALID_DURATION_DAYS", request_id: requestId }, 400, requestId);
   if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 100) return json({ error: "INVALID_MAX_DEVICES", request_id: requestId }, 400, requestId);
 
@@ -52,18 +52,28 @@ export async function generateLicense(request, env, requestId, json, auth) {
   const expiresAt = days ? isoAfterDays(days) : null;
 
   try {
-    const product = await env.DB.prepare("SELECT id, status FROM products WHERE id = ?1 LIMIT 1").bind(productId).first();
-    if (!product) return json({ error: "PRODUCT_NOT_FOUND", request_id: requestId }, 404, requestId);
-    if (normalizeStatus(product.status) !== "active") return json({ error: "PRODUCT_DISABLED", request_id: requestId }, 409, requestId);
+    if (productId) {
+      try {
+        const product = await env.DB.prepare("SELECT id, status FROM products WHERE id = ?1 LIMIT 1").bind(productId).first();
+        if (!product) return json({ error: "PRODUCT_NOT_FOUND", request_id: requestId }, 404, requestId);
+        if (normalizeStatus(product.status) !== "active") return json({ error: "PRODUCT_DISABLED", request_id: requestId }, 409, requestId);
+      } catch (error) {
+        const message = String(error?.message ?? "").toLowerCase();
+        if (message.includes("no such table") && message.includes("products")) {
+          return json({ error: "PRODUCT_SYSTEM_UNAVAILABLE", request_id: requestId }, 503, requestId);
+        }
+        throw error;
+      }
+    }
 
     await env.DB.prepare(
       "INSERT INTO licenses (id, license_key_hash, product_id, user_id, status, expires_at, max_devices) VALUES (?1, ?2, ?3, NULL, 'unused', ?4, ?5)",
-    ).bind(licenseId, keyHash, productId, expiresAt, maxDevices).run();
+    ).bind(licenseId, keyHash, productId || null, expiresAt, maxDevices).run();
 
     await audit(env, licenseId, null, "unused");
     return json({
       created: true,
-      license: { id: licenseId, product_id: productId, user_id: null, status: "unused", expires_at: expiresAt, max_devices: maxDevices },
+      license: { id: licenseId, product_id: productId || null, user_id: null, status: "unused", expires_at: expiresAt, max_devices: maxDevices },
       license_key: licenseKey,
       warning: "The plaintext license key is returned only in this creation response and is never stored by Frezen.",
       created_by: auth?.user_id ?? null,
