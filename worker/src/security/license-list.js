@@ -20,6 +20,33 @@ function publicLicense(row) {
   };
 }
 
+async function queryWithProductMetadata(env, conditions, binds, pageSize, offset) {
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const count = await env.DB.prepare(
+    `SELECT COUNT(*) AS total FROM licenses l LEFT JOIN users u ON u.id = l.user_id LEFT JOIN products p ON p.id = l.product_id ${where}`,
+  ).bind(...binds).first();
+  const total = Number(count?.total ?? 0);
+  const result = await env.DB.prepare(
+    `SELECT l.id, l.user_id, u.username, u.email, l.product_id, p.name AS product_name, l.status, l.expires_at, l.created_at, l.max_devices, l.last_seen, l.redeem_count, l.reset_count FROM licenses l LEFT JOIN users u ON u.id = l.user_id LEFT JOIN products p ON p.id = l.product_id ${where} ORDER BY l.created_at DESC, l.id DESC LIMIT ? OFFSET ?`,
+  ).bind(...binds, pageSize, offset).all();
+  return { total, result };
+}
+
+async function queryWithoutProductMetadata(env, conditions, binds, pageSize, offset) {
+  const where = conditions
+    .filter((condition) => !condition.includes("p.name"))
+    .map((condition) => condition.replace(/ OR COALESCE\(p\.name, ''\) LIKE \?/g, ""));
+  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const count = await env.DB.prepare(
+    `SELECT COUNT(*) AS total FROM licenses l LEFT JOIN users u ON u.id = l.user_id ${clause}`,
+  ).bind(...binds.slice(0, 5)).first();
+  const total = Number(count?.total ?? 0);
+  const result = await env.DB.prepare(
+    `SELECT l.id, l.user_id, u.username, u.email, l.product_id, NULL AS product_name, l.status, l.expires_at, l.created_at, l.max_devices, l.last_seen, l.redeem_count, l.reset_count FROM licenses l LEFT JOIN users u ON u.id = l.user_id ${clause} ORDER BY l.created_at DESC, l.id DESC LIMIT ? OFFSET ?`,
+  ).bind(...binds.slice(0, 5), pageSize, offset).all();
+  return { total, result };
+}
+
 export async function listLicenses(request, env, requestId, json) {
   if (!env.DB) return json({ error: "DATABASE_UNAVAILABLE", request_id: requestId }, 503, requestId);
   const url = new URL(request.url);
@@ -45,22 +72,25 @@ export async function listLicenses(request, env, requestId, json) {
     const pattern = `%${search}%`;
     add("(l.id LIKE ? OR COALESCE(l.user_id, '') LIKE ? OR COALESCE(u.username, '') LIKE ? OR COALESCE(u.email, '') LIKE ? OR l.product_id LIKE ? OR COALESCE(p.name, '') LIKE ?)", pattern, pattern, pattern, pattern, pattern, pattern);
   }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const offset = (page - 1) * pageSize;
 
   try {
-    const count = await env.DB.prepare(
-      `SELECT COUNT(*) AS total FROM licenses l LEFT JOIN users u ON u.id = l.user_id LEFT JOIN products p ON p.id = l.product_id ${where}`,
-    ).bind(...binds).first();
-    const total = Number(count?.total ?? 0);
-    const result = await env.DB.prepare(
-      `SELECT l.id, l.user_id, u.username, u.email, l.product_id, p.name AS product_name, l.status, l.expires_at, l.created_at, l.max_devices, l.last_seen, l.redeem_count, l.reset_count FROM licenses l LEFT JOIN users u ON u.id = l.user_id LEFT JOIN products p ON p.id = l.product_id ${where} ORDER BY l.created_at DESC, l.id DESC LIMIT ? OFFSET ?`,
-    ).bind(...binds, pageSize, offset).all();
-    const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+    let queried;
+    try {
+      queried = await queryWithProductMetadata(env, conditions, binds, pageSize, offset);
+    } catch (error) {
+      const message = String(error?.message ?? "").toLowerCase();
+      const missingProducts = message.includes("no such table") && message.includes("products");
+      if (!missingProducts) throw error;
+      queried = await queryWithoutProductMetadata(env, conditions, binds, pageSize, offset);
+    }
+
+    const totalPages = queried.total === 0 ? 0 : Math.ceil(queried.total / pageSize);
     return json({
-      licenses: (result?.results ?? []).map(publicLicense),
-      pagination: { page, page_size: pageSize, total, total_pages: totalPages },
+      licenses: (queried.result?.results ?? []).map(publicLicense),
+      pagination: { page, page_size: pageSize, total: queried.total, total_pages: totalPages },
       filters: { status: status || null, product_id: productId || null, q: search || null },
+      degraded: queried.result?.results?.some((row) => row.product_name == null) ?? false,
       request_id: requestId,
     });
   } catch {
