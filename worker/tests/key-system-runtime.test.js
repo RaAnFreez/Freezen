@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { publicGetKeyPage, getPublicServiceConfig, startPublicFlow } from '../src/key-system-runtime.js';
 
 describe('server-side GetKey service runtime', () => {
-  it('renders the public custom-slug page only for a configured service', async () => {
+  it('renders the public custom-slug page without the unrelated product selector', async () => {
     const db = {
       prepare(sql) {
         return {
@@ -23,6 +23,9 @@ describe('server-side GetKey service runtime', () => {
     expect(response.status).toBe(200);
     expect(body).toContain('Service: frezen');
     expect(body).toContain('Start Get-Key Flow');
+    expect(body).toContain('id="checkpoints"');
+    expect(body).not.toContain('Loading products');
+    expect(body).not.toContain('/api/v1/get-key/products');
   });
 
   it('returns not found when the slug is not configured', async () => {
@@ -39,7 +42,7 @@ describe('server-side GetKey service runtime', () => {
     const db = {
       prepare(sql) {
         return {
-          bind(value) {
+          bind() {
             return {
               async first() {
                 if (sql.includes('FROM frezen_key_services WHERE slug')) return { id: 's1', name: 'Frezen', slug: 'frezen', active: 1 };
@@ -52,9 +55,9 @@ describe('server-side GetKey service runtime', () => {
         };
       },
     };
-    const request = new Request('https://frezen.example/api/v1/get-key/flow/start', {
+    const request = new Request('https://frezen.example/api/v1/get-key/flow/start?slug=frezen', {
       method: 'POST',
-      body: JSON.stringify({ product_id: 'p1' }),
+      body: JSON.stringify({ slug: 'frezen' }),
       headers: { 'content-type': 'application/json' },
     });
     const response = await startPublicFlow(request, { DB: db }, 'frezen');
