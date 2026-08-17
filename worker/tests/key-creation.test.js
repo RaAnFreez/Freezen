@@ -12,6 +12,19 @@ describe('Key Control license creation', () => {
             calls.push(values);
             return {
               async first() { throw new Error('no such table: products'); },
+              async all() {
+                return {
+                  results: [
+                    { name: 'id' },
+                    { name: 'license_key_hash' },
+                    { name: 'product_id' },
+                    { name: 'user_id' },
+                    { name: 'status' },
+                    { name: 'expires_at' },
+                    { name: 'max_devices' },
+                  ],
+                };
+              },
               async run() { return { meta: { changes: 1 } }; },
             };
           },
