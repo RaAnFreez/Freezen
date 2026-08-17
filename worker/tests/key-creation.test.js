@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { generateLicense } from '../src/security/license-lifecycle.js';
 
 describe('Key Control license creation', () => {
-  it('creates a license without requiring the products table', async () => {
+  it('creates a license without requiring the products table or audit success', async () => {
     const calls = [];
+    const columns = ['id', 'license_key_hash', 'product_id', 'user_id', 'status', 'expires_at', 'max_devices'];
     const DB = {
       prepare(sql) {
         calls.push(sql);
@@ -11,8 +12,18 @@ describe('Key Control license creation', () => {
           bind(...values) {
             calls.push(values);
             return {
-              async first() { throw new Error('no such table: products'); },
-              async run() { return { meta: { changes: 1 } }; },
+              async first() {
+                if (sql.includes('FROM products')) throw new Error('no such table: products');
+                return null;
+              },
+              async all() {
+                if (sql.includes('PRAGMA table_info(licenses)')) return { results: columns.map((name, cid) => ({ cid, name })) };
+                return { results: [] };
+              },
+              async run() {
+                if (sql.includes('license_audit_log')) throw new Error('legacy audit schema');
+                return { meta: { changes: 1 } };
+              },
             };
           },
         };
@@ -25,5 +36,6 @@ describe('Key Control license creation', () => {
     expect(data.license.product_id).toBeNull();
     expect(data.license_key).toMatch(/^FREZEN-/);
     expect(calls.some((sql) => String(sql).includes('FROM products'))).toBe(false);
+    expect(calls.some((sql) => String(sql).includes('PRAGMA table_info(licenses)'))).toBe(true);
   });
 });
