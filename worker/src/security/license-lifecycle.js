@@ -23,9 +23,13 @@ const parseLicenseId = (licenseId, json, requestId) => {
 };
 const audit = async (env, licenseId, previousStatus, newStatus) => {
   if (!env.DB) return;
-  await env.DB.prepare(
-    "INSERT INTO license_audit_log (id, license_id, previous_status, new_status) VALUES (?1, ?2, ?3, ?4)",
-  ).bind(crypto.randomUUID(), licenseId, previousStatus ?? null, newStatus).run();
+  try {
+    await env.DB.prepare(
+      "INSERT INTO license_audit_log (id, license_id, previous_status, new_status) VALUES (?1, ?2, ?3, ?4)",
+    ).bind(crypto.randomUUID(), licenseId, previousStatus ?? null, newStatus).run();
+  } catch (_) {
+    // Audit history is best-effort for compatibility with existing production schemas.
+  }
 };
 const expired = (expiresAt) => {
   if (!expiresAt) return false;
@@ -33,6 +37,33 @@ const expired = (expiresAt) => {
   return !Number.isNaN(timestamp) && timestamp <= Date.now();
 };
 const isoAfterDays = (days, base = Date.now()) => new Date(base + days * 86400000).toISOString();
+
+async function licenseColumns(env) {
+  const result = await env.DB.prepare("PRAGMA table_info(licenses)").all();
+  return new Set((result?.results || []).map((row) => String(row.name)));
+}
+
+async function insertGeneratedLicense(env, { licenseId, keyHash, productId, expiresAt, maxDevices }) {
+  const columns = await licenseColumns(env);
+  const supported = ["id", "license_key_hash", "product_id", "user_id", "status", "expires_at", "max_devices"];
+  const values = {
+    id: licenseId,
+    license_key_hash: keyHash,
+    product_id: productId || null,
+    user_id: null,
+    status: columns.has("status") ? "unused" : null,
+    expires_at: expiresAt,
+    max_devices: maxDevices,
+  };
+  const selected = supported.filter((column) => columns.has(column) && values[column] !== undefined);
+  if (!selected.includes("id") || !selected.includes("license_key_hash")) {
+    throw new Error("LICENSE_SCHEMA_INCOMPATIBLE");
+  }
+  if (columns.has("status") && values.status === null) throw new Error("LICENSE_STATUS_COLUMN_REQUIRED");
+  const placeholders = selected.map((_, index) => `?${index + 1}`).join(", ");
+  const sql = `INSERT INTO licenses (${selected.join(", ")}) VALUES (${placeholders})`;
+  await env.DB.prepare(sql).bind(...selected.map((column) => values[column])).run();
+}
 
 export async function generateLicense(request, env, requestId, json, auth) {
   if (!env.DB) return json({ error: "DATABASE_UNAVAILABLE", request_id: requestId }, 503, requestId);
@@ -52,6 +83,7 @@ export async function generateLicense(request, env, requestId, json, auth) {
   const expiresAt = days ? isoAfterDays(days) : null;
 
   try {
+    // Product metadata is optional in this production installation.
     if (productId) {
       try {
         const product = await env.DB.prepare("SELECT id, status FROM products WHERE id = ?1 LIMIT 1").bind(productId).first();
@@ -59,18 +91,14 @@ export async function generateLicense(request, env, requestId, json, auth) {
         if (normalizeStatus(product.status) !== "active") return json({ error: "PRODUCT_DISABLED", request_id: requestId }, 409, requestId);
       } catch (error) {
         const message = String(error?.message ?? "").toLowerCase();
-        if (message.includes("no such table") && message.includes("products")) {
-          return json({ error: "PRODUCT_SYSTEM_UNAVAILABLE", request_id: requestId }, 503, requestId);
-        }
-        throw error;
+        if (!(message.includes("no such table") && message.includes("products"))) throw error;
+        return json({ error: "PRODUCT_SYSTEM_UNAVAILABLE", request_id: requestId }, 503, requestId);
       }
     }
 
-    await env.DB.prepare(
-      "INSERT INTO licenses (id, license_key_hash, product_id, user_id, status, expires_at, max_devices) VALUES (?1, ?2, ?3, NULL, 'unused', ?4, ?5)",
-    ).bind(licenseId, keyHash, productId || null, expiresAt, maxDevices).run();
-
+    await insertGeneratedLicense(env, { licenseId, keyHash, productId, expiresAt, maxDevices });
     await audit(env, licenseId, null, "unused");
+
     return json({
       created: true,
       license: { id: licenseId, product_id: productId || null, user_id: null, status: "unused", expires_at: expiresAt, max_devices: maxDevices },
