@@ -18,6 +18,22 @@ function makeDb({ product = { id: "prod-1", status: "ACTIVE" }, license = null, 
               if (sql.includes("FROM licenses")) return license;
               return null;
             },
+            async all() {
+              if (sql.includes("PRAGMA table_info(licenses)")) {
+                return {
+                  results: [
+                    { name: "id" },
+                    { name: "license_key_hash" },
+                    { name: "product_id" },
+                    { name: "user_id" },
+                    { name: "status" },
+                    { name: "expires_at" },
+                    { name: "max_devices" },
+                  ],
+                };
+              }
+              return { results: [] };
+            },
             async run() {
               return { meta: { changes: updateChanges }, args };
             },
