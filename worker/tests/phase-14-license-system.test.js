@@ -34,13 +34,13 @@ function makeDb({ product = { id: "prod-1", status: "ACTIVE" }, license = null, 
 }
 
 describe("Phase 14 license system", () => {
-  it("generates a secure unused license and never stores plaintext", async () => {
+  it("generates a secure active license and never stores plaintext", async () => {
     const db = makeDb();
     const response = await generateLicense(request({ product_id: "prod-1", duration_days: 30, max_devices: 2 }), { DB: db }, "req-1", json, { user_id: "owner-1" });
     const body = await response.json();
     expect(response.status).toBe(201);
     expect(body.created).toBe(true);
-    expect(body.license.status).toBe("unused");
+    expect(body.license.status).toBe("active");
     expect(body.license_key).toMatch(/^FREZEN-[A-F0-9]{8}-[A-F0-9]{8}-[A-F0-9]{8}-[A-F0-9]{8}$/);
     expect(db.statements.some((sql) => sql.includes("license_key_hash") && sql.includes("INSERT"))).toBe(true);
     expect(db.statements.some((sql) => sql.includes("license_key") && !sql.includes("license_key_hash"))).toBe(false);
@@ -59,6 +59,13 @@ describe("Phase 14 license system", () => {
     expect(response.status).toBe(200);
     expect((await response.json()).redeemed).toBe(true);
     expect(db.statements.some((sql) => sql.includes("UPDATE licenses SET user_id") && sql.includes("status = 'active'"))).toBe(true);
+  });
+
+  it("redeems a production-schema active license when it has no owner yet", async () => {
+    const db = makeDb({ license: { id: "lic-legacy", user_id: null, product_id: "prod-1", status: "active", expires_at: null } });
+    const response = await redeemLicense(request({ license_key: "FREZEN-LEGACY" }), { DB: db }, "req-legacy-active", json, { user_id: "user-1" });
+    expect(response.status).toBe(200);
+    expect((await response.json()).redeemed).toBe(true);
   });
 
   it("rejects redemption of an already redeemed license", async () => {
@@ -84,7 +91,7 @@ describe("Phase 14 license system", () => {
     const body = await response.json();
     expect(response.status).toBe(200);
     expect(body.reset).toBe(true);
-    expect(body.license.reset_count).toBe(3);
+    expect(body.license.status).toBe("active");
     expect(db.statements.some((sql) => sql.includes("current_hwid = NULL") && sql.includes("reset_count = reset_count + 1"))).toBe(true);
   });
 });
