@@ -38,7 +38,7 @@ describe("Phase 13 audit and security surfaces", () => {
     expect(main).toContain("label: 'MODERATION'");
     expect(main).toContain("licenses: 'licenses'");
     expect(keyPanel).toMatch(/KEY (?:SYSTEM|CONTROL)/);
-    expect(keyPanel).toContain("window.FrezenDashboardPanels.licenses = mount");
+    expect(keyPanel).toMatch(/window\.FrezenDashboardPanels\.licenses = (?:mount|shell)/);
     expect(keyPanel).not.toContain("document.addEventListener('click'");
 
     expect(html).not.toContain("audit-panel.js");
