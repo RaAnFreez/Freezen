@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS scripts (
   service_id TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
+  loader_url TEXT NOT NULL DEFAULT 'https://api.luarmor.net/files/v4/loaders/bf5d23724071469fc466114d4e10f88b.lua',
   status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','DISABLED')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
