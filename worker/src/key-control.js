@@ -45,10 +45,18 @@ export async function ensureKeyControlSchema(env) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS frezen_key_limits (
+      key_id TEXT PRIMARY KEY,
+      max_devices INTEGER NOT NULL DEFAULT 1 CHECK (max_devices > 0 AND max_devices <= 100),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (key_id) REFERENCES frezen_key_records(id) ON DELETE CASCADE
+    )`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_frezen_key_records_owner ON frezen_key_records(owner_id, created_at)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_frezen_key_records_provider ON frezen_key_records(provider_id, created_at)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_frezen_key_records_service ON frezen_key_records(service_id, created_at)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_frezen_key_folders_owner ON frezen_key_folders(owner_id, name)'),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_frezen_key_limits_updated ON frezen_key_limits(updated_at)'),
   ]);
 }
 
@@ -57,7 +65,7 @@ async function licenseColumns(env) {
   return new Set((result?.results || []).map((row) => String(row.name)));
 }
 
-async function createLicenseRecord(env, { expiresAt, maxDevices, productId = null }) {
+async function createLicenseRecord(env, { expiresAt, productId = null }) {
   const licenseKey = makeKey();
   const keyHash = await hashText(licenseKey);
   const licenseId = crypto.randomUUID();
@@ -67,14 +75,14 @@ async function createLicenseRecord(env, { expiresAt, maxDevices, productId = nul
     license_key_hash: keyHash,
     product_id: productId,
     user_id: null,
-    status: 'unused',
+    status: 'active',
     expires_at: expiresAt,
-    max_devices: maxDevices,
   };
-  const allowed = ['id', 'license_key_hash', 'product_id', 'user_id', 'status', 'expires_at', 'max_devices'];
+  const allowed = ['id', 'license_key_hash', 'product_id', 'user_id', 'status', 'expires_at'];
   const selected = allowed.filter((column) => columns.has(column));
   if (!selected.includes('id') || !selected.includes('license_key_hash')) throw new Error('LICENSE_SCHEMA_INCOMPATIBLE');
-  await env.DB.prepare(`INSERT INTO licenses (${selected.join(', ')}) VALUES (${selected.map((_, i) => `?${i + 1}`).join(', ')})`).bind(...selected.map((column) => values[column])).run();
+  await env.DB.prepare(`INSERT INTO licenses (${selected.join(', ')}) VALUES (${selected.map((_, i) => `?${i + 1}`).join(', ')})`)
+    .bind(...selected.map((column) => values[column])).run();
   return { licenseId, licenseKey };
 }
 
@@ -148,7 +156,13 @@ export async function listKeys(request, env, requestId, auth) {
     if (status) { const idx = binds.length + 1; filters.push(`LOWER(l.status) = ?${idx}`); binds.push(status); }
 
     const where = filters.join(' AND ');
-    const count = await env.DB.prepare(`SELECT COUNT(*) AS total FROM frezen_key_records k JOIN licenses l ON l.id = k.license_id LEFT JOIN frezen_key_providers p ON p.id = k.provider_id LEFT JOIN frezen_key_services s ON s.id = k.service_id LEFT JOIN frezen_key_folders f ON f.id = k.folder_id WHERE ${where}`).bind(...binds).first();
+    const count = await env.DB.prepare(`SELECT COUNT(*) AS total
+      FROM frezen_key_records k
+      JOIN licenses l ON l.id = k.license_id
+      LEFT JOIN frezen_key_providers p ON p.id = k.provider_id
+      LEFT JOIN frezen_key_services s ON s.id = k.service_id
+      LEFT JOIN frezen_key_folders f ON f.id = k.folder_id
+      WHERE ${where}`).bind(...binds).first();
     const total = Number(count?.total || 0);
     const totalPages = Math.max(Math.ceil(total / pageSize), 1);
     const safePage = Math.min(page, totalPages);
@@ -156,15 +170,19 @@ export async function listKeys(request, env, requestId, auth) {
     const limitIndex = binds.length + 1;
     const offsetIndex = binds.length + 2;
     const rows = await env.DB.prepare(`SELECT k.id, k.license_id, k.provider_id, k.service_id, k.folder_id, k.key_name, k.premium, k.forever,
-      k.created_at, k.updated_at, l.status, l.expires_at, l.max_devices, l.last_seen,
+      k.created_at, k.updated_at, l.status, l.expires_at,
+      COALESCE(d.max_devices, 1) AS max_devices,
       p.name AS provider_name, p.type AS provider_type, s.name AS service_name, s.slug AS service_slug,
       f.name AS folder_name
       FROM frezen_key_records k
       JOIN licenses l ON l.id = k.license_id
+      LEFT JOIN frezen_key_limits d ON d.key_id = k.id
       LEFT JOIN frezen_key_providers p ON p.id = k.provider_id
       LEFT JOIN frezen_key_services s ON s.id = k.service_id
       LEFT JOIN frezen_key_folders f ON f.id = k.folder_id
-      WHERE ${where} ORDER BY k.created_at DESC LIMIT ?${limitIndex} OFFSET ?${offsetIndex}`).bind(...binds, pageSize, offset).all();
+      WHERE ${where}
+      ORDER BY k.created_at DESC
+      LIMIT ?${limitIndex} OFFSET ?${offsetIndex}`).bind(...binds, pageSize, offset).all();
     return jsonResponse({ keys: rows.results || [], pagination: { page: safePage, page_size: pageSize, total, total_pages: totalPages } }, 200, requestId);
   } catch (error) {
     return jsonResponse({ error: 'DATABASE_ERROR', message: String(error?.message || 'Unable to load keys') }, 503, requestId);
@@ -206,21 +224,25 @@ export async function createKey(request, env, requestId, auth) {
     if (folderId && !await getFolder(env, auth.user_id, folderId)) return jsonResponse({ error: 'FOLDER_NOT_FOUND' }, 404, requestId);
 
     const expiresAt = forever ? null : new Date(Date.now() + totalMinutes * 60_000).toISOString();
-    const { licenseId, licenseKey } = await createLicenseRecord(env, { expiresAt, maxDevices });
+    const { licenseId, licenseKey } = await createLicenseRecord(env, { expiresAt });
     const recordId = crypto.randomUUID();
     try {
       await env.DB.prepare(`INSERT INTO frezen_key_records
         (id, owner_id, license_id, provider_id, service_id, folder_id, key_name, premium, forever)
         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)`)
         .bind(recordId, auth.user_id, licenseId, provider.id, serviceId, folderId, keyName, premium ? 1 : 0, forever ? 1 : 0).run();
+      await env.DB.prepare(`INSERT INTO frezen_key_limits (key_id, max_devices) VALUES (?1, ?2)`)
+        .bind(recordId, maxDevices).run();
     } catch (error) {
-      await env.DB.prepare("DELETE FROM licenses WHERE id = ?1 AND status = 'unused' AND user_id IS NULL").bind(licenseId).run().catch(() => {});
+      await env.DB.prepare('DELETE FROM frezen_key_limits WHERE key_id = ?1').bind(recordId).run().catch(() => {});
+      await env.DB.prepare('DELETE FROM frezen_key_records WHERE id = ?1').bind(recordId).run().catch(() => {});
+      await env.DB.prepare('DELETE FROM licenses WHERE id = ?1 AND user_id IS NULL').bind(licenseId).run().catch(() => {});
       throw error;
     }
 
     return jsonResponse({
       created: true,
-      key: { id: recordId, license_id: licenseId, provider_id: provider.id, provider_name: provider.name, service_id: serviceId, key_name: keyName, premium, forever, expires_at: expiresAt, max_devices: maxDevices, status: 'unused' },
+      key: { id: recordId, license_id: licenseId, provider_id: provider.id, provider_name: provider.name, service_id: serviceId, key_name: keyName, premium, forever, expires_at: expiresAt, max_devices: maxDevices, status: 'active' },
       license_key: licenseKey,
     }, 201, requestId);
   } catch (error) {
