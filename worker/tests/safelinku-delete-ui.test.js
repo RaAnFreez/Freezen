@@ -14,6 +14,6 @@ describe('SafeLinkU integration delete UI', () => {
     expect(panel).toContain('localStorage.removeItem(CHECKPOINTS_KEY)');
     expect(panel).toContain('checkpoints: []');
     expect(panel).toContain('Worker Secret itself is not exposed to the browser');
-    expect(html).toMatch(/safelinku-panel\.js\?v=(?:provider-getkey-v|key-control-v)\\d+/);
+    expect(html).toMatch(/safelinku-panel\.js\?v=(?:provider-getkey-v|key-control-v)\d+/);
   });
 });
