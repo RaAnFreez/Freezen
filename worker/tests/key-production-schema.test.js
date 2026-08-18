@@ -24,7 +24,7 @@ function makeProductionDb() {
               { name: 'expires_at' },
             ] };
           }
-          if (sql.includes('SELECT k.id, k.license_id')) {
+          if (sql.includes('FROM frezen_key_records k') && sql.includes('COALESCE(d.max_devices')) {
             if (sql.includes('l.max_devices')) throw new Error('legacy regression: listKeys queried l.max_devices');
             return { results: [{
               id: 'key-1', license_id: 'lic-1', provider_id: 'p1', service_id: 's1', folder_id: null,
@@ -44,9 +44,7 @@ function makeProductionDb() {
               if (sql.includes('COUNT(*) AS total')) return { total: 1 };
               return null;
             },
-            async all() {
-              return [];
-            },
+            async all() { return []; },
             async run() {
               if (sql.includes('INSERT INTO licenses')) {
                 if (args.includes('unused')) throw new Error("CHECK constraint failed: status IN ('active', 'revoked', 'expired')");
