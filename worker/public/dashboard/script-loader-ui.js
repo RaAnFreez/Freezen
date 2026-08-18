@@ -1,5 +1,6 @@
 (() => {
   const INTERNAL_NOTE = 'Frezen uses its own keyed loader. No external loader service is configured by default.';
+  const INTERNAL_LOADER_MARKER = `${location.origin}/loader/internal`;
 
   function loaderSource(scriptId) {
     const endpoint = `${location.origin}/loader/${encodeURIComponent(scriptId)}`;
@@ -11,21 +12,28 @@
     ].join('\n');
   }
 
-  function patchCreateModal() {
-    const loader = document.querySelector('#lua-loader');
-    if (!loader) return;
-    loader.value = '';
-    loader.placeholder = 'Frezen internal keyed loader';
-    const field = loader.closest('.lua-field');
-    if (field) {
-      field.style.display = 'none';
-      const note = field.querySelector('.lua-source-note');
-      if (note) note.textContent = INTERNAL_NOTE;
-    }
-  }
+  // Keep the Script Manager independent from external loader providers. The old UI
+  // supplied a Luarmor default even when the owner left the field untouched.
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async (input, init = {}) => {
+    try {
+      const url = typeof input === 'string' ? input : input?.url || '';
+      const method = String(init.method || (typeof input !== 'string' ? input?.method : 'GET') || 'GET').toUpperCase();
+      if (method === 'POST' && new URL(url, location.origin).pathname === '/api/v1/scripts') {
+        const headers = new Headers(init.headers || (typeof input !== 'string' ? input?.headers : undefined));
+        const contentType = headers.get('content-type') || '';
+        if (contentType.includes('application/json') && typeof init.body === 'string') {
+          const body = JSON.parse(init.body);
+          body.loader_url = INTERNAL_LOADER_MARKER;
+          init = { ...init, headers, body: JSON.stringify(body) };
+        }
+      }
+    } catch {}
+    return nativeFetch(input, init);
+  };
 
-  // Do not observe the whole dashboard DOM. The old global MutationObserver fired on
-  // every table update and made the Create Script modal increasingly expensive.
+  // Do not observe the whole dashboard DOM. That caused repeated callbacks while
+  // script cards, filters and modals were rendering and made Create Script heavy.
   document.addEventListener('click', (event) => {
     const button = event.target.closest('[data-act="loader"]');
     if (!button) return;
@@ -39,10 +47,17 @@
       .catch(() => alert(source));
   }, true);
 
-  // Patch only when the modal is explicitly opened.
+  // If the legacy loader field is rendered, hide it once when the user opens the
+  // create form. No global observer is used.
   document.addEventListener('click', (event) => {
-    if (event.target.closest('[data-act="create-script"], [data-act="new-script"], #create-script, #new-script')) {
-      queueMicrotask(patchCreateModal);
-    }
+    if (!event.target.closest('#lua-create, [data-act="create-script"], [data-act="new-script"], #create-script, #new-script')) return;
+    setTimeout(() => {
+      const loader = document.querySelector('#lua-loader');
+      if (!loader) return;
+      loader.value = INTERNAL_LOADER_MARKER;
+      loader.placeholder = 'Frezen internal keyed loader';
+      const field = loader.closest('.lua-field');
+      if (field) field.style.display = 'none';
+    }, 0);
   });
 })();
