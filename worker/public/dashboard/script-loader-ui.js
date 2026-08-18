@@ -16,7 +16,6 @@
     const loader = document.querySelector('#lua-loader');
     if (!source || !loader) return;
 
-    if (source.value.includes('api.luarmor.net')) source.value = '';
     loader.value = '';
     loader.placeholder = 'Frezen internal keyed loader';
     const field = loader.closest('.lua-field');
