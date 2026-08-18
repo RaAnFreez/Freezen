@@ -3,6 +3,7 @@ import { requirePrivateAccess } from "./security/private-access.js";
 import { createSafeLinkUCheckpoint } from "./safelinku.js";
 import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublicFlow, launchPublicFlow, publicGetKeyPage } from "./key-system-runtime.js";
 import { keyControlOptions, createKeyFolder, listKeys, createKey } from "./key-control.js";
+import { deliverScriptByKey } from "./script-loader.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", ...NO_STORE };
@@ -26,6 +27,12 @@ async function asset(request, env, pathname) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    const scriptLoaderMatch = url.pathname.match(/^\/loader\/([^/]+)\/?$/);
+    if (scriptLoaderMatch) {
+      const requestId = crypto.randomUUID();
+      return deliverScriptByKey(request, env, requestId, decodeURIComponent(scriptLoaderMatch[1]));
+    }
 
     if (request.method === "POST" && url.pathname === "/api/v1/safelinku/checkpoints/create") {
       const requestId = crypto.randomUUID();
