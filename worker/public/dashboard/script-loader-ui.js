@@ -12,10 +12,8 @@
   }
 
   function patchCreateModal() {
-    const source = document.querySelector('#lua-source');
     const loader = document.querySelector('#lua-loader');
-    if (!source || !loader) return;
-
+    if (!loader) return;
     loader.value = '';
     loader.placeholder = 'Frezen internal keyed loader';
     const field = loader.closest('.lua-field');
@@ -26,10 +24,8 @@
     }
   }
 
-  const observer = new MutationObserver(() => patchCreateModal());
-  observer.observe(document.body, { childList: true, subtree: true });
-  patchCreateModal();
-
+  // Do not observe the whole dashboard DOM. The old global MutationObserver fired on
+  // every table update and made the Create Script modal increasingly expensive.
   document.addEventListener('click', (event) => {
     const button = event.target.closest('[data-act="loader"]');
     if (!button) return;
@@ -37,8 +33,16 @@
     event.stopPropagation();
     const scriptId = button.dataset.id;
     if (!scriptId) return;
-    navigator.clipboard?.writeText(loaderSource(scriptId))
+    const source = loaderSource(scriptId);
+    navigator.clipboard?.writeText(source)
       .then(() => alert('Frezen keyed loader copied. Replace PASTE YOUR KEY HERE with a valid key.'))
-      .catch(() => alert(loaderSource(scriptId)));
+      .catch(() => alert(source));
   }, true);
+
+  // Patch only when the modal is explicitly opened.
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('[data-act="create-script"], [data-act="new-script"], #create-script, #new-script')) {
+      queueMicrotask(patchCreateModal);
+    }
+  });
 })();
