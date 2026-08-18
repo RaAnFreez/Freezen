@@ -6,7 +6,11 @@ const request = (body) => new Request('https://frezen.test/api/v1/key-control/ke
 function makeDb() {
   return {
     prepare(sql) {
-      return {
+      const statement = {
+        async all() {
+          if (sql.includes('PRAGMA table_info(licenses)')) return { results: ['id', 'license_key_hash', 'product_id', 'user_id', 'status', 'expires_at', 'max_devices'].map((name, cid) => ({ name, cid })) };
+          return { results: [] };
+        },
         bind(...args) {
           return {
             async first() {
@@ -16,7 +20,6 @@ function makeDb() {
               return null;
             },
             async all() {
-              if (sql.includes('PRAGMA table_info(licenses)')) return { results: ['id', 'license_key_hash', 'product_id', 'user_id', 'status', 'expires_at', 'max_devices'].map((name, cid) => ({ name, cid })) };
               if (sql.includes('frezen_key_providers')) return { results: [{ id: 'p1', name: 'Fres', type: 'safelinku', service_id: 's1' }] };
               if (sql.includes('frezen_key_services')) return { results: [{ id: 's1', name: 'Frezen', slug: 'frezen' }] };
               if (sql.includes('frezen_key_folders')) return { results: [] };
@@ -26,6 +29,7 @@ function makeDb() {
           };
         },
       };
+      return statement;
     },
     async batch() { return []; },
   };
