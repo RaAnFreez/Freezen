@@ -27,7 +27,8 @@ function dbMock(versions) {
   return {
     state,
     prepare(sql) { return { bind: (...values) => statement(sql, values) }; },
-    batch(statements) { return Promise.all(statements.map((s) => s.run())); },
+    // Schema creation is covered by production-schema tests; versioning tests only need DML behavior.
+    batch(statements) { return Promise.all(statements.filter((s) => s?.run).map((s) => s.run())); },
   };
 }
 
