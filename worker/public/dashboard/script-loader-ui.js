@@ -12,8 +12,6 @@
     ].join('\n');
   }
 
-  // Keep the Script Manager independent from external loader providers. The old UI
-  // supplied a Luarmor default even when the owner left the field untouched.
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
     try {
@@ -32,8 +30,6 @@
     return nativeFetch(input, init);
   };
 
-  // Do not observe the whole dashboard DOM. That caused repeated callbacks while
-  // script cards, filters and modals were rendering and made Create Script heavy.
   document.addEventListener('click', (event) => {
     const button = event.target.closest('[data-act="loader"]');
     if (!button) return;
@@ -47,8 +43,6 @@
       .catch(() => alert(source));
   }, true);
 
-  // If the legacy loader field is rendered, hide it once when the user opens the
-  // create form. No global observer is used.
   document.addEventListener('click', (event) => {
     if (!event.target.closest('#lua-create, [data-act="create-script"], [data-act="new-script"], #create-script, #new-script')) return;
     setTimeout(() => {
