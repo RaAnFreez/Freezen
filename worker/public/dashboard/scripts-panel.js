@@ -1,133 +1,86 @@
-const scriptsRoot = document.querySelector('#content');
-const html = (v) => String(v ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let scriptItems = [];
-let scriptSystemAvailable = true;
-let scriptSystemMessage = '';
+(() => {
+  const root = () => document.querySelector('#content');
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const DEFAULT_LOADER_URL = 'https://api.luarmor.net/files/v4/loaders/bf5d23724071469fc466114d4e10f88b.lua';
+  const DEFAULT_SOURCE = `script_key="PASTE YOUR KEY HERE";\nloadstring(game:HttpGet("${DEFAULT_LOADER_URL}"))()`;
+  const state = { scripts: [], services: [], status: '', q: '' };
 
-async function scriptRequest(url, options = {}) {
-  const r = await fetch(url, { credentials:'same-origin', ...options, headers:{accept:'application/json', ...(options.headers||{})} });
-  if (r.status === 401 || r.status === 403) { location.href='/login'; throw new Error('SESSION_EXPIRED'); }
-  const data = await r.json().catch(()=>({}));
-  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
-  return data;
-}
+  const css = document.createElement('style');
+  css.textContent = `
+  .lua-page{padding:2px}.lua-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}.lua-header-copy h2{margin:6px 0}.lua-header-copy p{margin:0;color:#8d98a8;line-height:1.5}.lua-header-icon{width:62px;height:62px;border-radius:16px;display:grid;place-items:center;background:#271a35;color:#ae63ff;font-size:30px}.lua-new{margin-top:18px;width:100%;min-height:58px;border:0;border-radius:12px;background:#a85cff;color:#fff;font:inherit;font-weight:800;font-size:17px}.lua-tabs{display:flex;gap:8px;margin-top:24px;padding:4px;border:1px solid rgba(255,255,255,.06);border-radius:999px;background:#17131d}.lua-tab{flex:1;border:0;background:transparent;color:#8993a2;padding:12px;border-radius:999px;font:inherit}.lua-tab.active{background:#100d15;color:#fff}.lua-stat{margin-top:10px;padding:18px;border:1px solid rgba(255,255,255,.06);border-radius:16px;background:#17131f}.lua-stat strong{font-size:22px}.lua-toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0}.lua-filters{display:flex;gap:8px;align-items:center}.lua-chip{padding:10px 14px;border-radius:999px;background:#17131d;color:#9da7b7}.lua-chip.active{background:#22172e;color:#fff}.lua-grid{display:grid;gap:12px}.lua-card{border:1px solid rgba(255,255,255,.06);border-radius:18px;background:#17131f;padding:16px}.lua-card-head{display:flex;justify-content:space-between;gap:12px}.lua-card-head h3{margin:0;font-size:18px}.lua-card-sub{margin-top:5px;color:#858fa0;font-size:13px}.lua-card-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.lua-status{padding:6px 10px;border-radius:999px;background:#12251a;color:#77e8a1;font-size:11px}.lua-meta{padding:6px 10px;border-radius:999px;background:#14111a;color:#adb7c4;font-size:11px}.lua-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.lua-btn{border:0;border-radius:10px;padding:10px 14px;font:inherit;font-weight:700;background:#211927;color:#e1e7ef}.lua-btn.primary{background:#a85cff;color:#fff}.lua-empty{padding:70px 18px;text-align:center;border:1px dashed rgba(255,255,255,.08);border-radius:18px;color:#8993a2}.lua-empty strong{display:block;color:#fff;font-size:18px;margin-bottom:8px}.lua-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.68);backdrop-filter:blur(10px);display:flex;align-items:flex-end;justify-content:center;z-index:3000;padding:10px}.lua-modal{width:min(100%,700px);max-height:96vh;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:18px 18px 10px 10px;background:#1c1723;box-shadow:0 30px 100px rgba(0,0,0,.55)}.lua-modal-head{display:flex;justify-content:space-between;gap:10px;padding:18px 20px 14px;border-bottom:1px solid rgba(255,255,255,.06)}.lua-modal-head h3{margin:0;font-size:20px}.lua-modal-head p{margin:4px 0 0;color:#8f99aa;font-size:12px}.lua-modal-head button{border:0;background:transparent;color:#b6bfca;font-size:25px}.lua-modal-body{padding:18px 20px}.lua-field{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}.lua-field label{font-size:13px;color:#e5ebf3}.lua-field input,.lua-field select,.lua-field textarea{width:100%;border:1px solid rgba(255,255,255,.08);background:#0e0b12;color:#fff;border-radius:10px;padding:12px;font:inherit}.lua-field textarea{min-height:120px;resize:vertical}.lua-editor-label{display:flex;justify-content:space-between;align-items:center}.lua-editor-wrap{border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#111}.lua-editor{width:100%;min-height:300px;border:0;background:#111;color:#e9eef5;padding:16px;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical}.lua-info{padding:12px;border:1px solid rgba(72,221,142,.2);border-radius:12px;background:#12251b;color:#83e7aa;font-size:12px;line-height:1.5;margin-bottom:16px}.lua-source-note{padding:12px;border:1px solid rgba(255,193,83,.18);border-radius:12px;background:#2a2012;color:#e2c480;font-size:12px;line-height:1.5}.lua-footer{display:flex;gap:8px;padding:14px 20px;border-top:1px solid rgba(255,255,255,.06)}.lua-footer button{flex:1;min-height:46px}.lua-result{padding:12px;border-radius:12px;background:#0f1814;border:1px solid rgba(72,221,142,.2);margin-top:14px}.lua-result code{display:block;white-space:pre-wrap;word-break:break-word;color:#dff9e8;font-size:12px}.lua-small{font-size:11px;color:#7e8a9b}@media(min-width:700px){.lua-modal-backdrop{align-items:center}.lua-modal{border-radius:18px}.lua-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  `;
+  document.head.appendChild(css);
 
-function scriptSystemBanner() {
-  return scriptSystemAvailable ? '' : `<div class="script-schema-warning"><b>Script Manager is waiting for its existing database schema.</b><span>${html(scriptSystemMessage || 'The production database does not currently expose the script tables. The UI will not create fake or local-only records.')}</span></div>`;
-}
-
-function setScriptUnavailable(message) {
-  scriptSystemAvailable = false;
-  scriptSystemMessage = message;
-  const search = document.querySelector('#script-search');
-  const status = document.querySelector('#script-status');
-  const create = document.querySelector('#script-create');
-  if (search) search.disabled = true;
-  if (status) status.disabled = true;
-  if (create) create.disabled = true;
-  const old = document.querySelector('.script-schema-warning');
-  if (!old) document.querySelector('.panel')?.insertAdjacentHTML('afterend', scriptSystemBanner());
-}
-
-function scriptPage() {
-  scriptsRoot.innerHTML = `<section class="hero"><div><p class="eyebrow">SCRIPT DELIVERY</p><h2>Script Manager</h2><p>Manage protected Lua scripts, versions and release state from the Owner dashboard.</p></div><span class="badge"><span class="dot"></span>Protected</span></section>
-  <section class="panel"><div class="scripts-toolbar"><div class="field"><label for="script-search">Search</label><input id="script-search" placeholder="Name, product or description"></div><div class="field"><label for="script-status">Status</label><select id="script-status"><option value="">All statuses</option><option>ACTIVE</option><option>DISABLED</option></select></div><button class="primary" id="script-refresh">Refresh</button><button class="primary" id="script-create">+ New Script</button></div></section>
-  ${scriptSystemBanner()}
-  <section class="panel"><div class="panel-head"><div><p class="eyebrow">CATALOG</p><h3>Scripts</h3></div><span id="script-count" class="eyebrow"></span></div><div id="script-grid" class="script-grid"></div></section>`;
-  document.querySelector('#script-search').oninput = () => { if (scriptSystemAvailable) loadScripts(); };
-  document.querySelector('#script-status').onchange = () => { if (scriptSystemAvailable) loadScripts(); };
-  document.querySelector('#script-refresh').onclick = loadScripts;
-  document.querySelector('#script-create').onclick = createScriptModal;
-  loadScripts();
-}
-
-function renderScripts() {
-  const grid = document.querySelector('#script-grid');
-  document.querySelector('#script-count').textContent = `${scriptItems.length} script${scriptItems.length===1?'':'s'}`;
-  if (!scriptItems.length) {
-    grid.innerHTML = scriptSystemAvailable
-      ? '<div class="empty"><b>No scripts found</b><span>Create a script and associate it with an active product.</span></div>'
-      : '<div class="empty"><b>Script data is unavailable</b><span>The UI remains available, but production persistence cannot be simulated while the existing schema is missing.</span></div>';
-    return;
+  async function api(url, options={}) {
+    const response = await fetch(url,{credentials:'same-origin',headers:{accept:'application/json',...(options.body instanceof FormData?{}:{'content-type':'application/json'})},...options});
+    if(response.status===401||response.status===403){location.href='/login';return null;}
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.message||data.error||`HTTP ${response.status}`);
+    return data;
   }
-  grid.innerHTML = scriptItems.map(s => `<article class="script-card"><div class="panel-head"><div><p class="eyebrow">${html(s.product_name || s.product_id)}</p><h3>${html(s.name)}</h3></div><span class="status-pill ${html(String(s.status||'').toLowerCase())}">${html(s.status)}</span></div><p>${html(s.description || 'No description')}</p><div class="script-meta"><span>${html(s.version_count ?? 0)} versions</span><span>Active: ${html(s.active_version || 'none')}</span></div><div class="script-actions"><button class="ghost" data-script="${html(s.id)}" data-action="details">Details</button><button class="ghost" data-script="${html(s.id)}" data-action="version">Upload version</button><button class="ghost" data-script="${html(s.id)}" data-action="toggle">${s.status==='ACTIVE'?'Disable':'Enable'}</button></div></article>`).join('');
-  grid.querySelectorAll('[data-script]').forEach(b => b.onclick=()=>scriptAction(b.dataset.action,b.dataset.script));
-}
 
-async function loadScripts() {
-  const grid = document.querySelector('#script-grid'); if (!grid) return;
-  if (!scriptSystemAvailable) { renderScripts(); return; }
-  grid.innerHTML='<div class="empty"><div class="spinner"></div><b>Loading scripts…</b></div>';
-  const q=encodeURIComponent(document.querySelector('#script-search').value.trim());
-  const status=encodeURIComponent(document.querySelector('#script-status').value);
-  try {
-    const data=await scriptRequest(`/api/v1/scripts?page=1&page_size=50&q=${q}&status=${status}`);
-    scriptItems=Array.isArray(data.scripts)?data.scripts:[];
-    renderScripts();
-  } catch(e){
-    const error = String(e.message || 'DATABASE_ERROR');
-    if (error === 'DATABASE_ERROR' || error === 'DATABASE_UNAVAILABLE' || error === 'SCRIPT_SCHEMA_UNAVAILABLE') {
-      scriptItems = [];
-      setScriptUnavailable('The existing Script Manager tables are not available in production. No fake records or local persistence are created.');
-      renderScripts();
-      return;
+  function render() {
+    const el=root(); if(!el) return;
+    const total=state.scripts.length;
+    el.innerHTML=`<section class="lua-page"><div class="lua-header"><div><div class="lua-header-icon">&lt;&gt;</div><div class="lua-header-copy"><p class="eyebrow">SCRIPT DELIVERY</p><h2>Lua Scripts</h2><p>Manage protected Lua scripts, versions and keyed loader execution.</p></div></div></div><button class="lua-new" id="lua-create">＋ Create Script</button><div class="lua-tabs"><button class="lua-tab active">Scripts (${total})</button><button class="lua-tab">Loaders</button></div><div class="lua-stat"><strong>${total}</strong> <span>/ 5 scripts</span><div class="lua-small" style="margin-top:8px">${Math.min(100,Math.round((total/5)*100))}% of your current script limit</div></div><div class="lua-toolbar"><div class="lua-filters"><button class="lua-chip ${!state.status?'active':''}" data-status="">All (${total})</button><button class="lua-chip ${state.status==='ACTIVE'?'active':''}" data-status="ACTIVE">Active</button><button class="lua-chip ${state.status==='DISABLED'?'active':''}" data-status="DISABLED">Disabled</button></div><button class="lua-btn" id="lua-refresh">Refresh</button></div><div id="lua-grid" class="lua-grid"></div></section>`;
+    el.querySelector('#lua-create').onclick=()=>createModal();
+    el.querySelector('#lua-refresh').onclick=load;
+    el.querySelectorAll('[data-status]').forEach(b=>b.onclick=()=>{state.status=b.dataset.status;load();});
+    renderGrid();
+  }
+
+  function renderGrid(){
+    const grid=document.querySelector('#lua-grid');if(!grid)return;
+    const items=state.scripts.filter(s=>!state.status||String(s.status).toUpperCase()===state.status).filter(s=>!state.q||`${s.name} ${s.service_name}`.toLowerCase().includes(state.q));
+    if(!items.length){grid.innerHTML='<div class="lua-empty"><strong>No scripts available yet</strong><span>Create your first Lua script with secure keyed delivery.</span></div>';return;}
+    grid.innerHTML=items.map(s=>`<article class="lua-card"><div class="lua-card-head"><div><h3>${esc(s.name)}</h3><div class="lua-card-sub">${esc(s.service_name||s.service_id||'Unknown service')}</div></div><span class="lua-status">${esc(s.status)}</span></div><div class="lua-card-meta"><span class="lua-meta">${esc(s.version_count||0)} versions</span><span class="lua-meta">Active: ${esc(s.active_version||'none')}</span><span class="lua-meta">Key required</span></div><div class="lua-actions"><button class="lua-btn primary" data-act="details" data-id="${esc(s.id)}">Details</button><button class="lua-btn" data-act="version" data-id="${esc(s.id)}">Upload version</button><button class="lua-btn" data-act="loader" data-id="${esc(s.id)}">Copy loader</button><button class="lua-btn" data-act="toggle" data-id="${esc(s.id)}">${String(s.status).toUpperCase()==='ACTIVE'?'Disable':'Enable'}</button></div></article>`).join('');
+    grid.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>action(b.dataset.act,b.dataset.id));
+  }
+
+  async function load(){
+    render();
+    try{
+      const params=new URLSearchParams({page:'1',page_size:'50'});if(state.status)params.set('status',state.status);if(state.q)params.set('q',state.q);
+      const data=await api(`/api/v1/scripts?${params}`);state.scripts=Array.isArray(data.scripts)?data.scripts:[];render();
+    }catch(error){
+      const grid=document.querySelector('#lua-grid');if(grid)grid.innerHTML=`<div class="lua-empty"><strong>Unable to load scripts</strong><span>${esc(error.message)}</span></div>`;
     }
-    grid.innerHTML=`<div class="empty"><b>Unable to load scripts</b><span>${html(error)}</span></div>`;
   }
-}
 
-function closeModal(){ document.querySelector('.modal-backdrop')?.remove(); }
-function modal(title, body){ const wrap=document.createElement('div'); wrap.className='modal-backdrop'; wrap.innerHTML=`<div class="modal"><div class="panel-head"><h2>${html(title)}</h2><button class="ghost" id="modal-close">Close</button></div>${body}</div>`; document.body.appendChild(wrap); wrap.querySelector('#modal-close').onclick=closeModal; return wrap.querySelector('.modal'); }
+  async function createModal(){
+    let services=[];
+    try{const data=await api('/api/v1/key-control/options');services=data.services||[];}catch(error){alert(`Unable to load services: ${error.message}`);return;}
+    if(!services.length){alert('Create a Service first. Script must be linked to a Service.');return;}
+    const wrap=document.createElement('div');wrap.className='lua-modal-backdrop';wrap.innerHTML=`<section class="lua-modal"><div class="lua-modal-head"><div><h3>Create Script</h3><p>Create and configure a protected Lua loader.</p></div><button id="lua-close">×</button></div><div class="lua-modal-body"><div class="lua-field"><label>Service <b>*</b></label><select id="lua-service">${services.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></div><div class="lua-field"><label>Name <b>*</b></label><input id="lua-name" placeholder="Frezen Script"></div><div class="lua-field"><label>Description</label><input id="lua-description" placeholder="Optional script description"></div><div class="lua-info"><b>Script</b><br>The script is delivered through the keyed loader. Leave the <code>script_key</code> placeholder intact; users must provide a valid key for the loader to continue.</div><div class="lua-field"><div class="lua-editor-label"><label>Script <b>*</b></label><button type="button" class="lua-btn" id="lua-upload">Upload .lua</button></div><div class="lua-editor-wrap"><textarea id="lua-source" class="lua-editor">${esc(DEFAULT_SOURCE)}</textarea></div><input id="lua-file" type="file" accept=".lua,text/plain" hidden><div class="lua-small">No separate UI-Source tab. The Script editor is the only source editor.</div></div><div class="lua-field"><label>Loader URL</label><input id="lua-loader" value="${esc(DEFAULT_LOADER_URL)}"><div class="lua-source-note">The loader is external. Frezen enforces the presence of a key in the generated loader template; actual acceptance/validation of that key depends on the configured loader service.</div></div></div><div class="lua-footer"><button class="lua-btn" id="lua-cancel">Cancel</button><button class="lua-btn primary" id="lua-submit">Create</button></div></section>`;
+    document.body.appendChild(wrap);
+    const close=()=>wrap.remove();wrap.querySelector('#lua-close').onclick=close;wrap.querySelector('#lua-cancel').onclick=close;
+    wrap.querySelector('#lua-upload').onclick=()=>wrap.querySelector('#lua-file').click();
+    wrap.querySelector('#lua-file').onchange=async(e)=>{const file=e.target.files?.[0];if(!file)return;wrap.querySelector('#lua-source').value=await file.text();};
+    wrap.querySelector('#lua-submit').onclick=async()=>{
+      const service_id=wrap.querySelector('#lua-service').value,name=wrap.querySelector('#lua-name').value.trim(),description=wrap.querySelector('#lua-description').value.trim(),loader_url=wrap.querySelector('#lua-loader').value.trim(),source=wrap.querySelector('#lua-source').value;
+      if(!name||!source.trim()){alert('Service, name and script are required.');return;}
+      const button=wrap.querySelector('#lua-submit');button.disabled=true;button.textContent='Creating…';
+      try{
+        const created=await api('/api/v1/scripts',{method:'POST',body:JSON.stringify({service_id,name,description,loader_url})});
+        const form=new FormData();form.append('file',new File([source],`${name.replace(/[^A-Za-z0-9_-]+/g,'_')}.lua`,{type:'text/x-lua'}));form.append('version','1.0.0');form.append('release_notes','Initial loader version');
+        await api(`/api/v1/scripts/${encodeURIComponent(created.script.id)}/versions`,{method:'POST',body:form});
+        close();await load();alert('Script created. Version 1.0.0 is archived; open Details to activate it.');
+      }catch(error){alert(`Create failed: ${error.message}`);}finally{button.disabled=false;button.textContent='Create';}
+    };
+  }
 
-async function createScriptModal(){
-  if (!scriptSystemAvailable) { alert(scriptSystemMessage || 'Script Manager database schema is unavailable.'); return; }
-  let products=[]; try { const d=await scriptRequest('/api/v1/products?page=1&page_size=50'); products=Array.isArray(d.products)?d.products:[]; } catch(e){ alert(e.message); return; }
-  const m=modal('Create Script',`<div class="field"><label>Product</label><select id="new-product">${products.map(p=>`<option value="${html(p.id)}">${html(p.name)} — ${html(p.status)}</option>`).join('')}</select></div><div class="field"><label>Name</label><input id="new-name" placeholder="example.lua"></div><div class="field"><label>Description</label><textarea id="new-description" placeholder="What this script does"></textarea></div><div class="modal-actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Create Script</button></div>`);
-  m.querySelector('#cancel').onclick=closeModal;
-  m.querySelector('#save').onclick=async()=>{ try { await scriptRequest('/api/v1/scripts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({product_id:m.querySelector('#new-product').value,name:m.querySelector('#new-name').value,description:m.querySelector('#new-description').value})}); closeModal(); loadScripts(); } catch(e){ alert(`Create failed: ${e.message}`); } };
-}
+  async function details(id){
+    try{const data=await api(`/api/v1/scripts/${encodeURIComponent(id)}`);const s=data.script,versions=data.versions||[];const wrap=document.createElement('div');wrap.className='lua-modal-backdrop';wrap.innerHTML=`<section class="lua-modal"><div class="lua-modal-head"><div><h3>${esc(s.name)}</h3><p>${esc(s.service_name||s.service_slug||'Service')}</p></div><button id="close">×</button></div><div class="lua-modal-body"><div class="lua-info"><b>Key required</b><br>Use the generated loader only after placing a valid key in <code>script_key</code>. Without a key, the loader does not continue.</div><div class="lua-field"><label>Versions</label>${versions.length?versions.map(v=>`<div class="lua-card" style="margin-top:8px"><div class="lua-card-head"><div><b>${esc(v.version)}</b><div class="lua-small">${esc(v.release_notes||'No release notes')}</div></div><span class="lua-meta">${esc(v.status)}</span></div><div class="lua-actions">${v.status==='ACTIVE'?'':`<button class="lua-btn" data-version-act="activate" data-version="${esc(v.id)}">Activate</button>`}</div></div>`).join(''):'<div class="lua-empty"><strong>No versions</strong><span>Upload a .lua version to begin.</span></div>'}</div><div class="lua-result"><div class="lua-small">Loader template</div><code id="loader-template">script_key="PASTE YOUR KEY HERE";\nloadstring(game:HttpGet("${esc(s.loader_url)}"))()</code><div class="lua-actions"><button class="lua-btn primary" id="copy-template">Copy loader</button></div></div></div></section>`;document.body.appendChild(wrap);wrap.querySelector('#close').onclick=()=>wrap.remove();wrap.querySelector('#copy-template').onclick=async()=>{await navigator.clipboard.writeText(wrap.querySelector('#loader-template').textContent);alert('Loader copied. Replace PASTE YOUR KEY HERE with a valid key.');};wrap.querySelectorAll('[data-version-act]').forEach(b=>b.onclick=async()=>{try{await api(`/api/v1/scripts/${encodeURIComponent(id)}/versions/${encodeURIComponent(b.dataset.version)}/active`,{method:'PATCH'});wrap.remove();load();}catch(error){alert(error.message);}});}
+    catch(error){alert(`Unable to load script: ${error.message}`);}
+  }
 
-function renderVersions(script, versions) {
-  return versions.length ? versions.map(v => {
-    const active = String(v.status || '').toUpperCase() === 'ACTIVE';
-    const disabled = String(v.status || '').toUpperCase() === 'DISABLED';
-    const action = active ? '' : disabled ? '' : `<button class="ghost version-action" data-version="${html(v.id)}" data-action="activate">Activate</button><button class="ghost version-action" data-version="${html(v.id)}" data-action="disable">Disable</button>`;
-    return `<div class="version-row"><span><b>${html(v.version)}</b><small>${html(v.release_notes||'No release notes')}</small></span><span>${html(v.status)}</span><span class="version-actions">${action}</span></div>`;
-  }).join('') : '<div class="empty"><b>No versions</b><span>Upload a Lua version to begin a release lifecycle.</span></div>';
-}
+  async function uploadVersion(id){
+    const wrap=document.createElement('div');wrap.className='lua-modal-backdrop';wrap.innerHTML=`<section class="lua-modal"><div class="lua-modal-head"><div><h3>Upload Script Version</h3><p>Lua files only · maximum 512 KB.</p></div><button id="close">×</button></div><div class="lua-modal-body"><div class="lua-field"><label>Version <b>*</b></label><input id="version" placeholder="v1.0.1"></div><div class="lua-field"><label>Lua file <b>*</b></label><input id="file" type="file" accept=".lua,text/plain"></div><div class="lua-field"><label>Release notes</label><textarea id="notes"></textarea></div></div><div class="lua-footer"><button class="lua-btn" id="cancel">Cancel</button><button class="lua-btn primary" id="upload">Upload</button></div></section>`;document.body.appendChild(wrap);const close=()=>wrap.remove();wrap.querySelector('#close').onclick=close;wrap.querySelector('#cancel').onclick=close;wrap.querySelector('#upload').onclick=async()=>{const file=wrap.querySelector('#file').files?.[0];if(!file)return alert('Select a .lua file.');const form=new FormData();form.append('file',file);form.append('version',wrap.querySelector('#version').value);form.append('release_notes',wrap.querySelector('#notes').value);try{await api(`/api/v1/scripts/${encodeURIComponent(id)}/versions`,{method:'POST',body:form});close();load();alert('Version uploaded as ARCHIVED. Activate it from Details.');}catch(error){alert(`Upload failed: ${error.message}`);}};
+  }
 
-async function openScriptDetails(id){
-  try {
-    const d=await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}`);
-    const m=modal(d.script?.name||'Script details',`<p>${html(d.script?.description||'No description')}</p><div class="script-meta"><span>Status: ${html(d.script?.status)}</span><span>Product: ${html(d.script?.product_name||d.script?.product_id)}</span></div><div class="version-list" id="version-list">${renderVersions(d.script,d.versions||[])}</div>`);
-    m.querySelectorAll('.version-action').forEach(b=>b.onclick=()=>changeVersionState(id,b.dataset.version,b.dataset.action));
-  } catch(e){ alert(e.message); }
-}
+  async function action(action,id){if(action==='details')return details(id);if(action==='version')return uploadVersion(id);if(action==='loader')return details(id);const item=state.scripts.find(s=>s.id===id);if(!item)return;if(!confirm(`${item.status==='ACTIVE'?'Disable':'Enable'} ${item.name}?`))return;try{await api(`/api/v1/scripts/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:item.status==='ACTIVE'?'DISABLED':'ACTIVE'})});load();}catch(error){alert(error.message);}}
 
-async function changeVersionState(scriptId, versionId, action){
-  const verb = action === 'activate' ? 'Activate' : 'Disable';
-  if(!confirm(`${verb} this script version?`)) return;
-  const endpoint = action === 'activate'
-    ? `/api/v1/scripts/${encodeURIComponent(scriptId)}/versions/${encodeURIComponent(versionId)}/active`
-    : `/api/v1/scripts/${encodeURIComponent(scriptId)}/versions/${encodeURIComponent(versionId)}/disabled`;
-  try { await scriptRequest(endpoint,{method:'PATCH'}); closeModal(); await openScriptDetails(scriptId); loadScripts(); }
-  catch(e){ alert(`${verb} failed: ${e.message}`); }
-}
-
-async function scriptAction(action,id){
-  if (!scriptSystemAvailable) { alert(scriptSystemMessage || 'Script Manager database schema is unavailable.'); return; }
-  if(action==='details'){ await openScriptDetails(id); return; }
-  if(action==='toggle'){const s=scriptItems.find(x=>x.id===id);if(!s)return;if(!confirm(`${s.status==='ACTIVE'?'Disable':'Enable'} ${s.name}?`))return;try{await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({status:s.status==='ACTIVE'?'DISABLED':'ACTIVE'})});loadScripts();}catch(e){alert(e.message);}return;}
-  if(action==='version'){ uploadVersionModal(id); }
-}
-
-function uploadVersionModal(id){
- const m=modal('Upload Script Version',`<p class="eyebrow">Lua files only • maximum 512 KB</p><div class="field"><label>Version</label><input id="version" placeholder="v1.0.0"></div><div class="field"><label>Lua file</label><input id="lua" type="file" accept=".lua,text/plain"></div><div class="field"><label>Release notes</label><textarea id="notes"></textarea></div><div class="modal-actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="upload">Upload</button></div>`);
- m.querySelector('#cancel').onclick=closeModal;
- m.querySelector('#upload').onclick=async()=>{const file=m.querySelector('#lua').files[0];if(!file){alert('Select a .lua file');return;}const form=new FormData();form.append('file',file);form.append('version',m.querySelector('#version').value);form.append('release_notes',m.querySelector('#notes').value);try{await scriptRequest(`/api/v1/scripts/${encodeURIComponent(id)}/versions`,{method:'POST',body:form});closeModal();alert('Version uploaded as ARCHIVED. Open Details to activate it when ready.');loadScripts();}catch(e){alert(`Upload failed: ${e.message}`);}};
-}
-
-function mountScripts(){ if(!scriptsRoot)return; scriptPage(); }
-
-window.FrezenDashboardPanels = window.FrezenDashboardPanels || {};
-window.FrezenDashboardPanels.scripts = mountScripts;
+  function mount(){ load(); }
+  window.FrezenDashboardPanels=window.FrezenDashboardPanels||{};
+  window.FrezenDashboardPanels.scripts=mount;
+})();
