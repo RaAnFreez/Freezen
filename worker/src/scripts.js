@@ -29,59 +29,25 @@ function cleanUrl(value) {
   try {
     const parsed = new URL(url);
     return parsed.protocol === 'https:' ? parsed.toString() : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 async function audit(env, auth, action, resourceType, resourceId, status, requestId, metadata = {}) {
   if (!env.DB) return;
-  try {
-    await env.DB.prepare('INSERT INTO audit_logs (id,user_id,action,resource_type,resource_id,status,request_id,metadata_json) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)')
-      .bind(id(), auth?.user_id ?? null, action, resourceType, resourceId ?? null, status, requestId, JSON.stringify(metadata)).run();
-  } catch {}
+  try { await env.DB.prepare('INSERT INTO audit_logs (id,user_id,action,resource_type,resource_id,status,request_id,metadata_json) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)').bind(id(), auth?.user_id ?? null, action, resourceType, resourceId ?? null, status, requestId, JSON.stringify(metadata)).run(); } catch {}
 }
 
 export async function ensureScriptSchema(env) {
   if (!env?.DB) throw new Error('DATABASE_UNAVAILABLE');
   await env.DB.batch([
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS scripts (
-      id TEXT PRIMARY KEY,
-      service_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      description TEXT,
-      loader_url TEXT NOT NULL DEFAULT '${DEFAULT_LOADER_URL}',
-      status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','DISABLED')),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(service_id) REFERENCES frezen_key_services(id) ON DELETE RESTRICT
-    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS scripts (id TEXT PRIMARY KEY, service_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, loader_url TEXT NOT NULL DEFAULT '${DEFAULT_LOADER_URL}', status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','DISABLED')), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), FOREIGN KEY(service_id) REFERENCES frezen_key_services(id) ON DELETE RESTRICT)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_scripts_service ON scripts(service_id)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_scripts_status ON scripts(status)'),
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_scripts_service_name ON scripts(service_id, name)'),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS script_versions (
-      id TEXT PRIMARY KEY,
-      script_id TEXT NOT NULL,
-      version TEXT NOT NULL,
-      file_reference TEXT NOT NULL,
-      release_notes TEXT,
-      status TEXT NOT NULL DEFAULT 'ARCHIVED' CHECK(status IN ('ACTIVE','ARCHIVED','DISABLED')),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(script_id) REFERENCES scripts(id) ON DELETE CASCADE
-    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS script_versions (id TEXT PRIMARY KEY, script_id TEXT NOT NULL, version TEXT NOT NULL, file_reference TEXT NOT NULL, release_notes TEXT, status TEXT NOT NULL DEFAULT 'ARCHIVED' CHECK(status IN ('ACTIVE','ARCHIVED','DISABLED')), created_at TEXT NOT NULL DEFAULT (datetime('now')), FOREIGN KEY(script_id) REFERENCES scripts(id) ON DELETE CASCADE)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_script_versions_script ON script_versions(script_id, created_at DESC)'),
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_script_versions_unique ON script_versions(script_id, version)'),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS script_files (
-      id TEXT PRIMARY KEY,
-      script_version_id TEXT NOT NULL,
-      file_name TEXT NOT NULL,
-      content_type TEXT NOT NULL DEFAULT 'text/x-lua',
-      size_bytes INTEGER NOT NULL,
-      content TEXT NOT NULL,
-      sha256 TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(script_version_id) REFERENCES script_versions(id) ON DELETE CASCADE
-    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS script_files (id TEXT PRIMARY KEY, script_version_id TEXT NOT NULL, file_name TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT 'text/x-lua', size_bytes INTEGER NOT NULL, content TEXT NOT NULL, sha256 TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), FOREIGN KEY(script_version_id) REFERENCES script_versions(id) ON DELETE CASCADE)`),
     env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_script_files_version ON script_files(script_version_id)'),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_script_files_sha256 ON script_files(sha256)'),
   ]);
@@ -104,21 +70,14 @@ export async function listScripts(request, env, requestId, json) {
     const bindings = [];
     if (status) { where.push('s.status = ?'); bindings.push(status); }
     if (serviceId) { where.push('s.service_id = ?'); bindings.push(serviceId); }
-    if (q) { where.push('(s.id LIKE ? OR s.name LIKE ? OR s.description LIKE ? OR sv.service_name LIKE ?)'); const pattern = `%${q}%`; bindings.push(pattern, pattern, pattern, pattern); }
+    if (q) { where.push('(s.id LIKE ? OR s.name LIKE ? OR s.description LIKE ? OR sv.name LIKE ?)'); const pattern = `%${q}%`; bindings.push(pattern, pattern, pattern, pattern); }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const totalRow = await env.DB.prepare(`SELECT COUNT(*) AS total FROM scripts s LEFT JOIN frezen_key_services sv ON sv.id=s.service_id ${clause}`).bind(...bindings).first();
     const total = Number(totalRow?.total ?? 0);
     const offset = (page - 1) * pageSize;
-    const rows = await env.DB.prepare(`SELECT s.id,s.service_id,s.name,s.description,s.loader_url,s.status,s.created_at,s.updated_at,
-      sv.name AS service_name,sv.slug AS service_slug,
-      (SELECT COUNT(*) FROM script_versions v WHERE v.script_id=s.id) AS version_count,
-      (SELECT v.version FROM script_versions v WHERE v.script_id=s.id AND v.status='ACTIVE' ORDER BY v.created_at DESC LIMIT 1) AS active_version
-      FROM scripts s LEFT JOIN frezen_key_services sv ON sv.id=s.service_id ${clause}
-      ORDER BY s.updated_at DESC LIMIT ? OFFSET ?`).bind(...bindings, pageSize, offset).all();
+    const rows = await env.DB.prepare(`SELECT s.id,s.service_id,s.name,s.description,s.loader_url,s.status,s.created_at,s.updated_at,sv.name AS service_name,sv.slug AS service_slug,(SELECT COUNT(*) FROM script_versions v WHERE v.script_id=s.id) AS version_count,(SELECT v.version FROM script_versions v WHERE v.script_id=s.id AND v.status='ACTIVE' ORDER BY v.created_at DESC LIMIT 1) AS active_version FROM scripts s LEFT JOIN frezen_key_services sv ON sv.id=s.service_id ${clause} ORDER BY s.updated_at DESC LIMIT ? OFFSET ?`).bind(...bindings, pageSize, offset).all();
     return json({ scripts: rows.results ?? [], pagination: { page, page_size: pageSize, total, total_pages: Math.ceil(total / pageSize) }, request_id: requestId });
-  } catch {
-    return bad(json, requestId, 'DATABASE_ERROR', 503);
-  }
+  } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
 }
 
 export async function createScript(request, env, requestId, json, auth) {
@@ -137,7 +96,7 @@ export async function createScript(request, env, requestId, json, auth) {
     if (!service) return bad(json, requestId, 'SERVICE_NOT_FOUND', 404);
     if (!service.active) return bad(json, requestId, 'SERVICE_DISABLED', 409);
     const scriptId = id();
-    await env.DB.prepare('INSERT INTO scripts (id,service_id,name,description,loader_url,status) VALUES (?1,?2,?3,?4,?5,\'ACTIVE\')').bind(scriptId, serviceId, name, description, loaderUrl).run();
+    await env.DB.prepare("INSERT INTO scripts (id,service_id,name,description,loader_url,status) VALUES (?1,?2,?3,?4,?5,'ACTIVE')").bind(scriptId, serviceId, name, description, loaderUrl).run();
     await audit(env, auth, 'SCRIPT_CREATED', 'script', scriptId, 'SUCCESS', requestId, { service_id: serviceId });
     return json({ script: { id: scriptId, service_id: serviceId, service_name: service.name, service_slug: service.slug, name, description, loader_url: loaderUrl, status: 'ACTIVE' }, request_id: requestId }, 201, requestId);
   } catch (error) {
@@ -175,8 +134,8 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
     const versionId = id();
     const fileId = id();
     const sha256 = await sha256Hex(parsed.content);
-    await env.DB.prepare('INSERT INTO script_versions (id,script_id,version,file_reference,release_notes,status) VALUES (?1,?2,?3,?4,?5,\'ARCHIVED\')').bind(versionId, scriptId, parsed.version, fileId, parsed.releaseNotes).run();
-    await env.DB.prepare('INSERT INTO script_files (id,script_version_id,file_name,content_type,size_bytes,content,sha256) VALUES (?1,?2,?3,\'text/x-lua\',?4,?5,?6)').bind(fileId, versionId, parsed.fileName, parsed.sizeBytes, parsed.content, sha256).run();
+    await env.DB.prepare("INSERT INTO script_versions (id,script_id,version,file_reference,release_notes,status) VALUES (?1,?2,?3,?4,?5,'ARCHIVED')").bind(versionId, scriptId, parsed.version, fileId, parsed.releaseNotes).run();
+    await env.DB.prepare("INSERT INTO script_files (id,script_version_id,file_name,content_type,size_bytes,content,sha256) VALUES (?1,?2,?3,'text/x-lua',?4,?5,?6)").bind(fileId, versionId, parsed.fileName, parsed.sizeBytes, parsed.content, sha256).run();
     await audit(env, auth, 'SCRIPT_VERSION_UPLOADED', 'script_version', versionId, 'SUCCESS', requestId, { script_id: scriptId, version: parsed.version });
     return json({ version: { id: versionId, script_id: scriptId, version: parsed.version, file_name: parsed.fileName, size_bytes: parsed.sizeBytes, sha256, release_notes: parsed.releaseNotes, status: 'ARCHIVED' }, request_id: requestId }, 201, requestId);
   } catch (error) {
@@ -194,11 +153,7 @@ export async function setScriptVersionActive(request, env, requestId, json, auth
     const access = await env.DB.prepare('SELECT s.id FROM scripts s JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 AND sv.owner_id=?2').bind(scriptId, auth?.user_id).first();
     if (!access) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
     if (statusOk(version.status) === 'DISABLED') return bad(json, requestId, 'SCRIPT_VERSION_DISABLED', 409);
-    await env.DB.batch([
-      env.DB.prepare("UPDATE script_versions SET status='ARCHIVED' WHERE script_id=?1 AND status='ACTIVE'").bind(scriptId),
-      env.DB.prepare("UPDATE script_versions SET status='ACTIVE' WHERE id=?1 AND script_id=?2").bind(versionId, scriptId),
-      env.DB.prepare("UPDATE scripts SET updated_at=CURRENT_TIMESTAMP WHERE id=?1").bind(scriptId),
-    ]);
+    await env.DB.batch([env.DB.prepare("UPDATE script_versions SET status='ARCHIVED' WHERE script_id=?1 AND status='ACTIVE'").bind(scriptId),env.DB.prepare("UPDATE script_versions SET status='ACTIVE' WHERE id=?1 AND script_id=?2").bind(versionId, scriptId),env.DB.prepare("UPDATE scripts SET updated_at=CURRENT_TIMESTAMP WHERE id=?1").bind(scriptId)]);
     await audit(env, auth, 'SCRIPT_VERSION_ACTIVATED', 'script_version', versionId, 'SUCCESS', requestId, { script_id: scriptId, version: version.version });
     return json({ status: 'active', version: { id: version.id, version: version.version }, request_id: requestId });
   } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
@@ -237,33 +192,11 @@ export async function getScript(request, env, requestId, json, scriptId) {
   if (!env.DB) return bad(json, requestId, 'DATABASE_UNAVAILABLE', 503);
   try {
     await ensureScriptSchema(env);
-    const script = await env.DB.prepare(`SELECT s.id,s.service_id,s.name,s.description,s.loader_url,s.status,s.created_at,s.updated_at,sv.name AS service_name,sv.slug AS service_slug
-      FROM scripts s LEFT JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 LIMIT 1`).bind(scriptId).first();
+    const script = await env.DB.prepare(`SELECT s.id,s.service_id,s.name,s.description,s.loader_url,s.status,s.created_at,s.updated_at,sv.name AS service_name,sv.slug AS service_slug FROM scripts s LEFT JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 LIMIT 1`).bind(scriptId).first();
     if (!script) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
     const versions = await env.DB.prepare('SELECT id,version,file_reference,release_notes,status,created_at FROM script_versions WHERE script_id=?1 ORDER BY created_at DESC').bind(scriptId).all();
     return json({ script, versions: versions.results ?? [], request_id: requestId });
   } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
 }
 
-function injectScriptKey(content, key) {
-  const normalized = String(key || '').trim();
-  if (!normalized) return content;
-  if (/script_key\s*=\s*["'][^"']*["']/.test(content)) return content.replace(/script_key\s*=\s*["'][^"']*["']/, `script_key="${normalized.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
-  return `local script_key="${normalized.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"\n${content}`;
-}
-
-export async function getScriptLoaderTemplate(env, requestId, json, scriptId) {
-  if (!env.DB) return bad(json, requestId, 'DATABASE_UNAVAILABLE', 503);
-  try {
-    await ensureScriptSchema(env);
-    const row = await env.DB.prepare(`SELECT s.id,s.name,s.loader_url,s.status,sv.slug AS service_slug,
-      (SELECT sf.content FROM script_versions v JOIN script_files sf ON sf.script_version_id=v.id WHERE v.script_id=s.id AND v.status='ACTIVE' ORDER BY v.created_at DESC LIMIT 1) AS content
-      FROM scripts s LEFT JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 LIMIT 1`).bind(scriptId).first();
-    if (!row) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
-    if (statusOk(row.status) !== 'ACTIVE') return bad(json, requestId, 'SCRIPT_DISABLED', 409);
-    const source = row.content || `script_key="PASTE YOUR KEY HERE";\nloadstring(game:HttpGet("${row.loader_url}"))()`;
-    return json({ script: { id: row.id, name: row.name, service_slug: row.service_slug, loader_url: row.loader_url }, template: injectScriptKey(source, 'PASTE YOUR KEY HERE'), active_version_available: Boolean(row.content), requires_key: true }, 200, requestId);
-  } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
-}
-
-export { DEFAULT_LOADER_URL, injectScriptKey };
+export { DEFAULT_LOADER_URL };
