@@ -50,7 +50,7 @@ async function insertGeneratedLicense(env, { licenseId, keyHash, productId, expi
     license_key_hash: keyHash,
     product_id: productId || null,
     user_id: null,
-    status: "unused",
+    status: "active",
     expires_at: expiresAt,
     max_devices: maxDevices,
   };
@@ -95,10 +95,10 @@ export async function generateLicense(request, env, requestId, json, auth) {
     }
 
     await insertGeneratedLicense(env, { licenseId, keyHash, productId, expiresAt, maxDevices });
-    await audit(env, licenseId, null, "unused");
+    await audit(env, licenseId, null, "active");
     return json({
       created: true,
-      license: { id: licenseId, product_id: productId || null, user_id: null, status: "unused", expires_at: expiresAt, max_devices: maxDevices },
+      license: { id: licenseId, product_id: productId || null, user_id: null, status: "active", expires_at: expiresAt, max_devices: maxDevices },
       license_key: licenseKey,
       warning: "The plaintext license key is returned only in this creation response and is never stored by Frezen.",
       created_by: auth?.user_id ?? null,
@@ -118,19 +118,30 @@ export async function redeemLicense(request, env, requestId, json, auth) {
 
   try {
     const keyHash = await sha256Hex(licenseKey);
-    const license = await env.DB.prepare("SELECT id, user_id, product_id, status, expires_at, redeem_count FROM licenses WHERE license_key_hash = ?1 LIMIT 1").bind(keyHash).first();
+    const license = await env.DB.prepare("SELECT id, user_id, product_id, status, expires_at FROM licenses WHERE license_key_hash = ?1 LIMIT 1").bind(keyHash).first();
     if (!license) return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId);
     const status = normalizeStatus(license.status);
     if (status === "revoked") return json({ error: "LICENSE_REVOKED", request_id: requestId }, 403, requestId);
     if (status === "banned") return json({ error: "LICENSE_BANNED", request_id: requestId }, 403, requestId);
     if (status === "expired" || expired(license.expires_at)) return json({ error: "LICENSE_EXPIRED", request_id: requestId }, 403, requestId);
-    if (status !== "unused") {
+
+    const claimable = status === "unused" || (status === "active" && !license.user_id);
+    if (!claimable) {
       if (license.user_id === auth.user_id) return json({ error: "LICENSE_ALREADY_REDEEMED", request_id: requestId }, 409, requestId);
       return json({ error: "LICENSE_UNAVAILABLE", request_id: requestId }, 409, requestId);
     }
-    const result = await env.DB.prepare("UPDATE licenses SET user_id = ?1, status = 'active', redeem_count = redeem_count + 1, last_seen = CURRENT_TIMESTAMP WHERE id = ?2 AND status = 'unused' AND user_id IS NULL").bind(auth.user_id, license.id).run();
+
+    const columns = await licenseColumns(env);
+    if (!columns.has("user_id")) return json({ error: "LICENSE_SCHEMA_INCOMPATIBLE", request_id: requestId }, 503, requestId);
+    const updates = ["user_id = ?1"];
+    if (columns.has("status")) updates.push("status = 'active'");
+    if (columns.has("redeem_count")) updates.push("redeem_count = redeem_count + 1");
+    if (columns.has("last_seen")) updates.push("last_seen = CURRENT_TIMESTAMP");
+    const conditions = ["id = ?2", "user_id IS NULL"];
+    if (columns.has("status")) conditions.push("status IN ('unused', 'active')");
+    const result = await env.DB.prepare(`UPDATE licenses SET ${updates.join(", ")} WHERE ${conditions.join(" AND ")}`).bind(auth.user_id, license.id).run();
     if (!result?.meta || result.meta.changes !== 1) return json({ error: "LICENSE_REDEEM_CONFLICT", request_id: requestId }, 409, requestId);
-    await audit(env, license.id, "unused", "active");
+    await audit(env, license.id, status, "active");
     return json({ redeemed: true, license: { id: license.id, product_id: license.product_id, status: "active", expires_at: license.expires_at }, request_id: requestId }, 200, requestId);
   } catch {
     return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId);
@@ -154,7 +165,15 @@ export async function extendLicense(request, env, requestId, json, licenseId) {
     const base = Number.isNaN(current) || current < Date.now() ? Date.now() : current;
     const expiresAt = isoAfterDays(days, base);
     const nextStatus = status === "expired" ? "active" : status;
-    await env.DB.prepare("UPDATE licenses SET expires_at = ?1, status = ?2, last_seen = CURRENT_TIMESTAMP WHERE id = ?3").bind(expiresAt, nextStatus, licenseId).run();
+    const columns = await licenseColumns(env);
+    const updates = ["expires_at = ?1"];
+    if (columns.has("status")) updates.push("status = ?2");
+    if (columns.has("last_seen")) updates.push(`last_seen = CURRENT_TIMESTAMP`);
+    if (columns.has("status")) {
+      await env.DB.prepare(`UPDATE licenses SET ${updates.join(", ")} WHERE id = ?3`).bind(expiresAt, nextStatus, licenseId).run();
+    } else {
+      await env.DB.prepare(`UPDATE licenses SET ${updates[0]} WHERE id = ?2`).bind(expiresAt, licenseId).run();
+    }
     if (nextStatus !== status) await audit(env, licenseId, status, nextStatus);
     return json({ extended: true, license: { id: licenseId, status: nextStatus, expires_at: expiresAt }, request_id: requestId }, 200, requestId);
   } catch {
@@ -167,12 +186,17 @@ export async function resetLicenseHwid(request, env, requestId, json, licenseId)
   const invalid = parseLicenseId(licenseId, json, requestId);
   if (invalid) return invalid;
   try {
-    const license = await env.DB.prepare("SELECT id, status, reset_count FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first();
+    const license = await env.DB.prepare("SELECT id, status FROM licenses WHERE id = ?1 LIMIT 1").bind(licenseId).first();
     if (!license) return json({ error: "LICENSE_NOT_FOUND", request_id: requestId }, 404, requestId);
     const status = normalizeStatus(license.status);
     if (["revoked", "banned"].includes(status)) return json({ error: "LICENSE_NOT_RESETTABLE", request_id: requestId }, 409, requestId);
-    await env.DB.prepare("UPDATE licenses SET current_hwid = NULL, reset_count = reset_count + 1, last_seen = CURRENT_TIMESTAMP WHERE id = ?1").bind(licenseId).run();
-    return json({ reset: true, license: { id: licenseId, status: license.status, reset_count: Number(license.reset_count ?? 0) + 1 }, request_id: requestId }, 200, requestId);
+    const columns = await licenseColumns(env);
+    if (!columns.has("current_hwid")) return json({ error: "HWID_SCHEMA_INCOMPATIBLE", request_id: requestId }, 503, requestId);
+    const updates = ["current_hwid = NULL"];
+    if (columns.has("reset_count")) updates.push("reset_count = reset_count + 1");
+    if (columns.has("last_seen")) updates.push("last_seen = CURRENT_TIMESTAMP");
+    await env.DB.prepare(`UPDATE licenses SET ${updates.join(", ")} WHERE id = ?1`).bind(licenseId).run();
+    return json({ reset: true, license: { id: licenseId, status: license.status }, request_id: requestId }, 200, requestId);
   } catch {
     return json({ error: "DATABASE_ERROR", request_id: requestId }, 503, requestId);
   }
