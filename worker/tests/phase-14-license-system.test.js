@@ -6,7 +6,7 @@ const request = (body) => new Request("https://frezen.test/api/v1/licenses", { m
 
 function makeDb({ product = { id: "prod-1", status: "ACTIVE" }, license = null, updateChanges = 1 } = {}) {
   const statements = [];
-  const columns = ["id", "license_key_hash", "product_id", "user_id", "status", "expires_at", "max_devices"];
+  const columns = ["id", "license_key_hash", "product_id", "user_id", "status", "expires_at", "max_devices", "current_hwid", "reset_count", "last_seen"];
   return {
     statements,
     prepare(sql) {
