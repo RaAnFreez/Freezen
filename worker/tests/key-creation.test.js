@@ -9,16 +9,16 @@ describe('Key Control license creation', () => {
       prepare(sql) {
         calls.push(sql);
         return {
+          async all() {
+            if (sql.includes('PRAGMA table_info(licenses)')) return { results: columns.map((name, cid) => ({ cid, name })) };
+            return { results: [] };
+          },
           bind(...values) {
             calls.push(values);
             return {
               async first() {
                 if (sql.includes('FROM products')) throw new Error('no such table: products');
                 return null;
-              },
-              async all() {
-                if (sql.includes('PRAGMA table_info(licenses)')) return { results: columns.map((name, cid) => ({ cid, name })) };
-                return { results: [] };
               },
               async run() {
                 if (sql.includes('license_audit_log')) throw new Error('legacy audit schema');
