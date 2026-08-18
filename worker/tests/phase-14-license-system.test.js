@@ -6,11 +6,16 @@ const request = (body) => new Request("https://frezen.test/api/v1/licenses", { m
 
 function makeDb({ product = { id: "prod-1", status: "ACTIVE" }, license = null, updateChanges = 1 } = {}) {
   const statements = [];
+  const columns = ["id", "license_key_hash", "product_id", "user_id", "status", "expires_at", "max_devices"];
   return {
     statements,
     prepare(sql) {
       statements.push(sql);
       return {
+        async all() {
+          if (sql.includes("PRAGMA table_info(licenses)")) return { results: columns.map((name, cid) => ({ cid, name })) };
+          return { results: [] };
+        },
         bind(...args) {
           return {
             async first() {
@@ -33,7 +38,6 @@ describe("Phase 14 license system", () => {
     const db = makeDb();
     const response = await generateLicense(request({ product_id: "prod-1", duration_days: 30, max_devices: 2 }), { DB: db }, "req-1", json, { user_id: "owner-1" });
     const body = await response.json();
-
     expect(response.status).toBe(201);
     expect(body.created).toBe(true);
     expect(body.license.status).toBe("unused");
