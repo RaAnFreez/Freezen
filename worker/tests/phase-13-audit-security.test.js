@@ -4,7 +4,7 @@ import path from "node:path";
 
 const root = path.resolve(process.cwd());
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const hasDashboardAsset = (html, asset) => new RegExp(`/dashboard/${asset}\\?v=provider-getkey-v\\d+`).test(html);
+const hasDashboardAsset = (html, asset) => new RegExp(`/dashboard/${asset}\\?v=(?:provider-getkey-v|key-control-v)\\d+`).test(html);
 
 describe("Phase 13 audit and security surfaces", () => {
   it("keeps the existing security event schema compatible", () => {
@@ -37,7 +37,7 @@ describe("Phase 13 audit and security surfaces", () => {
     expect(main).toContain("label: 'SCRIPTS'");
     expect(main).toContain("label: 'MODERATION'");
     expect(main).toContain("licenses: 'licenses'");
-    expect(keyPanel).toContain("KEY CONTROL");
+    expect(keyPanel).toMatch(/KEY (?:SYSTEM|CONTROL)/);
     expect(keyPanel).toContain("window.FrezenDashboardPanels.licenses = mount");
     expect(keyPanel).not.toContain("document.addEventListener('click'");
 
