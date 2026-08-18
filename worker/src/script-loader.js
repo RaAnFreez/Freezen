@@ -17,6 +17,9 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
   if (request.method !== 'GET') return deny('You cant access this link');
   if (!env.DB || !scriptId) return deny();
 
+  const accept = request.headers.get('accept') ?? '';
+  if (/text\/html/i.test(accept)) return deny();
+
   const key = new URL(request.url).searchParams.get('key')?.trim() ?? '';
   if (!key || key.length > 512 || key === 'PASTE YOUR KEY HERE') return deny();
 
