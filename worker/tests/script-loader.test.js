@@ -31,11 +31,24 @@ describe('Frezen internal keyed script loader', () => {
     expect(await response.text()).toBe('You cant access this link');
   });
 
-  it('returns the active script source for a matching active key', async () => {
+  it('denies browser-style navigation even when a key is present', async () => {
     const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
     const keyHash = await hash(key);
     const response = await deliverScriptByKey(
-      new Request(`https://frezen.test/loader/s1?key=${encodeURIComponent(key)}`),
+      new Request(`https://frezen.test/loader/s1?key=${encodeURIComponent(key)}`, { headers: { accept: 'text/html,application/xhtml+xml' } }),
+      { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', content: 'print("hello")', content_type: 'text/x-lua' }) },
+      'req-browser',
+      's1',
+    );
+    expect(response.status).toBe(403);
+    expect(await response.text()).toBe('You cant access this link');
+  });
+
+  it('returns the active script source for a matching programmatic key request', async () => {
+    const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
+    const keyHash = await hash(key);
+    const response = await deliverScriptByKey(
+      new Request(`https://frezen.test/loader/s1?key=${encodeURIComponent(key)}`, { headers: { accept: '*/*' } }),
       { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', content: 'print("hello")', content_type: 'text/x-lua' }) },
       'req-2',
       's1',
