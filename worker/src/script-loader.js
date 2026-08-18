@@ -14,7 +14,7 @@ async function sha256Hex(value) {
 }
 
 export async function deliverScriptByKey(request, env, requestId, scriptId) {
-  if (request.method !== 'GET') return deny('You cant access this link');
+  if (request.method !== 'GET') return deny();
   if (!env.DB || !scriptId) return deny();
 
   const accept = request.headers.get('accept') ?? '';
@@ -36,7 +36,6 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
       FROM scripts s
       JOIN script_versions v
         ON v.script_id = s.id
-       AND v.status = 'ACTIVE'
       JOIN script_files f
         ON f.script_version_id = v.id
       JOIN frezen_key_records kr
@@ -48,11 +47,12 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
         AND s.status = 'ACTIVE'
         AND LOWER(COALESCE(l.status, '')) = 'active'
         AND (l.expires_at IS NULL OR datetime(l.expires_at) > datetime('now'))
-      ORDER BY v.created_at DESC
+        AND v.status IN ('ACTIVE', 'ARCHIVED')
+      ORDER BY CASE WHEN v.status = 'ACTIVE' THEN 0 ELSE 1 END, v.created_at DESC
       LIMIT 1
     `).bind(keyHash, scriptId).first();
 
-    if (!row || row.script_status !== 'ACTIVE' || row.version_status !== 'ACTIVE') return deny();
+    if (!row || row.script_status !== 'ACTIVE') return deny();
 
     return new Response(row.content, {
       status: 200,
