@@ -35,6 +35,26 @@ function makeDb() {
   };
 }
 
+function makeOptionsDb() {
+  return {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async all() {
+              if (sql.includes('frezen_key_providers')) return { results: [{ id: 'p1', name: 'Fres', type: 'safelinku', service_id: 's1' }] };
+              if (sql.includes('frezen_key_services')) return { results: [{ id: 's1', name: 'Frezen', slug: 'frezen' }] };
+              if (sql.includes('frezen_key_folders')) return { results: [] };
+              return { results: [] };
+            },
+          };
+        },
+      };
+    },
+    async batch() { return []; },
+  };
+}
+
 describe('Key Control v4', () => {
   it('creates a key linked to provider and service with custom validity', async () => {
     const response = await createKey(request({ provider_id: 'p1', service_id: 's1', days: 0, hours: 1, minutes: 0, max_devices: 2, premium: true }), { DB: makeDb() }, 'req-1', { user_id: 'owner-1' });
@@ -48,7 +68,7 @@ describe('Key Control v4', () => {
   });
 
   it('returns provider, service and folder options', async () => {
-    const response = await keyControlOptions(makeDb(), 'req-2', { user_id: 'owner-1' });
+    const response = await keyControlOptions(makeOptionsDb(), 'req-2', { user_id: 'owner-1' });
     const body = await response.json();
     expect(response.status).toBe(200);
     expect(body.providers.length).toBe(1);
