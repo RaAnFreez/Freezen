@@ -35,12 +35,25 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
         f.content_type
       FROM scripts s
       JOIN script_versions v
-        ON v.script_id = s.id
-       AND v.status IN ('ACTIVE', 'ARCHIVED')
+        ON v.id = (
+          SELECT v2.id
+          FROM script_versions v2
+          WHERE v2.script_id = s.id
+            AND v2.status IN ('ACTIVE', 'ARCHIVED')
+          ORDER BY CASE WHEN v2.status = 'ACTIVE' THEN 0 ELSE 1 END,
+                   v2.created_at DESC
+          LIMIT 1
+        )
       JOIN script_files f
         ON f.script_version_id = v.id
       JOIN frezen_key_records kr
         ON kr.service_id = s.service_id
+        OR kr.service_id = (
+          SELECT p.service_id
+          FROM frezen_key_providers p
+          WHERE p.id = kr.provider_id
+          LIMIT 1
+        )
       JOIN licenses l
         ON l.id = kr.license_id
        AND l.license_key_hash = ?1
@@ -48,6 +61,7 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
         AND s.status = 'ACTIVE'
         AND LOWER(COALESCE(l.status, '')) = 'active'
         AND (l.expires_at IS NULL OR datetime(l.expires_at) > datetime('now'))
+        AND (kr.owner_id = l.user_id OR l.user_id IS NULL)
       ORDER BY CASE WHEN v.status = 'ACTIVE' THEN 0 ELSE 1 END,
                v.created_at DESC
       LIMIT 1
