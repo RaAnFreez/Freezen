@@ -68,7 +68,7 @@ describe('Key Control v4', () => {
   });
 
   it('returns provider, service and folder options', async () => {
-    const response = await keyControlOptions(makeOptionsDb(), 'req-2', { user_id: 'owner-1' });
+    const response = await keyControlOptions({ DB: makeOptionsDb() }, 'req-2', { user_id: 'owner-1' });
     const body = await response.json();
     expect(response.status).toBe(200);
     expect(body.providers.length).toBe(1);
