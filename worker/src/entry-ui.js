@@ -2,6 +2,7 @@ import entry from "./entry.js";
 import { requirePrivateAccess } from "./security/private-access.js";
 import { createSafeLinkUCheckpoint } from "./safelinku.js";
 import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublicFlow, launchPublicFlow, publicGetKeyPage } from "./key-system-runtime.js";
+import { keyControlOptions, createKeyFolder, listKeys, createKey } from "./key-control.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", ...NO_STORE };
@@ -42,6 +43,31 @@ export default {
       if (access instanceof Response) return access;
       const result = await syncKeySystemConfig(request, env, access);
       return new Response(await result.text(), { status: result.status, headers: { ...Object.fromEntries(result.headers.entries()), "x-request-id": requestId } });
+    }
+
+    if (url.pathname === "/api/v1/key-control/options") {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+      return keyControlOptions(env, requestId, access);
+    }
+
+    if (url.pathname === "/api/v1/key-control/folders") {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+      return createKeyFolder(request, env, requestId, access);
+    }
+
+    if (url.pathname === "/api/v1/key-control/keys") {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method === "GET") return listKeys(request, env, requestId, access);
+      if (request.method === "POST") return createKey(request, env, requestId, access);
+      return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
     }
 
     if (request.method === "GET" && url.pathname === "/api/v1/get-key/checkpoint/callback") {
