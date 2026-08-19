@@ -13,7 +13,7 @@ export function renderKeys(root) {
         <div class="key-create-title"><strong>Create key</strong><span>Each key can have its own device limit and validity.</span></div>
         <div class="key-form-grid">
           <label>Provider<select id="key-provider"></select></label>
-          <label>Service<select id="key-service"><option value="">No service</option></select></label>
+          <label>Service<select id="key-service"><option value="">Use provider service</option></select></label>
           <label>Folder<select id="key-folder"><option value="">No folder</option></select></label>
           <label>Key name<input id="key-name" maxlength="100" placeholder="Customer / VIP"></label>
           <label>Days<input id="key-days" type="number" min="0" max="3650" value="30"></label>
@@ -34,6 +34,7 @@ export function renderKeys(root) {
   const folder = root.querySelector("#key-folder");
   const forever = root.querySelector("#key-forever");
   const show = (text, error = false) => { message.hidden = !text; message.textContent = text; message.classList.toggle("error", error); };
+  let providerOptions = [];
 
   const api = async (path, options = {}) => {
     const response = await fetch(`${API}${path}`, { credentials: "include", ...options });
@@ -42,11 +43,25 @@ export function renderKeys(root) {
     return data;
   };
 
+  const syncProviderService = () => {
+    const selected = providerOptions.find((item) => String(item.id) === String(provider.value));
+    const boundService = selected?.service_id ? String(selected.service_id) : "";
+    if (boundService) {
+      service.value = boundService;
+      service.disabled = true;
+    } else {
+      service.value = "";
+      service.disabled = false;
+    }
+  };
+
   const loadOptions = async () => {
     const data = await api("/options");
-    provider.innerHTML = (data.providers ?? []).map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("") || `<option value="">No providers</option>`;
-    service.innerHTML = `<option value="">No service</option>` + (data.services ?? []).map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("");
+    providerOptions = data.providers ?? [];
+    provider.innerHTML = providerOptions.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("") || `<option value="">No providers</option>`;
+    service.innerHTML = `<option value="">Use provider service</option>` + (data.services ?? []).map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("");
     folder.innerHTML = `<option value="">No folder</option>` + (data.folders ?? []).map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("");
+    syncProviderService();
   };
 
   const render = (keys) => {
@@ -69,9 +84,12 @@ export function renderKeys(root) {
     try { await api(`/keys/${encodeURIComponent(id)}`, { method: "DELETE" }); show("Key deleted."); await load(); } catch (error) { show(error.message, true); }
   };
 
+  provider.addEventListener("change", syncProviderService);
+
   root.querySelector("#key-create").addEventListener("click", async () => {
     if (!provider.value) { show("Create or enable a provider first.", true); return; }
     try {
+      syncProviderService();
       const body = {
         provider_id: provider.value,
         service_id: service.value || null,
