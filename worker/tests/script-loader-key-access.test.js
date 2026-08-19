@@ -7,8 +7,15 @@ const db = {
       bind(...args) {
         return {
           async first() {
-            if (sql.includes("FROM frezen_key_records")) {
-              return { script_id: args[1], script_status: "ACTIVE", version: "v1.0.0", version_status: "ARCHIVED", content: "print('ok')", content_type: "text/x-lua" };
+            if (sql.includes("JOIN frezen_key_records")) {
+              return {
+                script_id: args[1],
+                script_status: "ACTIVE",
+                version: "v1.0.0",
+                version_status: "ARCHIVED",
+                content: "print('ok')",
+                content_type: "text/x-lua",
+              };
             }
             return null;
           },
@@ -20,12 +27,26 @@ const db = {
 
 describe("Script loader key access", () => {
   it("denies browser navigation", async () => {
-    const response = await deliverScriptByKey(new Request("https://frezen.test/loader/s1", { headers: { accept: "text/html" } }), { DB: db }, "req-browser", "s1");
+    const response = await deliverScriptByKey(
+      new Request("https://frezen.test/loader/s1", {
+        headers: { accept: "text/html" },
+      }),
+      { DB: db },
+      "req-browser",
+      "s1",
+    );
     expect(response.status).toBe(403);
   });
 
   it("allows a valid key to receive a newly created script version", async () => {
-    const response = await deliverScriptByKey(new Request("https://frezen.test/loader/s1?key=FREZEN-TEST", { headers: { accept: "text/plain" } }), { DB: db }, "req-key", "s1");
+    const response = await deliverScriptByKey(
+      new Request("https://frezen.test/loader/s1?key=FREZEN-TEST", {
+        headers: { accept: "text/plain" },
+      }),
+      { DB: db },
+      "req-key",
+      "s1",
+    );
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("print('ok')");
   });
