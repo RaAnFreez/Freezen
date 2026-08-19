@@ -1,5 +1,5 @@
 (() => {
-  const INTERNAL_NOTE = 'Frezen uses its own keyed loader. No external loader service is configured by default.';
+  const INTERNAL_NOTE = 'Frezen keyed loader uses an explicit raw-content endpoint and server-side key validation.';
   const INTERNAL_LOADER_MARKER = `${location.origin}/loader/internal`;
 
   function loaderSource(scriptId) {
@@ -7,7 +7,9 @@
     return [
       'script_key="PASTE YOUR KEY HERE";',
       'local HttpService=game:GetService("HttpService");',
-      `local source=game:HttpGet("${endpoint}?key="..HttpService:UrlEncode(script_key));`,
+      'local ok,hwid=pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end);',
+      'if not ok then hwid="" end;',
+      `local source=game:HttpGet("${endpoint}?format=raw&key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid));`,
       'loadstring(source)();',
     ].join('\n');
   }
