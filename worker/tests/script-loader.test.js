@@ -28,7 +28,7 @@ describe('Frezen server-file keyed script delivery', () => {
     const { deliverScriptFileByKey } = await import('../src/script-loader.js');
     const response = await deliverScriptFileByKey(new Request('https://frezen.test/files/s1.lua'), { DB: dbMock('', null) }, 'req-1', 's1');
     expect(response.status).toBe(403);
-    expect(await response.text()).toBe('You cant access this link');
+    expect(await response.text()).toBe('INVALID_KEY');
   });
 
   it('does not reject a keyed server-file request because of a browser-like Accept header', async () => {
@@ -72,6 +72,6 @@ describe('Frezen server-file keyed script delivery', () => {
       's1',
     );
     expect(response.status).toBe(403);
-    expect(await response.text()).toBe('You cant access this link');
+    expect(await response.text()).toBe('BROWSER_NAVIGATION_BLOCKED');
   });
 });
