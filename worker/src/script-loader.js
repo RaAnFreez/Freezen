@@ -97,7 +97,7 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
   const hwid = url.searchParams.get("hwid")?.trim() ?? "";
   if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny("INVALID_KEY", 403, requestId);
 
-  if (responseMode === "legacy-loader" && /text\\/html/i.test(request.headers.get("accept") || "")) {
+  if (responseMode === "legacy-loader" && /text\/html/i.test(request.headers.get("accept") || "")) {
     return deny("BROWSER_NAVIGATION_BLOCKED", 403, requestId);
   }
 
