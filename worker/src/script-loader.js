@@ -1,36 +1,50 @@
-const deny = (message = 'You cant access this link') => new Response(message, {
+import { bindRuntimeHwid } from "./security/runtime-hwid.js";
+
+const deny = (message = "You cant access this link") => new Response(message, {
   status: 403,
   headers: {
-    'content-type': 'text/plain; charset=utf-8',
-    'cache-control': 'no-store, no-cache, must-revalidate',
-    'pragma': 'no-cache',
-    'x-content-type-options': 'nosniff',
+    "content-type": "text/plain; charset=utf-8",
+    "cache-control": "no-store, no-cache, must-revalidate",
+    pragma: "no-cache",
+    "x-content-type-options": "nosniff",
   },
 });
 
-const serverError = (requestId) => new Response('Script delivery temporarily unavailable', {
+const serverError = (requestId) => new Response("Script delivery temporarily unavailable", {
   status: 503,
   headers: {
-    'content-type': 'text/plain; charset=utf-8',
-    'cache-control': 'no-store',
-    'x-frezen-request-id': requestId,
+    "content-type": "text/plain; charset=utf-8",
+    "cache-control": "no-store",
+    "x-frezen-request-id": requestId,
   },
 });
 
 async function sha256Hex(value) {
-  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function bindFailureMessage(reason) {
+  switch (reason) {
+    case "LICENSE_EXPIRED": return "License expired";
+    case "LICENSE_BLOCKED": return "License blocked";
+    case "HWID_BLOCKED": return "HWID blocked";
+    case "DEVICE_LIMIT_REACHED": return "Device limit reached";
+    default: return "HWID validation failed";
+  }
 }
 
 export async function deliverScriptByKey(request, env, requestId, scriptId) {
-  if (request.method !== 'GET') return deny();
+  if (request.method !== "GET") return deny();
   if (!env.DB || !scriptId) return serverError(requestId);
 
-  const accept = request.headers.get('accept') ?? '';
+  const accept = request.headers.get("accept") ?? "";
   if (/text\/html/i.test(accept)) return deny();
 
-  const key = new URL(request.url).searchParams.get('key')?.trim() ?? '';
-  if (!key || key.length > 512 || key === 'PASTE YOUR KEY HERE') return deny();
+  const url = new URL(request.url);
+  const key = url.searchParams.get("key")?.trim() ?? "";
+  const hwid = url.searchParams.get("hwid")?.trim() ?? "";
+  if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny();
 
   try {
     const keyHash = await sha256Hex(key);
@@ -41,7 +55,8 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
         v.version,
         v.status AS version_status,
         f.content,
-        f.content_type
+        f.content_type,
+        l.id AS license_id
       FROM scripts s
       JOIN script_versions v
         ON v.id = (
@@ -75,21 +90,26 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
       LIMIT 1
     `).bind(keyHash, scriptId).first();
 
-    if (!row || row.script_status !== 'ACTIVE') return deny();
+    if (!row || row.script_status !== "ACTIVE") return deny();
+
+    if (hwid) {
+      const bound = await bindRuntimeHwid(env, row.license_id, hwid);
+      if (!bound.ok) return deny(bindFailureMessage(bound.reason));
+    }
 
     return new Response(row.content, {
       status: 200,
       headers: {
-        'content-type': row.content_type || 'text/x-lua; charset=utf-8',
-        'cache-control': 'no-store, no-cache, must-revalidate',
-        'pragma': 'no-cache',
-        'x-content-type-options': 'nosniff',
-        'x-frezen-request-id': requestId,
-        'x-frezen-version': row.version,
+        "content-type": row.content_type || "text/x-lua; charset=utf-8",
+        "cache-control": "no-store, no-cache, must-revalidate",
+        pragma: "no-cache",
+        "x-content-type-options": "nosniff",
+        "x-frezen-request-id": requestId,
+        "x-frezen-version": row.version,
       },
     });
   } catch (error) {
-    console.error('script delivery failed', {
+    console.error("script delivery failed", {
       requestId,
       scriptId,
       message: String(error?.message ?? error),
@@ -107,7 +127,9 @@ export function buildLoaderSource(request, scriptId) {
   return [
     'script_key="PASTE YOUR KEY HERE";',
     'local HttpService=game:GetService("HttpService");',
-    `local source=game:HttpGet("${endpoint}?key="..HttpService:UrlEncode(script_key));`,
+    'local ok,hwid=pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end);',
+    'if not ok then hwid="" end;',
+    `local source=game:HttpGet("${endpoint}?key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid));`,
     'loadstring(source)();',
-  ].join('\n');
+  ].join("\n");
 }
