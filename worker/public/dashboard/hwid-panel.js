@@ -1,16 +1,13 @@
 const root = document.querySelector('#content');
 const escapeHtml = (value) => String(value ?? '—').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
-let licenses = [];
-let selectedLicense = '';
 let devices = [];
+let filter = 'all';
+let query = '';
 
 async function request(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { accept: 'application/json', ...(options.headers || {}) } });
-  if (response.status === 401 || response.status === 403) {
-    window.location.href = '/login';
-    throw new Error('SESSION_EXPIRED');
-  }
+  if (response.status === 401 || response.status === 403) { location.href = '/login'; throw new Error('SESSION_EXPIRED'); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
   return data;
@@ -18,114 +15,69 @@ async function request(url, options = {}) {
 
 function shell() {
   root.innerHTML = `
-    <section class="hero">
-      <div><p class="eyebrow">DEVICE CONTROL</p><h2>HWID Management</h2><p>Inspect license-bound devices and perform protected reset or block actions.</p></div>
-      <span class="badge"><span class="dot"></span>Protected</span>
-    </section>
-    <section class="hwid-toolbar panel">
-      <div class="hwid-toolbar-title"><p class="eyebrow">LICENSE SCOPE</p><h3>Select a license</h3></div>
-      <div class="hwid-controls">
-        <select id="hwid-license" aria-label="Select license"><option value="">Loading licenses…</option></select>
-        <button class="primary" id="hwid-refresh">Refresh</button>
-      </div>
-    </section>
-    <div class="stats" id="hwid-stats"></div>
-    <section class="panel">
-      <div class="panel-head"><div><p class="eyebrow">BOUND DEVICES</p><h3>Devices</h3></div><span id="hwid-count" class="eyebrow"></span></div>
-      <div class="table-wrap"><table class="hwid-table"><thead><tr><th>Device</th><th>Status</th><th>First seen</th><th>Last seen</th><th>Blocked</th><th>Actions</th></tr></thead><tbody id="hwid-body"></tbody></table></div>
-      <div id="hwid-empty" class="empty" hidden><b>No devices bound</b><span>This license has no recorded HWID devices.</span></div>
+    <section class="hwid-page">
+      <div class="hwid-head"><div class="hwid-heading"><div class="hwid-shield">⌘</div><div><p class="eyebrow">DEVICE SECURITY</p><h2>HWID blacklist</h2><p>HWIDs are recorded automatically when a valid key is used.</p></div></div><button class="hwid-ban" id="hwid-ban">＋ Ban</button></div>
+      <div class="hwid-stats" id="hwid-stats"></div>
+      <section class="hwid-card">
+        <div class="hwid-toolbar"><div class="hwid-tabs"><button class="hwid-tab active" data-filter="all">All</button><button class="hwid-tab" data-filter="active">Active</button><button class="hwid-tab" data-filter="blocked">Blocked</button></div><div class="hwid-search"><span>⌕</span><input id="hwid-search" placeholder="Search HWID or key…" autocomplete="off"><button id="hwid-refresh" title="Refresh">↻</button></div></div>
+        <div id="hwid-list"></div>
+        <div id="hwid-empty" class="hwid-empty" hidden><div class="hwid-empty-icon">⌁</div><b>No HWIDs recorded yet</b><span>Use a valid key through the loader to record a device.</span></div>
+      </section>
     </section>`;
-  document.querySelector('#hwid-license').addEventListener('change', (event) => { selectedLicense = event.target.value; loadDevices(); });
-  document.querySelector('#hwid-refresh').addEventListener('click', loadDevices);
-}
-
-function statusBadge(status) {
-  const safe = String(status || 'unknown').toLowerCase();
-  return `<span class="status-pill ${escapeHtml(safe)}">${escapeHtml(safe)}</span>`;
+  root.querySelectorAll('.hwid-tab').forEach((button) => button.onclick = () => { filter = button.dataset.filter; root.querySelectorAll('.hwid-tab').forEach((tab) => tab.classList.toggle('active', tab === button)); render(); });
+  root.querySelector('#hwid-search').oninput = (event) => { query = event.target.value.trim().toLowerCase(); render(); };
+  root.querySelector('#hwid-refresh').onclick = load;
+  root.querySelector('#hwid-ban').onclick = () => window.alert('Select Block on a recorded HWID.');
 }
 
 function renderStats() {
-  const active = devices.filter((d) => d.status === 'active').length;
-  const blocked = devices.filter((d) => d.status === 'blocked').length;
-  const lastSeen = devices.reduce((latest, d) => Math.max(latest, Date.parse(d.last_seen || '') || 0), 0);
-  document.querySelector('#hwid-stats').innerHTML = [
-    ['Devices', devices.length, 'Bound to selected license', '⌘'],
-    ['Active', active, 'Allowed devices', '✓'],
-    ['Blocked', blocked, 'Blocked devices', '⊘'],
-    ['Last activity', lastSeen ? new Date(lastSeen).toLocaleString() : '—', 'Most recent last_seen', '◷'],
-  ].map(([label, value, note, glyph]) => `<article class="stat"><div class="stat-icon">${glyph}</div><p>${escapeHtml(label)}</p><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`).join('');
-  document.querySelector('#hwid-count').textContent = `${devices.length} device${devices.length === 1 ? '' : 's'}`;
+  const active = devices.filter((d) => String(d.status).toLowerCase() === 'active').length;
+  const blocked = devices.filter((d) => String(d.status).toLowerCase() === 'blocked').length;
+  root.querySelector('#hwid-stats').innerHTML = `<div><span>Recorded</span><strong>${devices.length}</strong><small>devices seen</small></div><div><span>Active</span><strong>${active}</strong><small>allowed devices</small></div><div><span>Blocked</span><strong>${blocked}</strong><small>blacklisted devices</small></div>`;
 }
 
-function renderDevices() {
-  const body = document.querySelector('#hwid-body');
-  const empty = document.querySelector('#hwid-empty');
+function render() {
+  renderStats();
+  const list = root.querySelector('#hwid-list');
+  const empty = root.querySelector('#hwid-empty');
+  const items = devices.filter((device) => {
+    const status = String(device.status || '').toLowerCase();
+    if (filter !== 'all' && status !== filter) return false;
+    if (!query) return true;
+    return `${device.fingerprint || ''} ${device.id || ''} ${device.license_id || ''} ${device.key_name || ''} ${device.service_name || ''}`.toLowerCase().includes(query);
+  });
   empty.hidden = devices.length !== 0;
-  body.innerHTML = devices.map((device) => {
-    const action = device.status === 'blocked' ? 'Unblock' : 'Block';
-    return `<tr>
-      <td><b>${escapeHtml(device.id)}</b><small>HWID is stored server-side as a hash</small></td>
-      <td>${statusBadge(device.status)}</td>
-      <td>${escapeHtml(device.first_seen)}</td>
-      <td>${escapeHtml(device.last_seen)}</td>
-      <td>${escapeHtml(device.blocked_at || '—')}<small>${escapeHtml(device.blocked_reason || '')}</small></td>
-      <td><div class="row-actions"><button class="ghost device-action" data-action="${action.toLowerCase()}" data-id="${escapeHtml(device.id)}">${action}</button><button class="ghost device-action" data-action="reset" data-id="${escapeHtml(device.id)}" data-license="${escapeHtml(selectedLicense)}">Reset</button></div></td>
-    </tr>`;
+  if (!items.length && devices.length) { list.innerHTML = '<div class="hwid-no-match">No HWID matches the current filter.</div>'; return; }
+  list.innerHTML = items.map((device) => {
+    const status = String(device.status || 'unknown').toLowerCase();
+    const action = status === 'blocked' ? 'Unblock' : 'Block';
+    return `<article class="hwid-row"><div class="hwid-main"><div class="hwid-device-icon">⌁</div><div><b>HWID-${escapeHtml(device.fingerprint || String(device.id || '').replace(/-/g, '').slice(0,12).toUpperCase())}</b><small>${escapeHtml(device.key_name || device.license_id || 'Key')} · ${escapeHtml(device.service_name || 'Service')}</small><small>Last seen: ${escapeHtml(device.last_seen || '—')}</small></div></div><div><span class="hwid-status ${escapeHtml(status)}">${escapeHtml(status)}</span></div><div class="hwid-actions"><button class="hwid-action ${status === 'blocked' ? 'unblock' : 'block'}" data-action="${action.toLowerCase()}" data-id="${escapeHtml(device.id)}">${action}</button><button class="hwid-action reset" data-action="reset" data-license="${escapeHtml(device.license_id)}">Reset</button></div></article>`;
   }).join('');
-  body.querySelectorAll('.device-action').forEach((button) => button.addEventListener('click', () => performAction(button.dataset.action, button.dataset.id, button.dataset.license || selectedLicense)));
+  list.querySelectorAll('.hwid-action').forEach((button) => button.onclick = () => performAction(button.dataset.action, button.dataset.id, button.dataset.license));
 }
 
-async function loadLicenses() {
+async function load() {
+  shell();
+  const list = root.querySelector('#hwid-list');
+  list.innerHTML = '<div class="hwid-loading"><div class="spinner"></div><b>Loading HWIDs…</b></div>';
   try {
-    const data = await request('/api/v1/licenses?page=1&page_size=50');
-    licenses = Array.isArray(data.licenses) ? data.licenses : [];
-    const select = document.querySelector('#hwid-license');
-    select.innerHTML = `<option value="">Choose a license…</option>` + licenses.map((license) => `<option value="${escapeHtml(license.id)}">${escapeHtml(license.id)} — ${escapeHtml(license.username || license.email || 'unassigned')} — ${escapeHtml(license.status)}</option>`).join('');
-    if (selectedLicense && licenses.some((license) => license.id === selectedLicense)) select.value = selectedLicense;
-    if (!selectedLicense && licenses.length) { selectedLicense = licenses[0].id; select.value = selectedLicense; await loadDevices(); }
-    if (!licenses.length) { document.querySelector('#hwid-body').innerHTML = ''; document.querySelector('#hwid-empty').hidden = false; document.querySelector('#hwid-empty').innerHTML = '<b>No licenses found</b><span>Create a license first in License Management.</span>'; }
-  } catch (error) {
-    document.querySelector('#hwid-body').innerHTML = `<tr><td colspan="6"><div class="empty"><b>Unable to load licenses</b><span>${escapeHtml(error.message)}</span></div></td></tr>`;
-  }
-}
-
-async function loadDevices() {
-  if (!selectedLicense) return;
-  document.querySelector('#hwid-body').innerHTML = '<tr><td colspan="6"><div class="empty"><div class="spinner"></div><b>Loading devices…</b></div></td></tr>';
-  try {
-    const data = await request(`/api/v1/hwid?license_id=${encodeURIComponent(selectedLicense)}`);
+    const data = await request('/api/v1/hwid');
     devices = Array.isArray(data.devices) ? data.devices : [];
-    renderStats();
-    renderDevices();
+    render();
   } catch (error) {
-    document.querySelector('#hwid-body').innerHTML = `<tr><td colspan="6"><div class="empty"><b>Unable to load HWID data</b><span>${escapeHtml(error.message)}</span></div></td></tr>`;
+    list.innerHTML = `<div class="hwid-error"><b>Unable to load HWID data</b><span>${escapeHtml(error.message)}</span></div>`;
   }
 }
 
 async function performAction(action, deviceId, licenseId) {
   if (action === 'reset') {
-    if (!window.confirm('Reset HWID for this license? Existing active devices will be blocked and the license will require a new bind.')) return;
-    try {
-      await request(`/api/v1/licenses/${encodeURIComponent(licenseId)}/hwid/reset`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-      await loadDevices();
-    } catch (error) { window.alert(`HWID reset failed: ${error.message}`); }
+    if (!licenseId || !confirm('Reset HWID bindings for this license?')) return;
+    try { await request(`/api/v1/hwid/licenses/${encodeURIComponent(licenseId)}/reset`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); await load(); } catch (error) { alert(`Reset failed: ${error.message}`); }
     return;
   }
-  const endpoint = `/api/v1/hwid/devices/${encodeURIComponent(deviceId)}/${action === 'block' ? 'block' : 'unblock'}`;
-  if (!window.confirm(`${action === 'block' ? 'Block' : 'Unblock'} this device?`)) return;
-  try {
-    await request(endpoint, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: '{}' });
-    await loadDevices();
-  } catch (error) { window.alert(`Device action failed: ${error.message}`); }
+  if (!deviceId || !confirm(`${action === 'block' ? 'Block' : 'Unblock'} this HWID?`)) return;
+  try { await request(`/api/v1/hwid/devices/${encodeURIComponent(deviceId)}/${action}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: '{}' }); await load(); } catch (error) { alert(`Action failed: ${error.message}`); }
 }
 
-function mount() {
-  if (!root) return;
-  shell();
-  loadLicenses();
-}
-
-// The dashboard router is the single navigation owner. Export only the panel
-// mount function; do not attach navigation listeners or MutationObservers here.
 window.FrezenDashboardPanels = window.FrezenDashboardPanels || {};
-window.FrezenDashboardPanels.hwid = mount;
+window.FrezenDashboardPanels.hwid = load;

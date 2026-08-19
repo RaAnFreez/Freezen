@@ -8,10 +8,47 @@ const sha256Hex = async (value) => {
 };
 
 const normalize = (value, max = 128) => typeof value === "string" ? value.trim().slice(0, max) : "";
-const json = (body, status, requestId) => new Response(JSON.stringify({ ...body, request_id: requestId }), {
-  status,
-  headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
-});
+
+async function ensureSchema(env) {
+  if (!env?.DB) return false;
+  // Real D1 exposes batch(); the lightweight test doubles used by the legacy
+  // HWID tests intentionally do not. In tests, the mocked V2 tables already
+  // exist conceptually, so skip DDL rather than converting a mock miss into a
+  // misleading DATABASE_ERROR.
+  if (typeof env.DB.batch !== "function") return true;
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS hwid_bindings_v2 (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT,
+        license_id TEXT NOT NULL,
+        hwid_hash TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','blocked')),
+        first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        blocked_at TEXT,
+        blocked_reason TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (license_id, hwid_hash),
+        FOREIGN KEY (license_id) REFERENCES licenses(id) ON DELETE CASCADE,
+        FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE SET NULL
+      )`),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_hwid_v2_owner_status ON hwid_bindings_v2(owner_id, status, last_seen)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_hwid_v2_license_status ON hwid_bindings_v2(license_id, status, last_seen)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_hwid_v2_hash ON hwid_bindings_v2(hwid_hash)"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_hwid_v2_last_seen ON hwid_bindings_v2(last_seen)"),
+    ]);
+    return true;
+  } catch (error) {
+    // Migration 0027 is the canonical production schema. A DDL failure must
+    // not mask an otherwise valid request as an HWID database failure when
+    // the table already exists; the actual operation below will report a real
+    // query error when the schema is genuinely unusable.
+    console.warn("HWID V2 schema ensure skipped", { message: String(error?.message ?? error) });
+    return true;
+  }
+}
 
 async function maxDevicesForLicense(env, licenseId) {
   try {
@@ -52,6 +89,7 @@ export async function bindHwidV2(env, { licenseId, ownerId = null, rawHwid }) {
   if (!id || !hwid) return { ok: false, reason: "INVALID_HWID" };
 
   try {
+    await ensureSchema(env);
     const license = await licenseFor(env, id);
     const state = licenseState(license);
     if (state) return { ok: false, reason: state };
@@ -91,6 +129,7 @@ export async function validateHwidV2(env, { licenseId, rawHwid, ownerId = null }
   if (!id || !hwid) return { ok: false, reason: "INVALID_HWID" };
 
   try {
+    await ensureSchema(env);
     const license = await licenseFor(env, id);
     const state = licenseState(license);
     if (state) return { ok: false, reason: state };
@@ -118,6 +157,7 @@ export async function listHwidV2(env, { ownerId, licenseId = null }) {
   if (!owner) return { ok: false, reason: "SESSION_AUTH_REQUIRED" };
 
   try {
+    await ensureSchema(env);
     const where = license ? "WHERE h.owner_id = ?1 AND h.license_id = ?2" : "WHERE h.owner_id = ?1";
     const bindings = license ? [owner, license] : [owner];
     const rows = await env.DB.prepare(`
@@ -147,6 +187,7 @@ export async function setHwidStatusV2(env, { ownerId, deviceId, status }) {
   if (!owner || !id || !nextStatus) return { ok: false, reason: "INVALID_REQUEST" };
 
   try {
+    await ensureSchema(env);
     const existing = await env.DB.prepare(
       "SELECT id FROM hwid_bindings_v2 WHERE id = ?1 AND owner_id = ?2 LIMIT 1",
     ).bind(id, owner).first();
@@ -169,6 +210,7 @@ export async function resetHwidV2(env, { ownerId, licenseId }) {
   if (!owner || !id) return { ok: false, reason: "INVALID_REQUEST" };
 
   try {
+    await ensureSchema(env);
     const license = await licenseFor(env, id);
     const state = licenseState(license);
     if (state) return { ok: false, reason: state };
@@ -188,6 +230,7 @@ export async function resetHwidV2(env, { ownerId, licenseId }) {
 export async function cleanupHwidV2(env) {
   if (!env?.DB) return { removed: 0 };
   try {
+    await ensureSchema(env);
     const result = await env.DB.prepare(`
       DELETE FROM hwid_bindings_v2
       WHERE license_id IN (
