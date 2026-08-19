@@ -4,6 +4,7 @@ import { createSafeLinkUCheckpoint } from "./safelinku.js";
 import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublicFlow, launchPublicFlow, publicGetKeyPage } from "./key-system-runtime.js";
 import { keyControlOptions, createKeyFolder, listKeys, createKey } from "./key-control.js";
 import { deleteKey, cleanupExpiredKeys } from "./key-lifecycle.js";
+import { persistKeySecret, revealKeySecret } from "./key-secret.js";
 import { listAllHwid } from "./hwid-admin.js";
 import { cleanupHwidV2 } from "./security/runtime-hwid.js";
 import { deliverScriptByKey } from "./script-loader.js";
@@ -79,8 +80,34 @@ export default {
         await cleanupExpiredKeys(env, access.user_id);
         return listKeys(request, env, requestId, access);
       }
-      if (request.method === "POST") return createKey(request, env, requestId, access);
+      if (request.method === "POST") {
+        const response = await createKey(request, env, requestId, access);
+        if (!response.ok || response.status < 200 || response.status >= 300) return response;
+        try {
+          const payload = await response.clone().json();
+          if (payload?.key?.id && payload?.license_key) {
+            await persistKeySecret(env, payload.key.id, payload.license_key);
+          }
+        } catch (error) {
+          console.error('key secret persistence skipped', { requestId, message: String(error?.message || error) });
+        }
+        return response;
+      }
       return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+    }
+
+    const keySecretMatch = url.pathname.match(/^\/api\/v1\/key-control\/keys\/([^/]+)\/secret$/);
+    if (keySecretMatch) {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+      const result = await revealKeySecret(env, decodeURIComponent(keySecretMatch[1]), access.user_id);
+      if (!result.ok) {
+        const status = result.error === "KEY_NOT_FOUND" ? 404 : result.error === "KEY_SECRET_UNAVAILABLE" ? 409 : 503;
+        return json({ error: result.error, request_id: requestId }, status);
+      }
+      return json({ key: result.plaintext, request_id: requestId }, 200);
     }
 
     const keyDeleteMatch = url.pathname.match(/^\/api\/v1\/key-control\/keys\/([^/]+)$/);
