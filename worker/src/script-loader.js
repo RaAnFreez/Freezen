@@ -38,12 +38,20 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
   if (request.method !== "GET") return deny();
   if (!env.DB || !scriptId) return serverError(requestId);
 
-  const accept = request.headers.get("accept") ?? "";
-  if (/text\/html/i.test(accept)) return deny();
-
   const url = new URL(request.url);
+  const format = url.searchParams.get("format")?.trim().toLowerCase() ?? "";
   const key = url.searchParams.get("key")?.trim() ?? "";
   const hwid = url.searchParams.get("hwid")?.trim() ?? "";
+
+  // Raw delivery is explicit so executor-style HTTP clients do not depend on
+  // their particular Accept/User-Agent headers. Browser navigation without the
+  // raw marker remains denied.
+  if (format !== "raw") {
+    const accept = request.headers.get("accept") ?? "";
+    if (/text\/html/i.test(accept) || !key) return deny();
+    return deny();
+  }
+
   if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny();
 
   try {
@@ -129,7 +137,7 @@ export function buildLoaderSource(request, scriptId) {
     'local HttpService=game:GetService("HttpService");',
     'local ok,hwid=pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end);',
     'if not ok then hwid="" end;',
-    `local source=game:HttpGet("${endpoint}?key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid));`,
+    `local source=game:HttpGet("${endpoint}?format=raw&key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid));`,
     'loadstring(source)();',
   ].join("\n");
 }
