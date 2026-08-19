@@ -88,6 +88,8 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
   const hwid = url.searchParams.get("hwid")?.trim() ?? "";
   if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny();
 
+  if (/text\/html/i.test(request.headers.get("accept") || "") && responseMode !== "raw") return deny();
+
   try {
     const keyHash = await sha256Hex(key);
     const row = await findScriptFile(env, keyHash, scriptId);
@@ -124,8 +126,7 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
 export async function deliverScriptByKey(request, env, requestId, scriptId) {
   const url = new URL(request.url);
   const isRaw = url.searchParams.get("format") === "raw";
-  if (!isRaw) return deny();
-  return deliverResolvedFile(request, env, requestId, scriptId, "raw");
+  return deliverResolvedFile(request, env, requestId, scriptId, isRaw ? "raw" : "legacy-loader");
 }
 
 export async function deliverScriptFileByKey(request, env, requestId, fileOrScriptId) {
