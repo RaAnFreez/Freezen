@@ -8,14 +8,23 @@ const deny = (message = 'You cant access this link') => new Response(message, {
   },
 });
 
+const serverError = (requestId) => new Response('Script delivery temporarily unavailable', {
+  status: 503,
+  headers: {
+    'content-type': 'text/plain; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-frezen-request-id': requestId,
+  },
+});
+
 async function sha256Hex(value) {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export async function deliverScriptByKey(request, env, requestId, scriptId) {
-  if (request.method !== 'GET') return deny('You cant access this link');
-  if (!env.DB || !scriptId) return deny();
+  if (request.method !== 'GET') return deny();
+  if (!env.DB || !scriptId) return serverError(requestId);
 
   const accept = request.headers.get('accept') ?? '';
   if (/text\/html/i.test(accept)) return deny();
@@ -35,12 +44,24 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
         f.content_type
       FROM scripts s
       JOIN script_versions v
-        ON v.script_id = s.id
-       AND v.status IN ('ACTIVE', 'ARCHIVED')
+        ON v.id = (
+          SELECT v2.id
+          FROM script_versions v2
+          WHERE v2.script_id = s.id
+            AND v2.status IN ('ACTIVE', 'ARCHIVED')
+          ORDER BY CASE WHEN v2.status = 'ACTIVE' THEN 0 ELSE 1 END,
+                   v2.created_at DESC
+          LIMIT 1
+        )
       JOIN script_files f
         ON f.script_version_id = v.id
       JOIN frezen_key_records kr
         ON kr.service_id = s.service_id
+        OR kr.provider_id IN (
+          SELECT p.id
+          FROM frezen_key_providers p
+          WHERE p.service_id = s.service_id
+        )
       JOIN licenses l
         ON l.id = kr.license_id
        AND l.license_key_hash = ?1
@@ -48,6 +69,7 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
         AND s.status = 'ACTIVE'
         AND LOWER(COALESCE(l.status, '')) = 'active'
         AND (l.expires_at IS NULL OR datetime(l.expires_at) > datetime('now'))
+        AND (l.user_id IS NULL OR l.user_id = kr.owner_id)
       ORDER BY CASE WHEN v.status = 'ACTIVE' THEN 0 ELSE 1 END,
                v.created_at DESC
       LIMIT 1
@@ -66,8 +88,13 @@ export async function deliverScriptByKey(request, env, requestId, scriptId) {
         'x-frezen-version': row.version,
       },
     });
-  } catch {
-    return deny();
+  } catch (error) {
+    console.error('script delivery failed', {
+      requestId,
+      scriptId,
+      message: String(error?.message ?? error),
+    });
+    return serverError(requestId);
   }
 }
 
