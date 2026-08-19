@@ -72,6 +72,6 @@ describe('Frezen server-file keyed script delivery', () => {
       's1',
     );
     expect(response.status).toBe(403);
-    expect(await response.text()).toBe('BROWSER_NAVIGATION_BLOCKED');
+    expect(await response.text()).toBe('You cant access this link');
   });
 });
