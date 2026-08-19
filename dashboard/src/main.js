@@ -3,6 +3,7 @@ import { renderProducts } from "./products.js";
 import { renderLicenses } from "./licenses.js";
 import { renderHwid } from "./hwid.js";
 import { renderScripts } from "./scripts.js";
+import { renderKeys } from "./keys.js";
 
 const items = [
   ["overview", "Overview"], ["licenses", "Licenses"], ["keys", "Keys"], ["products", "Products"], ["scripts", "Scripts"], ["users", "Users"], ["hwid", "HWID"], ["safelinku", "SafeLinkU"], ["discord", "Discord"], ["analytics", "Analytics"], ["audit", "Audit Logs"], ["invites", "Invites"], ["security", "Security"], ["settings", "Settings"],
@@ -34,6 +35,7 @@ overlay.addEventListener("click", () => { sidebar.classList.remove("open"); over
 function renderSection(section) {
   if (section === "products") return renderProducts(content);
   if (section === "licenses") return renderLicenses(content);
+  if (section === "keys") return renderKeys(content);
   if (section === "hwid") return renderHwid(content);
   if (section === "scripts") return renderScripts(content);
   const isOverview = section === "overview";

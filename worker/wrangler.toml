@@ -25,6 +25,9 @@ binding = "DB"
 database_name = "frezen-production"
 database_id = "ff6e12e2-c59b-4891-812c-9ce0bbae64fc"
 
+[env.production.triggers]
+crons = ["*/15 * * * *"]
+
 # Recommended deployment commands:
 # npx wrangler deploy --env staging
 # npx wrangler deploy --env production

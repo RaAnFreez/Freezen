@@ -19,8 +19,8 @@ export function renderScripts(root) {
       <div class="panel-heading"><div><p class="eyebrow">LUA SCRIPT MANAGER</p><h2>Scripts</h2></div><button class="primary-button" id="script-refresh">Refresh</button></div>
       <p class="muted">Upload Lua files as data only. Frezen never executes uploaded Lua on the server.</p>
       <div class="script-form">
-        <label>Product ID<input id="script-product" maxlength="128" placeholder="product-id" /></label>
-        <label>Script name<input id="script-name" maxlength="120" placeholder="MyScript" /></label>
+        <label>Service<select id="script-service"><option value="">Loading services…</option></select></label>
+        <label>Script name<input id="script-name" maxlength="120" placeholder="MyScript.lua" /></label>
         <label>Description<textarea id="script-description" maxlength="1000" rows="2" placeholder="Optional description"></textarea></label>
         <button class="primary-button" id="script-create">Create script</button>
       </div>
@@ -31,7 +31,14 @@ export function renderScripts(root) {
 
   const list = root.querySelector("#script-list");
   const message = root.querySelector("#script-message");
-  const showMessage = (text, error = false) => { message.hidden = false; message.textContent = text; message.classList.toggle("error", error); };
+  const serviceSelect = root.querySelector("#script-service");
+  const showMessage = (text, error = false) => { message.hidden = !text; message.textContent = text; message.classList.toggle("error", error); };
+
+  const loadServices = async () => {
+    const data = await api("/key-control/options");
+    serviceSelect.innerHTML = (data.services ?? []).map((service) => `<option value="${esc(service.id)}">${esc(service.name)}</option>`).join("") || `<option value="">No services configured</option>`;
+  };
+
   const load = async () => {
     try {
       const params = new URLSearchParams({ page: "1", page_size: "50" });
@@ -43,7 +50,7 @@ export function renderScripts(root) {
       if (!data.scripts?.length) { list.innerHTML = `<div class="empty"><span>◌</span><strong>No scripts found</strong><p>Create a script record before uploading a Lua version.</p></div>`; return; }
       list.innerHTML = data.scripts.map((script) => `
         <article class="script-row">
-          <div><strong>${esc(script.name)}</strong><small>${esc(script.product_name || script.product_id)} · ${script.version_count} version(s)</small></div>
+          <div><strong>${esc(script.name)}</strong><small>${esc(script.service_name || script.service_id)} · ${script.version_count} version(s)</small></div>
           <span class="product-status">${esc(script.status)}</span>
           <span class="product-version">${esc(script.active_version || "No active version")}</span>
           <div class="script-actions"><button class="ghost-button small" data-upload="${esc(script.id)}">Upload Lua</button><button class="ghost-button small" data-disable="${esc(script.id)}">${script.status === "ACTIVE" ? "Disable" : "Enable"}</button><button class="danger-button small" data-delete="${esc(script.id)}">Delete</button></div>
@@ -52,12 +59,14 @@ export function renderScripts(root) {
     } catch (error) { list.innerHTML = `<div class="empty"><strong>Unable to load scripts</strong><p>${esc(error.message)}</p></div>`; }
   };
 
-  root.querySelector("#script-refresh").addEventListener("click", load);
+  root.querySelector("#script-refresh").addEventListener("click", async () => { try { await loadServices(); await load(); } catch (error) { showMessage(error.message, true); } });
   root.querySelector("#script-search").addEventListener("input", load);
   root.querySelector("#script-status").addEventListener("change", load);
+
   root.querySelector("#script-create").addEventListener("click", async () => {
     try {
-      await api("/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ product_id: root.querySelector("#script-product").value.trim(), name: root.querySelector("#script-name").value.trim(), description: root.querySelector("#script-description").value.trim() }) });
+      if (!serviceSelect.value) throw new Error("Create a key service before creating a script.");
+      await api("/scripts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ service_id: serviceSelect.value, name: root.querySelector("#script-name").value.trim(), description: root.querySelector("#script-description").value.trim() }) });
       showMessage("Script created.");
       root.querySelector("#script-name").value = "";
       root.querySelector("#script-description").value = "";
@@ -84,9 +93,10 @@ export function renderScripts(root) {
         if (!file) throw new Error("Select a .lua file first.");
         const form = new FormData(); form.append("file", file); form.append("version", version); form.append("release_notes", notes);
         await api(`/scripts/${encodeURIComponent(id)}/versions`, { method: "POST", body: form });
-        showMessage("Lua version uploaded. It remains archived until explicitly activated."); await load(); return;
+        showMessage("Lua version uploaded. Activate it from the version control endpoint when ready."); await load(); return;
       }
     } catch (error) { showMessage(error.message, true); }
   });
-  load();
+
+  (async () => { try { await loadServices(); await load(); } catch (error) { showMessage(error.message, true); } })();
 }
