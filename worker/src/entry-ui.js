@@ -5,6 +5,7 @@ import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublic
 import { keyControlOptions, createKeyFolder, listKeys, createKey } from "./key-control.js";
 import { deleteKey, cleanupExpiredKeys } from "./key-lifecycle.js";
 import { listAllHwid } from "./hwid-admin.js";
+import { cleanupHwidV2 } from "./security/runtime-hwid.js";
 import { deliverScriptByKey } from "./script-loader.js";
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -135,6 +136,9 @@ export default {
   },
 
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(cleanupExpiredKeys(env));
+    ctx.waitUntil(Promise.all([
+      cleanupExpiredKeys(env),
+      cleanupHwidV2(env),
+    ]));
   },
 };
