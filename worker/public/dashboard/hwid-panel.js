@@ -7,7 +7,7 @@ let query = '';
 
 async function request(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { accept: 'application/json', ...(options.headers || {}) } });
-  if (response.status === 401 || response.status === 403) { location.href = '/login'; throw new Error('SESSION_EXPIRED'); }
+  if (response.status === 401) { location.href = '/login'; throw new Error('SESSION_EXPIRED'); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
   return data;
