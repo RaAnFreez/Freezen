@@ -7,7 +7,7 @@ import { deleteKey, cleanupExpiredKeys } from "./key-lifecycle.js";
 import { persistKeySecret, revealKeySecret } from "./key-secret.js";
 import { listAllHwid } from "./hwid-admin.js";
 import { cleanupHwidV2 } from "./security/runtime-hwid.js";
-import { deliverScriptByKey } from "./script-loader.js";
+import { deliverScriptByKey, deliverScriptFileByKey } from "./script-loader.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", ...NO_STORE };
@@ -31,6 +31,12 @@ async function asset(request, env, pathname) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    const scriptFileMatch = url.pathname.match(/^\/files\/([^/]+)\.lua\/?$/i);
+    if (scriptFileMatch) {
+      const requestId = crypto.randomUUID();
+      return deliverScriptFileByKey(request, env, requestId, decodeURIComponent(scriptFileMatch[1]));
+    }
 
     const scriptLoaderMatch = url.pathname.match(/^\/loader\/([^/]+)\/?$/);
     if (scriptLoaderMatch) {
