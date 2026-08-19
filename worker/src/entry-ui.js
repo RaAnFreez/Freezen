@@ -3,6 +3,8 @@ import { requirePrivateAccess } from "./security/private-access.js";
 import { createSafeLinkUCheckpoint } from "./safelinku.js";
 import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublicFlow, launchPublicFlow, publicGetKeyPage } from "./key-system-runtime.js";
 import { keyControlOptions, createKeyFolder, listKeys, createKey } from "./key-control.js";
+import { deleteKey, cleanupExpiredKeys } from "./key-lifecycle.js";
+import { listAllHwid } from "./hwid-admin.js";
 import { deliverScriptByKey } from "./script-loader.js";
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -72,9 +74,29 @@ export default {
       const requestId = crypto.randomUUID();
       const access = await requirePrivateAccess(request, env, requestId);
       if (access instanceof Response) return access;
-      if (request.method === "GET") return listKeys(request, env, requestId, access);
+      if (request.method === "GET") {
+        await cleanupExpiredKeys(env, access.user_id);
+        return listKeys(request, env, requestId, access);
+      }
       if (request.method === "POST") return createKey(request, env, requestId, access);
       return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+    }
+
+    const keyDeleteMatch = url.pathname.match(/^\/api\/v1\/key-control\/keys\/([^/]+)$/);
+    if (keyDeleteMatch) {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method !== "DELETE") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+      return deleteKey(request, env, requestId, access, decodeURIComponent(keyDeleteMatch[1]));
+    }
+
+    if (url.pathname === "/api/v1/hwid/all") {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+      return listAllHwid(env, requestId, access);
     }
 
     if (request.method === "GET" && url.pathname === "/api/v1/get-key/checkpoint/callback") {
@@ -110,5 +132,9 @@ export default {
     }
 
     return entry.fetch(request, env, ctx);
+  },
+
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(cleanupExpiredKeys(env));
   },
 };
