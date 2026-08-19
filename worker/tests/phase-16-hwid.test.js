@@ -1,17 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { bindHwid, validateHwid, resetHwid, blockHwid, unblockHwid } from "../src/security/hwid.js";
-
-const auth = { user_id: "u1", role: "ADMIN" };
-const requestId = "phase16-test";
-const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+import { bindHwidV2, validateHwidV2, resetHwidV2, setHwidStatusV2 } from "../src/security/hwid-v2.js";
 
 const hash = async (value) => {
   const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
-function dbFactory({ license, devices = [] }) {
-  const rows = devices.map((row) => ({ ...row }));
+function dbFactory({ license, bindings = [], maxDevices = 2 }) {
+  const rows = bindings.map((row) => ({ ...row }));
   return {
     prepare(sql) {
       return {
@@ -19,15 +15,36 @@ function dbFactory({ license, devices = [] }) {
           return {
             async first() {
               if (sql.includes("FROM licenses")) return license;
-              if (sql.includes("FROM devices") && sql.includes("hwid_hash")) return rows.find((row) => row.license_id === values[0] && row.hwid_hash === values[1]) ?? null;
-              if (sql.includes("FROM devices") && sql.includes("COUNT(*)")) return { total: rows.filter((row) => row.license_id === values[0] && row.status === "active").length };
-              if (sql.includes("FROM devices") && sql.includes("WHERE id = ?1")) return rows.find((row) => row.id === values[0]) ?? null;
+              if (sql.includes("FROM frezen_key_limits")) return { max_devices: maxDevices };
+              if (sql.includes("FROM hwid_bindings_v2") && sql.includes("hwid_hash")) {
+                return rows.find((row) => row.license_id === values[0] && row.hwid_hash === values[1]) ?? null;
+              }
+              if (sql.includes("COUNT(*)") && sql.includes("hwid_bindings_v2")) {
+                return { total: rows.filter((row) => row.license_id === values[0] && row.status === "active").length };
+              }
+              if (sql.includes("FROM hwid_bindings_v2") && sql.includes("owner_id")) {
+                return rows.find((row) => row.id === values[0] && row.owner_id === values[1]) ?? null;
+              }
               return null;
             },
-            async all() { return { results: rows.filter((row) => row.license_id === values[0]) }; },
+            async all() {
+              return { results: rows.filter((row) => row.owner_id === values[0] && (!values[1] || row.license_id === values[1])) };
+            },
             async run() {
-              if (sql.startsWith("INSERT INTO devices")) rows.push({ id: values[0], license_id: values[1], user_id: values[2], hwid_hash: values[3], status: "active" });
-              if (sql.startsWith("UPDATE devices SET status")) { const row = rows.find((item) => item.id === values[3]); if (row) row.status = values[0]; }
+              if (sql.startsWith("INSERT INTO hwid_bindings_v2")) {
+                rows.push({ id: values[0], owner_id: values[1], license_id: values[2], hwid_hash: values[3], status: "active" });
+              }
+              if (sql.startsWith("UPDATE hwid_bindings_v2 SET status")) {
+                const row = rows.find((item) => item.id === values[3] && item.owner_id === values[4]);
+                if (row) row.status = values[0];
+              }
+              if (sql.startsWith("UPDATE hwid_bindings_v2 SET last_seen")) {
+                const row = rows.find((item) => item.id === values[0]);
+                if (row) row.last_seen = new Date().toISOString();
+              }
+              if (sql.startsWith("UPDATE hwid_bindings_v2 SET status = 'blocked'")) {
+                rows.filter((row) => row.owner_id === values[1] && row.license_id === values[2] && row.status === "active").forEach((row) => { row.status = "blocked"; });
+              }
               return { meta: { changes: 1 } };
             },
           };
@@ -37,43 +54,52 @@ function dbFactory({ license, devices = [] }) {
   };
 }
 
-const license = { id: "l1", user_id: "u1", status: "active", expires_at: null, max_devices: 2, hwid_reset_at: null, hwid_reset_cooldown_until: null };
+const license = { id: "l1", user_id: "u1", status: "active", expires_at: null };
 
-describe("Phase 16 HWID", () => {
+describe("Phase 16 HWID compatibility", () => {
   it("binds a device and stores only a hash", async () => {
     const db = dbFactory({ license });
-    const response = await bindHwid(new Request("https://frezen.test/api/v1/hwid", { method: "POST", body: JSON.stringify({ license_id: "l1", hwid: "device-secret-1" }) }), { DB: db }, requestId, json, auth);
-    expect(response.status).toBe(201);
-    const data = await response.json();
-    expect(data).not.toHaveProperty("hwid");
+    const result = await bindHwidV2(dbEnv(db), { licenseId: "l1", ownerId: "u1", rawHwid: "device-secret-1" });
+    expect(result.ok).toBe(true);
+    expect(result.existing).toBe(false);
+    expect(result.fingerprint).toBe((await hash("device-secret-1")).slice(0, 12));
+    expect(result.rawHwid).toBeUndefined();
   });
 
   it("rejects a third active device when max_devices is reached", async () => {
-    const db = dbFactory({ license: { ...license, max_devices: 1 }, devices: [{ id: "d1", license_id: "l1", user_id: "u1", hwid_hash: await hash("device-1"), status: "active" }] });
-    const response = await bindHwid(new Request("https://frezen.test/api/v1/hwid", { method: "POST", body: JSON.stringify({ license_id: "l1", hwid: "device-2" }) }), { DB: db }, requestId, json, auth);
-    expect(response.status).toBe(409);
-    expect((await response.json()).error).toBe("DEVICE_LIMIT_REACHED");
+    const db = dbFactory({ license, maxDevices: 1, bindings: [{ id: "d1", owner_id: "u1", license_id: "l1", hwid_hash: await hash("device-1"), status: "active" }] });
+    const result = await bindHwidV2(dbEnv(db), { licenseId: "l1", ownerId: "u1", rawHwid: "device-2" });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("DEVICE_LIMIT_REACHED");
   });
 
   it("validates matching HWID and denies mismatch", async () => {
-    const db = dbFactory({ license, devices: [{ id: "d1", license_id: "l1", user_id: "u1", hwid_hash: await hash("device-1"), status: "active" }] });
-    const valid = await validateHwid(new Request("https://frezen.test/api/v1/hwid/validate", { method: "POST", body: JSON.stringify({ license_id: "l1", hwid: "device-1" }) }), { DB: db }, requestId, json, auth);
-    expect(valid.status).toBe(200);
-    expect((await valid.json()).valid).toBe(true);
-    const invalid = await validateHwid(new Request("https://frezen.test/api/v1/hwid/validate", { method: "POST", body: JSON.stringify({ license_id: "l1", hwid: "wrong-device" }) }), { DB: db }, requestId, json, auth);
-    expect(invalid.status).toBe(200);
-    expect((await invalid.json()).reason).toBe("HWID_MISMATCH");
+    const db = dbFactory({ license, bindings: [{ id: "d1", owner_id: "u1", license_id: "l1", hwid_hash: await hash("device-1"), status: "active" }] });
+    const valid = await validateHwidV2(dbEnv(db), { licenseId: "l1", ownerId: "u1", rawHwid: "device-1" });
+    expect(valid.ok).toBe(true);
+    const invalid = await validateHwidV2(dbEnv(db), { licenseId: "l1", ownerId: "u1", rawHwid: "wrong-device" });
+    expect(invalid.ok).toBe(false);
+    expect(invalid.reason).toBe("HWID_MISMATCH");
   });
 
   it("blocks and unblocks a device", async () => {
-    const db = dbFactory({ license, devices: [{ id: "d1", license_id: "l1", user_id: "u1", hwid_hash: await hash("device-1"), status: "active" }] });
-    expect((await blockHwid(new Request("https://frezen.test"), { DB: db }, requestId, json, "d1")).status).toBe(200);
-    expect((await unblockHwid(new Request("https://frezen.test"), { DB: db }, requestId, json, "d1")).status).toBe(200);
+    const db = dbFactory({ license, bindings: [{ id: "d1", owner_id: "u1", license_id: "l1", hwid_hash: await hash("device-1"), status: "active" }] });
+    const blocked = await setHwidStatusV2(dbEnv(db), { ownerId: "u1", deviceId: "d1", status: "blocked" });
+    expect(blocked.ok).toBe(true);
+    expect(blocked.status).toBe("blocked");
+    const unblocked = await setHwidStatusV2(dbEnv(db), { ownerId: "u1", deviceId: "d1", status: "active" });
+    expect(unblocked.ok).toBe(true);
+    expect(unblocked.status).toBe("active");
   });
 
-  it("requires a cooldown after reset", async () => {
-    const db = dbFactory({ license });
-    const first = await resetHwid(new Request("https://frezen.test", { method: "POST" }), { DB: db, HWID_RESET_COOLDOWN_SECONDS: "86400" }, requestId, json, "l1");
-    expect(first.status).toBe(200);
+  it("resets active bindings for the owner license", async () => {
+    const db = dbFactory({ license, bindings: [{ id: "d1", owner_id: "u1", license_id: "l1", hwid_hash: await hash("device-1"), status: "active" }] });
+    const result = await resetHwidV2(dbEnv(db), { ownerId: "u1", licenseId: "l1" });
+    expect(result.ok).toBe(true);
+    expect(result.resetAt).toBeTruthy();
   });
 });
+
+function dbEnv(db) {
+  return { DB: db };
+}
