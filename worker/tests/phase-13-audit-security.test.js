@@ -4,7 +4,7 @@ import path from "node:path";
 
 const root = path.resolve(process.cwd());
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const hasDashboardAsset = (html, asset) => new RegExp(`/dashboard/${asset}\\?v=(?:provider-getkey-v|key-control-v)\\d+`).test(html);
+const hasDashboardAsset = (html, asset) => new RegExp(`/dashboard/${asset}\\?v=(?:provider-getkey-v|key-control-v|hwid-v)\\d+`).test(html);
 
 describe("Phase 13 audit and security surfaces", () => {
   it("keeps the existing security event schema compatible", () => {
