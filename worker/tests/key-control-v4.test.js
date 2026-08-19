@@ -67,6 +67,14 @@ describe('Key Control v4', () => {
     expect(body.license_key).toMatch(/^FREZEN-/);
   });
 
+  it('inherits the provider service when service_id is omitted', async () => {
+    const response = await createKey(request({ provider_id: 'p1', days: 1 }), { DB: makeDb() }, 'req-implicit-service', { user_id: 'owner-1' });
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.key.provider_id).toBe('p1');
+    expect(body.key.service_id).toBe('s1');
+  });
+
   it('returns provider, service and folder options', async () => {
     const response = await keyControlOptions({ DB: makeOptionsDb() }, 'req-2', { user_id: 'owner-1' });
     const body = await response.json();

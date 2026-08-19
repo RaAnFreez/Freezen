@@ -195,7 +195,7 @@ export async function createKey(request, env, requestId, auth) {
   try { body = await request.json(); } catch { return jsonResponse({ error: 'INVALID_JSON' }, 400, requestId); }
 
   const providerId = safeText(body?.provider_id, 128);
-  const serviceId = safeText(body?.service_id, 128) || null;
+  const requestedServiceId = safeText(body?.service_id, 128) || null;
   const folderId = safeText(body?.folder_id, 128) || null;
   const keyName = safeText(body?.key_name, MAX_NAME) || null;
   const premium = Boolean(body?.premium);
@@ -216,11 +216,16 @@ export async function createKey(request, env, requestId, auth) {
     await ensureKeyControlSchema(env);
     const provider = await getProvider(env, auth.user_id, providerId);
     if (!provider || !provider.active) return jsonResponse({ error: 'PROVIDER_NOT_FOUND' }, 404, requestId);
-    if (serviceId) {
-      const service = await getService(env, auth.user_id, serviceId);
-      if (!service || !service.active) return jsonResponse({ error: 'SERVICE_NOT_FOUND' }, 404, requestId);
-      if (provider.service_id && provider.service_id !== service.id) return jsonResponse({ error: 'PROVIDER_SERVICE_MISMATCH' }, 409, requestId);
-    }
+
+    // Providers are scoped to a service. When the caller omits service_id,
+    // inherit the provider's service so a newly generated key cannot become
+    // detached from the service used by the script loader.
+    const serviceId = requestedServiceId || safeText(provider.service_id, 128) || null;
+    if (!serviceId) return jsonResponse({ error: 'SERVICE_REQUIRED', message: 'Provider is not linked to a service' }, 409, requestId);
+
+    const service = await getService(env, auth.user_id, serviceId);
+    if (!service || !service.active) return jsonResponse({ error: 'SERVICE_NOT_FOUND' }, 404, requestId);
+    if (provider.service_id && provider.service_id !== service.id) return jsonResponse({ error: 'PROVIDER_SERVICE_MISMATCH' }, 409, requestId);
     if (folderId && !await getFolder(env, auth.user_id, folderId)) return jsonResponse({ error: 'FOLDER_NOT_FOUND' }, 404, requestId);
 
     const expiresAt = forever ? null : new Date(Date.now() + totalMinutes * 60_000).toISOString();
