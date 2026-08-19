@@ -1,15 +1,15 @@
 (() => {
-  const INTERNAL_NOTE = 'Frezen keyed loader uses an explicit raw-content endpoint and server-side key validation.';
-  const INTERNAL_LOADER_MARKER = `${location.origin}/loader/internal`;
+  const INTERNAL_NOTE = 'Frezen keyed loader uses a server-stored .lua file endpoint with server-side key validation.';
+  const INTERNAL_LOADER_MARKER = `${location.origin}/files/internal.lua`;
 
   function loaderSource(scriptId) {
-    const endpoint = `${location.origin}/loader/${encodeURIComponent(scriptId)}`;
+    const endpoint = `${location.origin}/files/${encodeURIComponent(scriptId)}.lua`;
     return [
       'script_key="PASTE YOUR KEY HERE";',
       'local HttpService=game:GetService("HttpService");',
       'local ok,hwid=pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end);',
       'if not ok then hwid="" end;',
-      `local source=game:HttpGet("${endpoint}?format=raw&key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid));`,
+      `local source=game:HttpGet("${endpoint}?key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid));`,
       'loadstring(source)();',
     ].join('\n');
   }
@@ -41,7 +41,7 @@
     if (!scriptId) return;
     const source = loaderSource(scriptId);
     navigator.clipboard?.writeText(source)
-      .then(() => alert('Frezen keyed loader copied. Replace PASTE YOUR KEY HERE with a valid key.'))
+      .then(() => alert('Frezen server-file loader copied. Replace PASTE YOUR KEY HERE with a valid key.'))
       .catch(() => alert(source));
   }, true);
 
@@ -51,7 +51,7 @@
       const loader = document.querySelector('#lua-loader');
       if (!loader) return;
       loader.value = INTERNAL_LOADER_MARKER;
-      loader.placeholder = 'Frezen internal keyed loader';
+      loader.placeholder = 'Frezen server file loader';
       const field = loader.closest('.lua-field');
       if (field) field.style.display = 'none';
     }, 0);
