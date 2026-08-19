@@ -39,6 +39,28 @@ export function renderScripts(root) {
     serviceSelect.innerHTML = (data.services ?? []).map((service) => `<option value="${esc(service.id)}">${esc(service.name)}</option>`).join("") || `<option value="">No services configured</option>`;
   };
 
+  const generateKeyForScript = async (script) => {
+    const options = await api("/key-control/options");
+    const providers = (options.providers ?? []).filter((item) => String(item.service_id || "") === String(script.service_id));
+    if (!providers.length) throw new Error("No active provider is linked to this script's service. Configure a provider for this service first.");
+    const provider = providers[0];
+    const data = await api("/key-control/keys", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        provider_id: provider.id,
+        service_id: script.service_id,
+        key_name: `${script.name} key`,
+        days: 30,
+        hours: 0,
+        minutes: 0,
+        max_devices: 1,
+        forever: false,
+      }),
+    });
+    return { key: data.license_key, provider };
+  };
+
   const load = async () => {
     try {
       const params = new URLSearchParams({ page: "1", page_size: "50" });
@@ -53,9 +75,24 @@ export function renderScripts(root) {
           <div><strong>${esc(script.name)}</strong><small>${esc(script.service_name || script.service_id)} · ${script.version_count} version(s)</small></div>
           <span class="product-status">${esc(script.status)}</span>
           <span class="product-version">${esc(script.active_version || "No active version")}</span>
-          <div class="script-actions"><button class="ghost-button small" data-upload="${esc(script.id)}">Upload Lua</button><button class="ghost-button small" data-disable="${esc(script.id)}">${script.status === "ACTIVE" ? "Disable" : "Enable"}</button><button class="danger-button small" data-delete="${esc(script.id)}">Delete</button></div>
+          <div class="script-actions"><button class="ghost-button small" data-key="${esc(script.id)}">Generate Key</button><button class="ghost-button small" data-upload="${esc(script.id)}">Upload Lua</button><button class="ghost-button small" data-disable="${esc(script.id)}">${script.status === "ACTIVE" ? "Disable" : "Enable"}</button><button class="danger-button small" data-delete="${esc(script.id)}">Delete</button></div>
           <div class="script-upload" data-panel="${esc(script.id)}" hidden><input type="file" accept=".lua,text/x-lua" data-file="${esc(script.id)}" /><input placeholder="Version e.g. 1.0.0" data-version="${esc(script.id)}" maxlength="80" /><input placeholder="Release notes (optional)" data-notes="${esc(script.id)}" maxlength="2000" /><button class="primary-button small" data-submit-upload="${esc(script.id)}">Upload</button></div>
         </article>`).join("");
+
+      const detailById = new Map(data.scripts.map((script) => [String(script.id), script]));
+      list.querySelectorAll("[data-key]").forEach((button) => button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          const script = detailById.get(String(button.dataset.key));
+          if (!script) throw new Error("Script not found in current list.");
+          const result = await generateKeyForScript(script);
+          showMessage(`Key created for ${script.name}: ${result.key}`);
+        } catch (error) {
+          showMessage(error.message, true);
+        } finally {
+          button.disabled = false;
+        }
+      }));
     } catch (error) { list.innerHTML = `<div class="empty"><strong>Unable to load scripts</strong><p>${esc(error.message)}</p></div>`; }
   };
 
@@ -76,7 +113,7 @@ export function renderScripts(root) {
 
   root.addEventListener("click", async (event) => {
     const button = event.target.closest("button");
-    if (!button) return;
+    if (!button || button.dataset.key) return;
     try {
       if (button.dataset.upload) { const panel = root.querySelector(`[data-panel="${CSS.escape(button.dataset.upload)}"]`); panel.hidden = !panel.hidden; return; }
       if (button.dataset.disable) {
