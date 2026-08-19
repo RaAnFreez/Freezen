@@ -21,6 +21,15 @@ export function renderHwid(container) {
         <div><span>Blocked</span><strong id="hwid-blocked">0</strong></div>
       </div>
 
+      <div class="hwid-toolbar">
+        <div class="hwid-tabs" role="tablist" aria-label="HWID filters">
+          <button class="hwid-tab active" data-filter="all" role="tab">All</button>
+          <button class="hwid-tab" data-filter="active" role="tab">Active</button>
+          <button class="hwid-tab" data-filter="blocked" role="tab">Blocked</button>
+        </div>
+        <label class="hwid-search"><span>⌕</span><input id="hwid-search" placeholder="Search HWID or key…" autocomplete="off" /><button type="button" id="hwid-refresh" title="Refresh">↻</button></label>
+      </div>
+
       <div id="hwid-message" class="inline-message" hidden></div>
       <div id="hwid-list" class="hwid-list">
         <div class="hwid-empty"><div class="hwid-empty-icon">♧</div><strong>Loading HWIDs…</strong><p>Device activity will appear here automatically.</p></div>
@@ -32,6 +41,11 @@ export function renderHwid(container) {
   const total = container.querySelector("#hwid-total");
   const active = container.querySelector("#hwid-active");
   const blocked = container.querySelector("#hwid-blocked");
+  const search = container.querySelector("#hwid-search");
+  let devices = [];
+  let filter = "all";
+  let query = "";
+
   const show = (text, error = false) => { message.hidden = !text; message.textContent = text; message.classList.toggle("error", error); };
 
   const api = async (path, options = {}) => {
@@ -41,15 +55,23 @@ export function renderHwid(container) {
     return data;
   };
 
-  const render = (devices) => {
-    if (!devices.length) {
-      list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">♧</div><strong>No HWIDs banned yet</strong><p>Banned hardware IDs will appear here. Valid key usage will automatically create device records.</p></div>`;
+  const matches = (device) => {
+    const status = String(device.status || "").toLowerCase();
+    if (filter !== "all" && status !== filter) return false;
+    if (!query) return true;
+    return `${device.fingerprint || ""} ${device.id || ""} ${device.key_name || ""} ${device.license_id || ""} ${device.service_name || ""}`.toLowerCase().includes(query);
+  };
+
+  const render = () => {
+    const visible = devices.filter(matches);
+    if (!visible.length) {
+      list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">♧</div><strong>${devices.length ? "No HWIDs match" : "No HWIDs banned yet"}</strong><p>${devices.length ? "Try another search or filter." : "Banned hardware IDs will appear here. Valid key usage will automatically create device records."}</p></div>`;
       return;
     }
 
     list.innerHTML = `
       <div class="hwid-table-wrap"><table class="hwid-table"><thead><tr><th>Device</th><th>Key</th><th>Service</th><th>Status</th><th>Last seen</th><th>Expires</th><th></th></tr></thead><tbody>
-      ${devices.map((device) => {
+      ${visible.map((device) => {
         const isBlocked = device.status === "blocked";
         return `<tr>
           <td><div class="device-cell"><span class="device-dot ${isBlocked ? "blocked" : "active"}"></span><div><code>${escapeHtml(device.fingerprint || device.id.slice(0, 12))}</code><small>${escapeHtml(device.id)}</small></div></div></td>
@@ -66,15 +88,20 @@ export function renderHwid(container) {
     list.querySelectorAll("[data-device]").forEach((button) => button.addEventListener("click", () => toggle(button.dataset.device, button.dataset.next)));
   };
 
+  const updateStats = (data) => {
+    total.textContent = String(data.stats?.total ?? devices.length);
+    active.textContent = String(data.stats?.active ?? devices.filter((d) => d.status === "active").length);
+    blocked.textContent = String(data.stats?.blocked ?? devices.filter((d) => d.status === "blocked").length);
+  };
+
   const load = async () => {
     show("");
     list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">◌</div><strong>Loading HWIDs…</strong><p>Refreshing device records.</p></div>`;
     try {
       const data = await api("/hwid/all");
-      total.textContent = String(data.stats?.total ?? data.devices?.length ?? 0);
-      active.textContent = String(data.stats?.active ?? 0);
-      blocked.textContent = String(data.stats?.blocked ?? 0);
-      render(data.devices ?? []);
+      devices = Array.isArray(data.devices) ? data.devices : [];
+      updateStats(data);
+      render();
     } catch (error) {
       list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">!</div><strong>Unable to load HWIDs</strong><p>${escapeHtml(error.message)}</p></div>`;
       show(error.message, true);
@@ -89,6 +116,18 @@ export function renderHwid(container) {
       await load();
     } catch (error) { show(error.message, true); }
   };
+
+  container.querySelectorAll(".hwid-tab").forEach((button) => button.addEventListener("click", () => {
+    filter = button.dataset.filter;
+    container.querySelectorAll(".hwid-tab").forEach((tab) => tab.classList.toggle("active", tab === button));
+    render();
+  }));
+
+  search.addEventListener("input", () => {
+    query = search.value.trim().toLowerCase();
+    render();
+  });
+  container.querySelector("#hwid-refresh").addEventListener("click", load);
 
   container.querySelector("#hwid-ban").addEventListener("click", async () => {
     const deviceId = window.prompt("Enter the device ID to ban:");
