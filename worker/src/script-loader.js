@@ -88,7 +88,11 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
   const hwid = url.searchParams.get("hwid")?.trim() ?? "";
   if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny();
 
-  if (/text\/html/i.test(request.headers.get("accept") || "") && responseMode !== "raw") return deny();
+  // The server-file endpoint intentionally does not inspect Accept/User-Agent.
+  // Executor HTTP clients may send browser-like headers; authorization is based
+  // on the key/license/HWID checks below. The legacy loader keeps its browser
+  // navigation guard unless the explicit raw marker is supplied.
+  if (responseMode === "legacy-loader" && /text\/html/i.test(request.headers.get("accept") || "")) return deny();
 
   try {
     const keyHash = await sha256Hex(key);
