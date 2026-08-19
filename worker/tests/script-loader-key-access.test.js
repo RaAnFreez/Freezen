@@ -28,9 +28,7 @@ const db = {
 describe("Script loader key access", () => {
   it("denies browser navigation", async () => {
     const response = await deliverScriptByKey(
-      new Request("https://frezen.test/loader/s1", {
-        headers: { accept: "text/html" },
-      }),
+      new Request("https://frezen.test/loader/s1", { headers: { accept: "text/html" } }),
       { DB: db },
       "req-browser",
       "s1",
@@ -40,9 +38,7 @@ describe("Script loader key access", () => {
 
   it("allows a valid key to receive a newly created script version", async () => {
     const response = await deliverScriptByKey(
-      new Request("https://frezen.test/loader/s1?key=FREZEN-TEST", {
-        headers: { accept: "text/plain" },
-      }),
+      new Request("https://frezen.test/loader/s1?key=FREZEN-TEST", { headers: { accept: "text/plain" } }),
       { DB: db },
       "req-key",
       "s1",
