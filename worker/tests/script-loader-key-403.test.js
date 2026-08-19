@@ -18,10 +18,10 @@ function dbMock() {
   };
 }
 
-describe('script loader 403 regression', () => {
-  it('returns Lua source for executor-style GET with a key', async () => {
+describe('script loader raw delivery regression', () => {
+  it('returns Lua source for an explicit raw GET with a key', async () => {
     const response = await deliverScriptByKey(
-      new Request('https://frezen.test/loader/s1?key=FREZEN-valid', {
+      new Request('https://frezen.test/loader/s1?format=raw&key=FREZEN-valid', {
         headers: { accept: '*/*', 'user-agent': 'Roblox/WinInet' },
       }),
       { DB: dbMock() },
@@ -32,7 +32,7 @@ describe('script loader 403 regression', () => {
     expect(await response.text()).toContain('print');
   });
 
-  it('continues denying browser navigation', async () => {
+  it('denies browser navigation without the raw marker', async () => {
     const response = await deliverScriptByKey(
       new Request('https://frezen.test/loader/s1?key=FREZEN-valid', {
         headers: { accept: 'text/html,application/xhtml+xml' },
