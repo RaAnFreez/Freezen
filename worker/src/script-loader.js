@@ -1,16 +1,17 @@
 import { bindRuntimeHwid } from "./security/runtime-hwid.js";
 
-const deny = (message = "You cant access this link") => new Response(message, {
-  status: 403,
+const deny = (code = "ACCESS_DENIED", status = 403, requestId = "") => new Response(code, {
+  status,
   headers: {
     "content-type": "text/plain; charset=utf-8",
     "cache-control": "no-store, no-cache, must-revalidate",
     pragma: "no-cache",
     "x-content-type-options": "nosniff",
+    ...(requestId ? { "x-frezen-request-id": requestId } : {}),
   },
 });
 
-const serverError = (requestId) => new Response("Script delivery temporarily unavailable", {
+const serverError = (requestId) => new Response("SCRIPT_DELIVERY_UNAVAILABLE", {
   status: 503,
   headers: {
     "content-type": "text/plain; charset=utf-8",
@@ -26,11 +27,11 @@ async function sha256Hex(value) {
 
 function bindFailureMessage(reason) {
   switch (reason) {
-    case "LICENSE_EXPIRED": return "License expired";
-    case "LICENSE_BLOCKED": return "License blocked";
-    case "HWID_BLOCKED": return "HWID blocked";
-    case "DEVICE_LIMIT_REACHED": return "Device limit reached";
-    default: return "HWID validation failed";
+    case "LICENSE_EXPIRED": return "LICENSE_EXPIRED";
+    case "LICENSE_BLOCKED": return "LICENSE_BLOCKED";
+    case "HWID_BLOCKED": return "HWID_BLOCKED";
+    case "DEVICE_LIMIT_REACHED": return "DEVICE_LIMIT_REACHED";
+    default: return "HWID_VALIDATION_FAILED";
   }
 }
 
@@ -39,12 +40,16 @@ async function findScriptFile(env, keyHash, scriptId) {
     SELECT
       s.id AS script_id,
       s.status AS script_status,
+      s.service_id AS script_service_id,
       v.version,
       v.status AS version_status,
       f.id AS file_id,
       f.content,
       f.content_type,
-      l.id AS license_id
+      l.id AS license_id,
+      l.status AS license_status,
+      l.expires_at AS license_expires_at,
+      kr.id AS key_record_id
     FROM scripts s
     JOIN script_versions v
       ON v.id = (
@@ -69,35 +74,54 @@ async function findScriptFile(env, keyHash, scriptId) {
       ON l.id = kr.license_id
      AND l.license_key_hash = ?1
     WHERE s.id = ?2
-      AND s.status = 'ACTIVE'
-      AND LOWER(COALESCE(l.status, '')) = 'active'
-      AND (l.expires_at IS NULL OR datetime(l.expires_at) > datetime('now'))
-      AND (l.user_id IS NULL OR l.user_id = kr.owner_id)
     ORDER BY CASE WHEN v.status = 'ACTIVE' THEN 0 ELSE 1 END,
              v.created_at DESC
     LIMIT 1
   `).bind(keyHash, scriptId).first();
 }
 
+async function scriptExists(env, scriptId) {
+  return env.DB.prepare("SELECT id, status FROM scripts WHERE id = ?1 LIMIT 1").bind(scriptId).first();
+}
+
+async function keyLicenseExists(env, keyHash) {
+  return env.DB.prepare("SELECT id, status, expires_at FROM licenses WHERE license_key_hash = ?1 LIMIT 1").bind(keyHash).first();
+}
+
 async function deliverResolvedFile(request, env, requestId, scriptId, responseMode = "file") {
-  if (request.method !== "GET") return deny();
+  if (request.method !== "GET") return deny("METHOD_NOT_ALLOWED", 405, requestId);
   if (!env.DB || !scriptId) return serverError(requestId);
 
   const url = new URL(request.url);
   const key = url.searchParams.get("key")?.trim() ?? "";
   const hwid = url.searchParams.get("hwid")?.trim() ?? "";
-  if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny();
+  if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny("INVALID_KEY", 403, requestId);
 
-  if (responseMode === "legacy-loader" && /text\/html/i.test(request.headers.get("accept") || "")) return deny();
+  if (responseMode === "legacy-loader" && /text\\/html/i.test(request.headers.get("accept") || "")) {
+    return deny("BROWSER_NAVIGATION_BLOCKED", 403, requestId);
+  }
 
   try {
     const keyHash = await sha256Hex(key);
     const row = await findScriptFile(env, keyHash, scriptId);
-    if (!row || row.script_status !== "ACTIVE") return deny();
+    if (!row) {
+      const script = await scriptExists(env, scriptId);
+      if (!script) return deny("SCRIPT_NOT_FOUND", 404, requestId);
+      const license = await keyLicenseExists(env, keyHash);
+      if (!license) return deny("INVALID_KEY", 403, requestId);
+      if (String(license.status || "").toLowerCase() !== "active") return deny("LICENSE_BLOCKED", 403, requestId);
+      if (license.expires_at && new Date(license.expires_at).getTime() <= Date.now()) return deny("LICENSE_EXPIRED", 403, requestId);
+      return deny("KEY_SCRIPT_MISMATCH", 403, requestId);
+    }
+
+    if (row.script_status !== "ACTIVE") return deny("SCRIPT_INACTIVE", 403, requestId);
+    if (String(row.license_status || "").toLowerCase() !== "active") return deny("LICENSE_BLOCKED", 403, requestId);
+    if (row.license_expires_at && new Date(row.license_expires_at).getTime() <= Date.now()) return deny("LICENSE_EXPIRED", 403, requestId);
+    if (!row.content) return deny("SCRIPT_CONTENT_MISSING", 404, requestId);
 
     if (hwid) {
       const bound = await bindRuntimeHwid(env, row.license_id, hwid);
-      if (!bound.ok) return deny(bindFailureMessage(bound.reason));
+      if (!bound.ok) return deny(bindFailureMessage(bound.reason), 403, requestId);
     }
 
     return new Response(row.content, {
