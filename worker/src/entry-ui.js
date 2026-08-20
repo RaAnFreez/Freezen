@@ -2,6 +2,7 @@ import entry from "./entry.js";
 import { requirePrivateAccess } from "./security/private-access.js";
 import { createSafeLinkUCheckpoint } from "./safelinku.js";
 import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublicFlow, launchPublicFlow, publicGetKeyPage } from "./key-system-runtime.js";
+import { reconcileDashboardState } from "./dashboard-state.js";
 import { keyControlOptions, createKeyFolder, listKeys, createKey } from "./key-control.js";
 import { deleteKey, cleanupExpiredKeys } from "./key-lifecycle.js";
 import { persistKeySecret, revealKeySecret } from "./key-secret.js";
@@ -58,8 +59,7 @@ export default {
       const requestId = crypto.randomUUID();
       const access = await requirePrivateAccess(request, env, requestId);
       if (access instanceof Response) return access;
-      const result = await syncKeySystemConfig(request, env, access);
-      return new Response(await result.text(), { status: result.status, headers: { ...Object.fromEntries(result.headers.entries()), "x-request-id": requestId } });
+      return reconcileDashboardState(request, env, access);
     }
 
     if (url.pathname === "/api/v1/key-control/options") {
