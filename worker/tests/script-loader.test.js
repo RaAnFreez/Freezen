@@ -31,7 +31,7 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(await response.text()).toBe('INVALID_KEY');
   });
 
-  it('returns generated loader UI when the script link is opened directly', async () => {
+  it('returns generated compact loader UI when the script link is opened directly', async () => {
     const { deliverScriptFileByKey } = await import('../src/script-loader.js');
     const response = await deliverScriptFileByKey(
       new Request('https://frezen.test/files/s1.lua', {
@@ -49,11 +49,10 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/html');
     const body = await response.text();
-    expect(body).toContain('Generated loader source with runtime HWID capture.');
+    expect(body).toContain('Generated loader source with compact bootstrap and runtime HWID capture.');
     expect(body).toContain('script_key=&quot;PASTE YOUR KEY HERE&quot;;');
-    expect(body).toContain('https://frezen.test/files/s1.lua?key=');
-    expect(body).toContain('&amp;hwid=');
-    expect(body).toContain('loadstring(source)();');
+    expect(body).toContain('/loader/s1?bootstrap=1&amp;key=');
+    expect(body).toContain('HttpService&quot;):UrlEncode(script_key)');
     expect(body).toContain('CAPTURE ENABLED');
   });
 
