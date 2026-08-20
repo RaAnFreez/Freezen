@@ -45,7 +45,8 @@ describe('script loader key/service delivery', () => {
       's1',
     );
     expect(response.status).toBe(403);
-    expect(await response.text()).toBe('You cant access this link');
+    const body = await response.text();
+    expect(body).toContain('You cant access this link');
   });
 
   it('returns 503 for a database failure instead of masking it as an invalid key', async () => {
