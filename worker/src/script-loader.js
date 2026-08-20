@@ -1,4 +1,5 @@
 import { bindRuntimeHwid } from "./security/runtime-hwid.js";
+import { isBrowserNavigation, blockedBrowserPage } from "./browser-link-guard.js";
 
 const deny = (code = "ACCESS_DENIED", status = 403, requestId = "") => new Response(code, {
   status,
@@ -92,14 +93,12 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
   if (request.method !== "GET") return deny("METHOD_NOT_ALLOWED", 405, requestId);
   if (!env.DB || !scriptId) return serverError(requestId);
 
+  if (isBrowserNavigation(request)) return blockedBrowserPage(requestId);
+
   const url = new URL(request.url);
   const key = url.searchParams.get("key")?.trim() ?? "";
   const hwid = url.searchParams.get("hwid")?.trim() ?? "";
   if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny("INVALID_KEY", 403, requestId);
-
-  if (responseMode === "legacy-loader" && /text\/html/i.test(request.headers.get("accept") || "")) {
-    return deny("You cant access this link", 403, requestId);
-  }
 
   try {
     const keyHash = await sha256Hex(key);
@@ -114,8 +113,6 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
       return deny("KEY_SCRIPT_MISMATCH", 403, requestId);
     }
 
-    // Production D1 always returns these authorization fields. The nullable
-    // checks keep lightweight D1 mocks/backward-compatible test doubles valid.
     if (row.script_status !== "ACTIVE") return deny("SCRIPT_INACTIVE", 403, requestId);
     if (row.license_status != null && String(row.license_status).toLowerCase() !== "active") return deny("LICENSE_BLOCKED", 403, requestId);
     if (row.license_expires_at != null && row.license_expires_at && new Date(row.license_expires_at).getTime() <= Date.now()) return deny("LICENSE_EXPIRED", 403, requestId);
