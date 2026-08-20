@@ -1,3 +1,5 @@
+const escapeLua = (value) => String(value ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n");
+
 export function buildCompactLoaderSource(request, scriptId) {
   const origin = new URL(request.url).origin;
   const id = encodeURIComponent(scriptId);
@@ -8,12 +10,13 @@ export function buildCompactLoaderSource(request, scriptId) {
   ].join("\n");
 }
 
-export function buildRuntimeLoaderSource(request, scriptId) {
+export function buildRuntimeLoaderSource(request, scriptId, key = "PASTE YOUR KEY HERE") {
   const origin = new URL(request.url).origin;
   const id = encodeURIComponent(scriptId);
   const endpoint = `${origin}/files/${id}.lua`;
+  const safeKey = escapeLua(key);
   return [
-    'script_key="PASTE YOUR KEY HERE";',
+    `script_key="${safeKey}";`,
     'local HttpService=game:GetService("HttpService");',
     'local hwid="";',
     'local ok,value=pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end);',
