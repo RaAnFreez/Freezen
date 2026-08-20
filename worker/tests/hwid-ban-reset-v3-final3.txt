@@ -1,0 +1,1 @@
+No D1 reset or migration changes are required for the HWID ban/reset separation.
