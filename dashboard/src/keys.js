@@ -64,14 +64,39 @@ export function renderKeys(root) {
     syncProviderService();
   };
 
+  const viewKey = async (id) => {
+    try {
+      const data = await api(`/keys/${encodeURIComponent(id)}/secret`);
+      const value = String(data.key || "");
+      if (!value) throw new Error("KEY_SECRET_UNAVAILABLE");
+      window.prompt("Frezen license key", value);
+    } catch (error) {
+      show(error.message === "KEY_SECRET_UNAVAILABLE" ? "This key cannot be revealed. Create a new key after the secret-storage migration is active." : error.message, true);
+    }
+  };
+
+  const copyKey = async (id) => {
+    try {
+      const data = await api(`/keys/${encodeURIComponent(id)}/secret`);
+      const value = String(data.key || "");
+      if (!value) throw new Error("KEY_SECRET_UNAVAILABLE");
+      await navigator.clipboard.writeText(value);
+      show("Key copied to clipboard.");
+    } catch (error) {
+      show(error.message === "KEY_SECRET_UNAVAILABLE" ? "This key cannot be revealed. Create a new key after the secret-storage migration is active." : error.message, true);
+    }
+  };
+
   const render = (keys) => {
-    if (!keys.length) { list.innerHTML = `<div class="key-empty"><div class="key-empty-icon">⌁</div><strong>No keys yet</strong><p>Create a key above. Expired keys disappear automatically.</p></div>`; return; }
+    if (!keys.length) { list.innerHTML = `<div class="key-empty"><div class="key-empty-icon">KEY</div><strong>No keys yet</strong><p>Create a key above. Expired keys disappear automatically.</p></div>`; return; }
     list.innerHTML = keys.map((key) => `
       <article class="key-card">
-        <div class="key-main"><div class="key-mark">⌁</div><div><strong>${esc(key.key_name || "Unnamed key")}</strong><small>${esc(key.license_id)}</small></div></div>
+        <div class="key-main"><div class="key-mark">KEY</div><div><strong>${esc(key.key_name || "Unnamed key")}</strong><small>${esc(key.license_id)}</small></div></div>
         <div class="key-meta"><span>${esc(key.service_name || "No service")}</span><span>${Number(key.max_devices ?? 1)} device${Number(key.max_devices ?? 1) === 1 ? "" : "s"}</span><span>${key.forever ? "FOREVER" : `Expires ${esc(date(key.expires_at))}`}</span></div>
-        <div class="key-actions"><button class="danger-button small" data-delete="${esc(key.id)}">Delete</button></div>
+        <div class="key-actions"><button class="ghost-button small" data-view="${esc(key.id)}">View key</button><button class="ghost-button small" data-copy="${esc(key.id)}">Copy key</button><button class="danger-button small" data-delete="${esc(key.id)}">Delete</button></div>
       </article>`).join("");
+    list.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => viewKey(button.dataset.view)));
+    list.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", () => copyKey(button.dataset.copy)));
     list.querySelectorAll("[data-delete]").forEach((button) => button.addEventListener("click", () => removeKey(button.dataset.delete)));
   };
 
