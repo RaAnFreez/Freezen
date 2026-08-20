@@ -1,10 +1,18 @@
-const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const esc = (value) => String(value ?? '').replace(/[&<>\"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;' }[c]));
 const KEY = 'frezen.services.v1';
 const read = () => { try { const value = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
 const write = (value) => { try { localStorage.setItem(KEY, JSON.stringify(value)); } catch {} };
 const id = () => crypto.randomUUID();
 const slugify = (value) => value.toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
 const keyUrl = (slug) => `${location.origin}/get-key/${encodeURIComponent(slug)}`;
+
+async function persistServices() {
+  try {
+    if (window.FrezenIntegration?.syncToServer) await window.FrezenIntegration.syncToServer(true);
+  } catch (error) {
+    console.warn('Service sync failed', error);
+  }
+}
 
 function modal({ edit = false, service = null }) {
   const wrap = document.createElement('div');
@@ -22,7 +30,7 @@ function modal({ edit = false, service = null }) {
   wrap.querySelector('#service-cancel').onclick = close;
   wrap.onclick = (event) => { if (event.target === wrap) close(); };
 
-  wrap.querySelector('form').onsubmit = (event) => {
+  wrap.querySelector('form').onsubmit = async (event) => {
     event.preventDefault();
     const name = wrap.querySelector('#service-name').value.trim();
     const slug = slugify(slugInput.value);
@@ -43,6 +51,7 @@ function modal({ edit = false, service = null }) {
     write(edit ? list.map((row) => row.id === item.id ? item : row) : [item, ...list]);
     close();
     renderServices();
+    await persistServices();
   };
 }
 
@@ -54,7 +63,7 @@ function renderServices() {
   root.querySelector('#service-empty-new')?.addEventListener('click', () => modal({}));
   root.querySelectorAll('.service-configure,.service-edit').forEach((button) => button.addEventListener('click', () => { const service = read().find((row) => row.id === button.closest('.service-card')?.dataset.id); if (service) modal({ edit: true, service }); }));
   root.querySelectorAll('.service-copy').forEach((button) => button.addEventListener('click', async () => { const value = button.closest('.service-configured-link')?.querySelector('code')?.textContent || ''; try { await navigator.clipboard.writeText(value); button.textContent = 'Copied'; setTimeout(() => { button.textContent = 'Copy'; }, 1200); } catch {} }));
-  root.querySelectorAll('.service-more').forEach((button) => button.addEventListener('click', () => { const service = read().find((row) => row.id === button.closest('.service-card')?.dataset.id); if (!service) return; if (!confirm(`Delete service "${service.name}"?`)) return; write(read().filter((row) => row.id !== service.id)); renderServices(); }));
+  root.querySelectorAll('.service-more').forEach((button) => button.addEventListener('click', async () => { const service = read().find((row) => row.id === button.closest('.service-card')?.dataset.id); if (!service) return; if (!confirm(`Delete service "${service.name}"?`)) return; write(read().filter((row) => row.id !== service.id)); renderServices(); await persistServices(); }));
 }
 
 window.FrezenDashboardPanels = window.FrezenDashboardPanels || {};
