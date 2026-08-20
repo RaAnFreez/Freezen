@@ -1,0 +1,1 @@
+HWID block and reset semantics are separated on the server.
