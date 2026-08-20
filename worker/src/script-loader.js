@@ -93,7 +93,9 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
   if (request.method !== "GET") return deny("METHOD_NOT_ALLOWED", 405, requestId);
   if (!env.DB || !scriptId) return serverError(requestId);
 
-  if (isBrowserNavigation(request)) return blockedBrowserPage(requestId);
+  if (isBrowserNavigation(request, { strictAccept: responseMode === "legacy-loader" })) {
+    return blockedBrowserPage(requestId);
+  }
 
   const url = new URL(request.url);
   const key = url.searchParams.get("key")?.trim() ?? "";
