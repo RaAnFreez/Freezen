@@ -12,9 +12,7 @@ function makeDb({ license = { id: "lic-1", user_id: "owner-1", status: "active",
       async first() {
         if (sql.includes("SELECT id, user_id, status, expires_at FROM licenses")) return license;
         if (sql.includes("SELECT max_devices FROM frezen_key_limits")) return { max_devices: maxDevices };
-        if (sql.includes("SELECT id, owner_id, license_id, status, first_seen")) {
-          return bindings.get(`${params[0]}:${params[1]}`) ?? null;
-        }
+        if (sql.includes("SELECT id, owner_id, license_id, status, first_seen")) return bindings.get(`${params[0]}:${params[1]}`) ?? null;
         if (sql.includes("SELECT COUNT(*) AS total FROM hwid_bindings_v2")) {
           const active = [...bindings.values()].filter((row) => row.license_id === params[0] && row.status === "active").length;
           return { total: active };
@@ -48,7 +46,12 @@ function makeDb({ license = { id: "lic-1", user_id: "owner-1", status: "active",
           const row = [...bindings.values()].find((item) => item.id === params[0]);
           if (row) row.last_seen = new Date().toISOString();
         }
-        if (sql.includes("DELETE FROM hwid_bindings_v2")) return { meta: { changes: 0 } };
+        if (sql.includes("DELETE FROM hwid_bindings_v2")) {
+          for (const [key, row] of bindings.entries()) {
+            if (row.owner_id === params[0] && row.license_id === params[1] && row.status === "active") bindings.delete(key);
+          }
+          return { meta: { changes: 1 } };
+        }
         return { meta: { changes: inserts } };
       },
     };
@@ -103,14 +106,16 @@ describe("HWID V2", () => {
     expect(result.reason).toBe("LICENSE_EXPIRED");
   });
 
-  it("reset blocks active bindings for only the selected owner and license", async () => {
+  it("reset removes active bindings only for the selected owner and license", async () => {
     const db = makeDb();
     const bound = await bindHwidV2({ DB: db }, { licenseId: "lic-1", ownerId: "owner-1", rawHwid: "DEVICE-123" });
     const result = await resetHwidV2({ DB: db }, { ownerId: "owner-1", licenseId: "lic-1" });
     expect(result.ok).toBe(true);
     const validation = await validateHwidV2({ DB: db }, { licenseId: "lic-1", ownerId: "owner-1", rawHwid: "DEVICE-123" });
     expect(validation.ok).toBe(false);
-    expect(validation.reason).toBe("HWID_BLOCKED");
-    expect(bound.deviceId).toBeDefined();
+    expect(validation.reason).toBe("HWID_MISMATCH");
+    const rebound = await bindHwidV2({ DB: db }, { licenseId: "lic-1", ownerId: "owner-1", rawHwid: "DEVICE-123" });
+    expect(rebound.ok).toBe(true);
+    expect(rebound.deviceId).not.toBe(bound.deviceId);
   });
 });
