@@ -31,7 +31,7 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(await response.text()).toBe('INVALID_KEY');
   });
 
-  it('returns the generated loader source when the script link is opened directly', async () => {
+  it('returns generated loader source when the script link is opened directly', async () => {
     const { deliverScriptFileByKey } = await import('../src/script-loader.js');
     const response = await deliverScriptFileByKey(
       new Request('https://frezen.test/files/s1.lua', {
@@ -55,12 +55,14 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(body).toContain('loadstring(source)();');
   });
 
-  it('returns the stored script source for a matching keyed loader request', async () => {
+  it('returns stored script source for a matching keyed loader request', async () => {
     const { deliverScriptFileByKey } = await import('../src/script-loader.js');
     const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
     const keyHash = await hash(key);
     const response = await deliverScriptFileByKey(
-      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}&hwid=hwid-1`, { headers: { accept: '*/*', 'user-agent': 'FrezenExecutor/1.0' } }),
+      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}&hwid=hwid-1`, {
+        headers: { accept: '*/*', 'user-agent': 'FrezenExecutor/1.0' },
+      }),
       { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', file_id: 's1', content: 'print("hello")', content_type: 'text/x-lua' }) },
       'req-2',
       's1',
@@ -71,7 +73,7 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(response.headers.get('content-type')).toContain('text/x-lua');
   });
 
-  it('denies a non-navigation file request without a key', async () => {
+  it('denies non-navigation file requests without a key', async () => {
     const { deliverScriptFileByKey } = await import('../src/script-loader.js');
     const response = await deliverScriptFileByKey(
       new Request('https://frezen.test/files/s1.lua', { headers: { accept: '*/*', 'user-agent': 'FrezenExecutor/1.0' } }),
@@ -82,7 +84,7 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(response.status).toBe(403);
   });
 
-  it('serves a valid file when Accept is text/html but the request is not browser navigation', async () => {
+  it('serves valid file content when Accept is text/html but request is not navigation', async () => {
     const { deliverScriptFileByKey } = await import('../src/script-loader.js');
     const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
     const keyHash = await hash(key);
