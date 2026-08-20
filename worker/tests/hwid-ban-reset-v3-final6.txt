@@ -1,0 +1,1 @@
+Existing hwid_bindings_v2 storage is preserved; only runtime behavior is changed.
