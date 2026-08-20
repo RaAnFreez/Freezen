@@ -14,6 +14,6 @@ describe('Service D1 persistence bridge', () => {
     expect(bridge).toContain("guardClick('#lua-create')");
     expect(bridge).toContain('Storage.prototype.setItem');
     expect(bridge).toContain('Storage.prototype.removeItem');
-    expect(html).toContain('/dashboard/service-d1-persistence.js?v=service-d1-v1');
+    expect(html).toContain('/dashboard/service-d1-persistence.js?v=service-d1-v2');
   });
 });
