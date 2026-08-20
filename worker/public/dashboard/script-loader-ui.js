@@ -3,29 +3,10 @@
   const INTERNAL_LOADER_MARKER = `${location.origin}/files/internal.lua`;
 
   function loaderSource(scriptId) {
-    const endpoint = `${location.origin}/files/${encodeURIComponent(scriptId)}.lua`;
+    const endpoint = `${location.origin}/loader/${encodeURIComponent(scriptId)}?bootstrap=1&key=`;
     return [
       'script_key="PASTE YOUR KEY HERE";',
-      'local HttpService=game:GetService("HttpService");',
-      'local hwid="";',
-      'local ok,value=pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end);',
-      'if ok and type(value)=="string" and value~="" then hwid=value end;',
-      'if hwid=="" then',
-      '  local providers={gethwid,get_hwid,getHWID,getexecutorhwid};',
-      '  for _,getter in ipairs(providers) do',
-      '    if type(getter)=="function" then',
-      '      local gok,gvalue=pcall(getter);',
-      '      if gok and type(gvalue)=="string" and gvalue~="" then hwid=gvalue break end;',
-      '    end',
-      '  end',
-      'end;',
-      'if hwid=="" and type(syn)=="table" and type(syn.get_hwid)=="function" then',
-      '  local gok,gvalue=pcall(syn.get_hwid);',
-      '  if gok and type(gvalue)=="string" and gvalue~="" then hwid=gvalue end;',
-      'end;',
-      'if hwid=="" then error("FREZEN_HWID_UNAVAILABLE") end;',
-      `local source=game:HttpGet("${endpoint}?key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid));`,
-      'loadstring(source)();',
+      `loadstring(game:HttpGet("${endpoint}"..game:GetService("HttpService"):UrlEncode(script_key)))()`,
     ].join('\n');
   }
 
@@ -52,11 +33,12 @@
     if (!button) return;
     event.preventDefault();
     event.stopPropagation();
+    event.stopImmediatePropagation();
     const scriptId = button.dataset.id;
     if (!scriptId) return;
     const source = loaderSource(scriptId);
     navigator.clipboard?.writeText(source)
-      .then(() => alert('Frezen server-file loader copied. Replace PASTE YOUR KEY HERE with a valid key. HWID capture is enabled.'))
+      .then(() => alert('Compact Frezen loader copied. Replace PASTE YOUR KEY HERE with a valid key. HWID capture runs in the bootstrap stage.'))
       .catch(() => alert(source));
   }, true);
 
