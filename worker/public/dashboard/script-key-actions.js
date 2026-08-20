@@ -66,36 +66,34 @@
     if (button.disabled) return;
     button.disabled = true;
     try {
+      if (window.FrezenIntegration?.generateKeyForScript) {
+        const created = await window.FrezenIntegration.generateKeyForScript(scriptId, { days: 30, hours: 0, minutes: 0 });
+        const key = created?.license_key;
+        const scriptName = created?.binding?.script?.name || 'script';
+        if (!key) throw new Error('Key creation succeeded but no key was returned.');
+        try {
+          await navigator.clipboard?.writeText(key);
+          setStatus(`Key created for ${scriptName} and copied to clipboard:\n${key}`);
+        } catch {
+          setStatus(`Key created for ${scriptName}:\n${key}`);
+        }
+        return;
+      }
+
+      // Compatibility fallback if the integration hub has not loaded yet.
       const scriptData = await api(`/api/v1/scripts/${encodeURIComponent(scriptId)}`);
       if (!scriptData?.script) throw new Error('Script not found.');
       const script = scriptData.script;
       const options = await api('/api/v1/key-control/options');
       const provider = (options?.providers || []).find((item) => String(item.service_id || '') === String(script.service_id || ''));
-      if (!provider) {
-        throw new Error('No active provider is linked to this script service. Configure a provider for this service first.');
-      }
-
+      if (!provider) throw new Error('No active provider is linked to this script service.');
       const created = await api('/api/v1/key-control/keys', {
         method: 'POST',
-        body: JSON.stringify({
-          provider_id: provider.id,
-          service_id: script.service_id,
-          key_name: `${script.name} key`,
-          days: 30,
-          hours: 0,
-          minutes: 0,
-          max_devices: 1,
-          forever: false,
-        }),
+        body: JSON.stringify({ provider_id: provider.id, service_id: script.service_id, key_name: `${script.name} key`, days: 30, hours: 0, minutes: 0, max_devices: Math.max(1, Number(provider.max_hwids_per_key || 1)), forever: false }),
       });
-
       const key = created?.license_key;
       if (!key) throw new Error('Key creation succeeded but no key was returned.');
       setStatus(`Key created for ${script.name}:\n${key}`);
-      try {
-        await navigator.clipboard?.writeText(key);
-        setStatus(`Key created for ${script.name} and copied to clipboard:\n${key}`);
-      } catch {}
     } catch (error) {
       setStatus(error.message || 'Unable to generate key.', true);
     } finally {

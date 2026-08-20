@@ -5,9 +5,11 @@ import path from 'node:path';
 const read = (file) => fs.readFileSync(path.resolve(process.cwd(), file), 'utf8');
 
 describe('Script loader UI integration', () => {
-  it('uses the Frezen keyed server-file loader and does not expose the example external loader', () => {
+  it('uses the Frezen keyed server-file loader and the unified dashboard integration hub', () => {
     const panel = read('public/dashboard/scripts-panel.js');
     const bridge = read('public/dashboard/script-loader-ui.js');
+    const keyActions = read('public/dashboard/script-key-actions.js');
+    const hub = read('public/dashboard/dashboard-integration-hub.js');
     const html = read('public/dashboard/index.html');
 
     expect(panel).toContain('script_key="PASTE YOUR KEY HERE"');
@@ -16,7 +18,15 @@ describe('Script loader UI integration', () => {
     expect(bridge).toContain('HttpService:UrlEncode(script_key)');
     expect(bridge).toMatch(/Frezen (?:uses its own keyed loader|keyed loader uses|server-file)/i);
     expect(bridge.toLowerCase()).not.toContain('luarmor');
-    expect(html).toContain('/dashboard/script-loader-ui.js?v=key-control-v11');
-    expect(html).toContain('/dashboard/script-key-actions.js?v=script-key-actions-v1');
+    expect(keyActions).toContain('FrezenIntegration.generateKeyForScript');
+    expect(keyActions).toContain('Generate Key');
+    expect(hub).toContain('/api/v1/key-system/sync');
+    expect(hub).toContain('/api/v1/key-control/options');
+    expect(hub).toContain('ensureScriptBinding');
+    expect(hub).toContain('generateKeyForScript');
+    expect(hub).toContain('max_hwids_per_key');
+    expect(html).toContain('/dashboard/dashboard-integration-hub.js?v=integration-v1');
+    expect(html).toContain('/dashboard/script-loader-ui.js?v=key-control-v12');
+    expect(html).toContain('/dashboard/script-key-actions.js?v=integration-v1');
   });
 });
