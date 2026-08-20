@@ -27,7 +27,7 @@ describe('Script loader UI integration', () => {
     expect(hub).toContain('max_hwids_per_key');
     expect(hub).not.toContain('await syncToServer(true);');
     expect(html).toContain('/dashboard/dashboard-integration-hub.js?v=integration-v2');
-    expect(html).toContain('/dashboard/script-loader-ui.js?v=key-control-v13');
+    expect(html).toContain('/dashboard/script-loader-ui.js?v=hwid-v15');
     expect(html).toContain('/dashboard/script-key-actions.js?v=integration-v2');
   });
 });
