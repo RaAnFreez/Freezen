@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
-const workerRoot = fileURLToPath(new URL("../", import.meta.url));
 const scriptLoaderSource = readFileSync(new URL("../src/script-loader.js", import.meta.url), "utf8");
 const runtimeHwidSource = readFileSync(new URL("../src/security/runtime-hwid.js", import.meta.url), "utf8");
 
