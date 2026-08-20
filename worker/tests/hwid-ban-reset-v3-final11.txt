@@ -1,0 +1,1 @@
+No schema reset is needed for this change.
