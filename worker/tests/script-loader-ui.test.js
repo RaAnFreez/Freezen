@@ -16,6 +16,7 @@ describe('Script loader UI integration', () => {
     expect(bridge).toContain('HttpService:UrlEncode(script_key)');
     expect(bridge).toMatch(/Frezen (?:uses its own keyed loader|keyed loader uses|server-file)/i);
     expect(bridge.toLowerCase()).not.toContain('luarmor');
-    expect(html).toContain('/dashboard/script-loader-ui.js?v=key-control-v10');
+    expect(html).toContain('/dashboard/script-loader-ui.js?v=key-control-v11');
+    expect(html).toContain('/dashboard/script-key-actions.js?v=script-key-actions-v1');
   });
 });
