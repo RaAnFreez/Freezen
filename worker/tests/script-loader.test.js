@@ -31,12 +31,10 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(await response.text()).toBe('INVALID_KEY');
   });
 
-  it('blocks direct browser navigation with the branded access-denied page', async () => {
+  it('returns the generated loader source when the script link is opened directly', async () => {
     const { deliverScriptFileByKey } = await import('../src/script-loader.js');
-    const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
-    const keyHash = await hash(key);
     const response = await deliverScriptFileByKey(
-      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}`, {
+      new Request('https://frezen.test/files/s1.lua', {
         headers: {
           accept: 'text/html,application/xhtml+xml',
           'sec-fetch-mode': 'navigate',
@@ -44,15 +42,17 @@ describe('Frezen server-file keyed script delivery', () => {
           'user-agent': 'Mozilla/5.0 Chrome/140.0 Safari/537.36',
         },
       }),
-      { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', file_id: 's1', content: 'print("hello")', content_type: 'text/x-lua' }) },
-      'req-browser-file',
+      { DB: dbMock('', null) },
+      'req-loader-page',
       's1',
     );
-    expect(response.status).toBe(403);
-    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/plain');
     const body = await response.text();
-    expect(body).toContain('You cant access this link');
-    expect(body).toContain('FREZEN SERVER-FILE');
+    expect(body).toContain('script_key="PASTE YOUR KEY HERE";');
+    expect(body).toContain('https://frezen.test/files/s1.lua?key=');
+    expect(body).toContain('&hwid=');
+    expect(body).toContain('loadstring(source)();');
   });
 
   it('returns the stored script source for a matching keyed loader request', async () => {
@@ -60,7 +60,7 @@ describe('Frezen server-file keyed script delivery', () => {
     const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
     const keyHash = await hash(key);
     const response = await deliverScriptFileByKey(
-      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}`, { headers: { accept: '*/*', 'user-agent': 'FrezenExecutor/1.0' } }),
+      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}&hwid=hwid-1`, { headers: { accept: '*/*', 'user-agent': 'FrezenExecutor/1.0' } }),
       { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', file_id: 's1', content: 'print("hello")', content_type: 'text/x-lua' }) },
       'req-2',
       's1',
@@ -71,7 +71,33 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(response.headers.get('content-type')).toContain('text/x-lua');
   });
 
-  it('keeps legacy browser navigation denied with the same branded page', async () => {
+  it('denies a non-navigation file request without a key', async () => {
+    const { deliverScriptFileByKey } = await import('../src/script-loader.js');
+    const response = await deliverScriptFileByKey(
+      new Request('https://frezen.test/files/s1.lua', { headers: { accept: '*/*', 'user-agent': 'FrezenExecutor/1.0' } }),
+      { DB: dbMock('', null) },
+      'req-file-2',
+      's1',
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it('serves a valid file when Accept is text/html but the request is not browser navigation', async () => {
+    const { deliverScriptFileByKey } = await import('../src/script-loader.js');
+    const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
+    const keyHash = await hash(key);
+    const response = await deliverScriptFileByKey(
+      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}`, {
+        headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': 'FrezenExecutor/1.0' },
+      }),
+      { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', file_id: 's1', content: 'print("hello")', content_type: 'text/x-lua' }) },
+      'req-file-3',
+      's1',
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it('keeps legacy browser navigation denied with the branded page', async () => {
     const { deliverScriptByKey } = await import('../src/script-loader.js');
     const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
     const keyHash = await hash(key);
