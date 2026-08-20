@@ -2,6 +2,7 @@ import entry from "./entry.js";
 import { requirePrivateAccess } from "./security/private-access.js";
 import { createSafeLinkUCheckpoint } from "./safelinku.js";
 import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublicFlow, launchPublicFlow, publicGetKeyPage } from "./key-system-runtime.js";
+import { getCanonicalDashboardState, reconcileDashboardState } from "./dashboard-state.js";
 import { keyControlOptions, createKeyFolder, listKeys, createKey } from "./key-control.js";
 import { deleteKey, cleanupExpiredKeys } from "./key-lifecycle.js";
 import { persistKeySecret, revealKeySecret } from "./key-secret.js";
@@ -14,9 +15,7 @@ const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", ...NO_
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
 async function asset(request, env, pathname) {
-  if (!env.ASSETS || typeof env.ASSETS.fetch !== "function") {
-    return new Response("UI assets are not configured", { status: 503, headers: { ...NO_STORE, "content-type": "text/plain; charset=utf-8" } });
-  }
+  if (!env.ASSETS || typeof env.ASSETS.fetch !== "function") return new Response("UI assets are not configured", { status: 503, headers: { ...NO_STORE, "content-type": "text/plain; charset=utf-8" } });
   const url = new URL(request.url);
   url.pathname = pathname;
   const response = await env.ASSETS.fetch(new Request(url, request));
@@ -31,18 +30,10 @@ async function asset(request, env, pathname) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-
     const scriptFileMatch = url.pathname.match(/^\/files\/([^/]+)\.lua\/?$/i);
-    if (scriptFileMatch) {
-      const requestId = crypto.randomUUID();
-      return deliverScriptFileByKey(request, env, requestId, decodeURIComponent(scriptFileMatch[1]));
-    }
-
+    if (scriptFileMatch) return deliverScriptFileByKey(request, env, crypto.randomUUID(), decodeURIComponent(scriptFileMatch[1]));
     const scriptLoaderMatch = url.pathname.match(/^\/loader\/([^/]+)\/?$/);
-    if (scriptLoaderMatch) {
-      const requestId = crypto.randomUUID();
-      return deliverScriptByKey(request, env, requestId, decodeURIComponent(scriptLoaderMatch[1]));
-    }
+    if (scriptLoaderMatch) return deliverScriptByKey(request, env, crypto.randomUUID(), decodeURIComponent(scriptLoaderMatch[1]));
 
     if (request.method === "POST" && url.pathname === "/api/v1/safelinku/checkpoints/create") {
       const requestId = crypto.randomUUID();
@@ -54,12 +45,21 @@ export default {
       return json({ provider: "safelinku", ...result, request_id: requestId }, result.http_status || (result.status === "ok" ? 200 : 503));
     }
 
+    if (url.pathname === "/api/v1/dashboard/state") {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+      const result = await getCanonicalDashboardState(env, access);
+      result.headers.set("x-request-id", requestId);
+      return result;
+    }
+
     if (request.method === "POST" && url.pathname === "/api/v1/key-system/sync") {
       const requestId = crypto.randomUUID();
       const access = await requirePrivateAccess(request, env, requestId);
       if (access instanceof Response) return access;
-      const result = await syncKeySystemConfig(request, env, access);
-      return new Response(await result.text(), { status: result.status, headers: { ...Object.fromEntries(result.headers.entries()), "x-request-id": requestId } });
+      return reconcileDashboardState(request, env, access);
     }
 
     if (url.pathname === "/api/v1/key-control/options") {
@@ -91,12 +91,8 @@ export default {
         if (!response.ok || response.status < 200 || response.status >= 300) return response;
         try {
           const payload = await response.clone().json();
-          if (payload?.key?.id && payload?.license_key) {
-            await persistKeySecret(env, payload.key.id, payload.license_key);
-          }
-        } catch (error) {
-          console.error('key secret persistence skipped', { requestId, message: String(error?.message || error) });
-        }
+          if (payload?.key?.id && payload?.license_key) await persistKeySecret(env, payload.key.id, payload.license_key);
+        } catch (error) { console.error('key secret persistence skipped', { requestId, message: String(error?.message || error) }); }
         return response;
       }
       return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
@@ -133,26 +129,19 @@ export default {
       return listAllHwid(env, requestId, access);
     }
 
-    if (request.method === "GET" && url.pathname === "/api/v1/get-key/checkpoint/callback") {
-      return json({ status: "callback_received", checkpoint_id: url.searchParams.get("checkpoint_id"), flow_id: url.searchParams.get("flow_id") || null, verified: false, message: "Returned from SafeLinkU. Completion remains pending until a trusted SafeLinkU completion signal is available." }, 202);
-    }
-
+    if (request.method === "GET" && url.pathname === "/api/v1/get-key/checkpoint/callback") return json({ status: "callback_received", checkpoint_id: url.searchParams.get("checkpoint_id"), flow_id: url.searchParams.get("flow_id") || null, verified: false, message: "Returned from SafeLinkU. Completion remains pending until a trusted SafeLinkU completion signal is available." }, 202);
     const publicServiceConfig = url.pathname.match(/^\/api\/v1\/get-key\/service\/([^/]+)$/);
     if (request.method === "GET" && publicServiceConfig) return getPublicServiceConfig(env, decodeURIComponent(publicServiceConfig[1]));
-
     if (request.method === "POST" && url.pathname === "/api/v1/get-key/flow/start") {
       let body = {};
       try { body = await request.clone().json(); } catch {}
       const slug = url.searchParams.get("slug") || body?.slug || "";
       return startPublicFlow(request, env, slug);
     }
-
     const publicFlowMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)$/);
     if (request.method === "GET" && publicFlowMatch) return getPublicFlow(env, decodeURIComponent(publicFlowMatch[1]));
-
     const publicFlowLaunchMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)\/launch$/);
     if (request.method === "GET" && publicFlowLaunchMatch) return launchPublicFlow(env, decodeURIComponent(publicFlowLaunchMatch[1]));
-
     const publicGetKeyMatch = url.pathname.match(/^\/get-key\/([^/]+)\/?$/);
     if (request.method === "GET" && publicGetKeyMatch) return publicGetKeyPage(env, request, decodeURIComponent(publicGetKeyMatch[1]));
 
@@ -167,11 +156,7 @@ export default {
 
     return entry.fetch(request, env, ctx);
   },
-
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(Promise.all([
-      cleanupExpiredKeys(env),
-      cleanupHwidV2(env),
-    ]));
+    ctx.waitUntil(Promise.all([cleanupExpiredKeys(env), cleanupHwidV2(env)]));
   },
 };
