@@ -13,10 +13,10 @@ describe('Script loader UI integration', () => {
     const html = read('public/dashboard/index.html');
 
     expect(panel).toContain('script_key="PASTE YOUR KEY HERE"');
-    expect(bridge).toContain('/files/');
-    expect(bridge).toContain('.lua');
-    expect(bridge).toContain('HttpService:UrlEncode(script_key)');
-    expect(bridge).toMatch(/Frezen (?:uses its own keyed loader|keyed loader uses|server-file)/i);
+    expect(bridge).toContain('/loader/');
+    expect(bridge).toContain('?bootstrap=1&key=');
+    expect(bridge).toContain('UrlEncode(script_key)');
+    expect(bridge).toMatch(/Frezen (?:uses its own keyed loader|keyed loader uses|server-file|compact loader)/i);
     expect(bridge.toLowerCase()).not.toContain('luarmor');
     expect(keyActions).toContain('FrezenIntegration.generateKeyForScript');
     expect(keyActions).toContain('Generate Key');
