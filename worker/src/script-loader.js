@@ -51,6 +51,7 @@ async function findScriptFile(env, keyHash, scriptId) {
       f.content,
       f.content_type,
       l.id AS license_id,
+      l.user_id AS license_user_id,
       l.status AS license_status,
       l.expires_at AS license_expires_at,
       kr.id AS key_record_id
@@ -118,6 +119,7 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
   const key = url.searchParams.get("key")?.trim() ?? "";
   const hwid = url.searchParams.get("hwid")?.trim() ?? "";
   if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny("INVALID_KEY", 403, requestId);
+  if (!hwid || hwid.length > 512) return deny("HWID_REQUIRED", 403, requestId);
 
   try {
     const keyHash = await sha256Hex(key);
@@ -137,11 +139,8 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
     if (row.license_expires_at != null && row.license_expires_at && new Date(row.license_expires_at).getTime() <= Date.now()) return deny("LICENSE_EXPIRED", 403, requestId);
     if (!row.content) return deny("SCRIPT_CONTENT_MISSING", 404, requestId);
 
-    let bound = null;
-    if (hwid) {
-      bound = await bindRuntimeHwid(env, row.license_id, hwid);
-      if (!bound.ok) return deny(bindFailureMessage(bound.reason), 403, requestId);
-    }
+    const bound = await bindRuntimeHwid(env, row.license_id, row.license_user_id, hwid);
+    if (!bound.ok) return deny(bindFailureMessage(bound.reason), 403, requestId);
 
     return new Response(row.content, {
       status: 200,
@@ -154,8 +153,9 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
         "x-frezen-request-id": requestId,
         "x-frezen-file-id": row.file_id || row.script_id,
         "x-frezen-version": row.version,
-        "x-frezen-hwid-bound": bound?.fingerprint ? "true" : "false",
-        ...(bound?.fingerprint ? { "x-frezen-hwid-fingerprint": bound.fingerprint } : {}),
+        "x-frezen-hwid-bound": "true",
+        "x-frezen-hwid-fingerprint": bound.fingerprint,
+        "x-frezen-hwid-device": bound.device_id,
       },
     });
   } catch (error) {
