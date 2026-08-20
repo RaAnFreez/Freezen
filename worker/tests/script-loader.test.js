@@ -49,9 +49,10 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/html');
     const body = await response.text();
-    expect(body).toContain('script_key="PASTE YOUR KEY HERE";');
+    expect(body).toContain('Generated loader source with runtime HWID capture.');
+    expect(body).toContain('script_key=&quot;PASTE YOUR KEY HERE&quot;;');
     expect(body).toContain('https://frezen.test/files/s1.lua?key=');
-    expect(body).toContain('&hwid=');
+    expect(body).toContain('&amp;hwid=');
     expect(body).toContain('loadstring(source)();');
     expect(body).toContain('CAPTURE ENABLED');
   });
