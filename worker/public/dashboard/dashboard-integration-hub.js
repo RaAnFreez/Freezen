@@ -1,6 +1,7 @@
 (() => {
   const STATE_KEYS = ['frezen.services.v1', 'frezen.providers.v1', 'frezen.safelinku.checkpoints.v1'];
   let syncPromise = null;
+  let hydrating = false;
 
   const read = (key) => {
     try {
@@ -12,6 +13,36 @@
   const write = (key, value) => {
     try { localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : [])); } catch {}
   };
+
+  async function getOptions() {
+    const response = await fetch('/api/v1/key-control/options', {
+      credentials: 'same-origin',
+      headers: { accept: 'application/json' },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || data.error || `HTTP ${response.status}`);
+    return {
+      services: Array.isArray(data.services) ? data.services : [],
+      providers: Array.isArray(data.providers) ? data.providers : [],
+      folders: Array.isArray(data.folders) ? data.folders : [],
+    };
+  }
+
+  // D1 is the canonical source. Never merge local-only rows back into the
+  // server snapshot: that was the reason deleted Service/Provider records
+  // previously came back after refresh.
+  function hydrateLocal(options) {
+    hydrating = true;
+    try {
+      write(STATE_KEYS[0], options.services);
+      write(STATE_KEYS[1], options.providers);
+      write(STATE_KEYS[2], read(STATE_KEYS[2]).filter((row) => options.providers.some((provider) =>
+        JSON.stringify(provider?.checkpoints || []).includes(String(row?.id || '')))));
+    } finally {
+      hydrating = false;
+    }
+    return options;
+  }
 
   async function syncToServer(force = false) {
     if (syncPromise && !force) return syncPromise;
@@ -33,38 +64,14 @@
     return syncPromise;
   }
 
-  async function getOptions() {
-    const response = await fetch('/api/v1/key-control/options', {
-      credentials: 'same-origin',
-      headers: { accept: 'application/json' },
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || data.error || `HTTP ${response.status}`);
-    return data;
-  }
-
-  function mergeServerState(options) {
-    if (Array.isArray(options?.services) && options.services.length) {
-      const local = read(STATE_KEYS[0]);
-      const byId = new Map(local.map((row) => [String(row?.id || ''), row]));
-      const merged = options.services.map((row) => ({ ...(byId.get(String(row.id)) || {}), ...row }));
-      const localOnly = local.filter((row) => !options.services.some((serverRow) => String(serverRow.id) === String(row?.id)));
-      write(STATE_KEYS[0], [...merged, ...localOnly]);
-    }
-    if (Array.isArray(options?.providers) && options.providers.length) {
-      const local = read(STATE_KEYS[1]);
-      const byId = new Map(local.map((row) => [String(row?.id || ''), row]));
-      const merged = options.providers.map((row) => ({ ...(byId.get(String(row.id)) || {}), ...row }));
-      const localOnly = local.filter((row) => !options.providers.some((serverRow) => String(serverRow.id) === String(row?.id)));
-      write(STATE_KEYS[1], [...merged, ...localOnly]);
-    }
-    return options;
-  }
-
   async function hydrate() {
-    await syncToServer(true);
-    const options = await getOptions();
-    return mergeServerState(options);
+    hydrating = true;
+    try {
+      const options = await getOptions();
+      return hydrateLocal(options);
+    } finally {
+      hydrating = false;
+    }
   }
 
   async function getScript(scriptId) {
@@ -81,35 +88,18 @@
     const script = await getScript(scriptId);
     if (!script?.service_id) throw new Error('SCRIPT_SERVICE_NOT_CONFIGURED');
 
-    let options = await hydrate();
-    let provider = (options.providers || []).find((row) => String(row.service_id || '') === String(script.service_id));
-    if (provider?.active !== false) return { script, provider, options };
-
-    // Retry once after syncing the currently selected local provider/service state.
+    // Push only intentional local edits/deletes first, then read the canonical
+    // D1 graph again. A stale local cache can never resurrect a deleted record.
     await syncToServer(true);
-    options = await getOptions();
-    provider = (options.providers || []).find((row) => String(row.service_id || '') === String(script.service_id) && row.active !== 0 && row.active !== false);
-    if (provider) return { script, provider, options };
-
-    const localProviders = read(STATE_KEYS[1]);
-    const localServices = read(STATE_KEYS[0]);
-    const localService = localServices.find((row) => String(row?.id || '') === String(script.service_id) || String(row?.slug || '').toLowerCase() === String(script.service_slug || '').toLowerCase());
-    const localProvider = localProviders.find((row) => String(row?.service_id || '') === String(script.service_id) || (localService && String(row?.service_id || '') === String(localService.id)));
-
-    if (localService && localProvider) {
-      await fetch('/api/v1/key-system/sync', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ services: [localService], providers: [{ ...localProvider, service_id: script.service_id }], checkpoints: read(STATE_KEYS[2]) }),
-      });
-      options = await getOptions();
-      provider = (options.providers || []).find((row) => String(row.service_id || '') === String(script.service_id) && row.active !== 0 && row.active !== false);
-      if (provider) return { script, provider, options };
+    const options = await hydrate();
+    const provider = (options.providers || []).find((row) =>
+      String(row.service_id || '') === String(script.service_id) && row.active !== false && row.active !== 0,
+    );
+    if (!provider) {
+      const serviceName = script.service_name ? ` (${script.service_name})` : '';
+      throw new Error(`No active provider is linked to this script service${serviceName}. Configure the provider for this exact service, then try again.`);
     }
-
-    const serviceName = script.service_name ? ` (${script.service_name})` : '';
-    throw new Error(`No active provider is linked to this script service${serviceName}. Open Providers, select this exact service, save it, then try Generate Key again.`);
+    return { script, provider, options };
   }
 
   async function generateKeyForScript(scriptId, validity = {}) {
@@ -139,8 +129,8 @@
     stateKeys: STATE_KEYS,
     read,
     write,
-    syncToServer,
     getOptions,
+    syncToServer,
     hydrate,
     getScript,
     ensureScriptBinding,
@@ -148,7 +138,12 @@
   };
 
   let timer = null;
-  const schedule = () => { clearTimeout(timer); timer = setTimeout(() => syncToServer().catch(() => {}), 200); };
+  const schedule = () => {
+    if (hydrating) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => syncToServer().catch(() => {}), 250);
+  };
+
   const originalSetItem = Storage.prototype.setItem;
   const originalRemoveItem = Storage.prototype.removeItem;
   Storage.prototype.setItem = function(key, value) {
@@ -162,5 +157,6 @@
     return result;
   };
   window.addEventListener('storage', (event) => { if (STATE_KEYS.includes(event.key)) schedule(); });
-  syncToServer().catch(() => {});
+
+  window.FrezenIntegrationReady = hydrate().catch(() => null);
 })();
