@@ -40,8 +40,9 @@ export default {
       const scriptId = decodeURIComponent(scriptLoaderMatch[1]);
       if (url.searchParams.get("bootstrap") === "1") {
         if (request.method !== "GET") return text("METHOD_NOT_ALLOWED", 405, crypto.randomUUID());
-        if (!url.searchParams.get("key")?.trim()) return text("INVALID_KEY", 403, crypto.randomUUID());
-        return text(buildRuntimeLoaderSource(request, scriptId), 200, crypto.randomUUID());
+        const key = url.searchParams.get("key")?.trim() ?? "";
+        if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return text("INVALID_KEY", 403, crypto.randomUUID());
+        return text(buildRuntimeLoaderSource(request, scriptId, key), 200, crypto.randomUUID());
       }
       return deliverScriptByKey(request, env, crypto.randomUUID(), scriptId);
     }
@@ -163,7 +164,7 @@ export default {
     const publicFlowMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)$/);
     if (request.method === "GET" && publicFlowMatch) return getPublicFlow(env, decodeURIComponent(publicFlowMatch[1]));
     const publicFlowLaunchMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)\/launch$/);
-    if (request.method === "GET" && publicFlowLaunchMatch) return launchPublicFlow(env, decodeURIComponent(publicFlowLaunchMatch[1]));
+    if (request.method === "GET" && publicFlowLaunchMatch) return launchPublicFlow(request, env, decodeURIComponent(publicFlowLaunchMatch[1]));
     const publicGetKeyMatch = url.pathname.match(/^\/get-key\/([^/]+)\/?$/);
     if (request.method === "GET" && publicGetKeyMatch) return publicGetKeyPage(env, request, decodeURIComponent(publicGetKeyMatch[1]));
 
