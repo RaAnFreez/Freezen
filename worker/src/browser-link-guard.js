@@ -1,9 +1,11 @@
-export function isBrowserNavigation(request) {
+export function isBrowserNavigation(request, { strictAccept = false } = {}) {
   const mode = (request.headers.get("sec-fetch-mode") || "").toLowerCase();
   const dest = (request.headers.get("sec-fetch-dest") || "").toLowerCase();
   const accept = (request.headers.get("accept") || "").toLowerCase();
   const userAgent = (request.headers.get("user-agent") || "").toLowerCase();
+
   if (mode === "navigate" || dest === "document") return true;
+  if (strictAccept && accept.includes("text/html")) return true;
   return accept.includes("text/html") && /mozilla|chrome|safari|firefox|edg\//i.test(userAgent);
 }
 
