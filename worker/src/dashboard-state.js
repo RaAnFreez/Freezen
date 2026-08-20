@@ -59,22 +59,49 @@ export async function reconcileDashboardState(request, env, access) {
   const checkpoints = Array.isArray(body?.checkpoints) ? body.checkpoints : [];
   const ownerId = access.user_id;
   const now = new Date().toISOString();
-  const serviceIds = normalizeIdSet(services);
+
+  // First normalize service identities. A stale local cache can still reference an old
+  // UUID while the same owner already has that slug in D1 (including an inactive row).
+  // Reuse the server row in that case instead of failing the whole reconciliation on
+  // a UNIQUE(slug) collision. The subsequent canonical hydrate replaces local IDs.
+  const normalizedServices = [];
+  for (const service of services) {
+    const requestedId = cleanId(service?.id);
+    const slug = slugify(service?.slug);
+    if (!slug) continue;
+    let canonicalId = requestedId;
+    if (requestedId) {
+      const byId = await env.DB.prepare('SELECT id,slug FROM frezen_key_services WHERE id=?1 AND owner_id=?2 LIMIT 1').bind(requestedId, ownerId).first();
+      if (byId?.id) canonicalId = byId.id;
+      if (byId?.slug && byId.slug !== slug) {
+        await env.DB.prepare('INSERT OR IGNORE INTO frezen_key_service_aliases (slug,service_id) VALUES (?1,?2)').bind(byId.slug, canonicalId).run();
+      }
+    }
+    const bySlug = await env.DB.prepare('SELECT id,active FROM frezen_key_services WHERE owner_id=?1 AND slug=?2 LIMIT 1').bind(ownerId, slug).first();
+    if (bySlug?.id && bySlug.id !== canonicalId) canonicalId = bySlug.id;
+    normalizedServices.push({ source: service, id: canonicalId || crypto.randomUUID(), slug });
+  }
+
+  const serviceIds = new Set(normalizedServices.map((row) => row.id));
   const providerIds = normalizeIdSet(providers);
   const checkpointIds = normalizeIdSet(checkpoints);
 
   try {
-    for (const service of services) {
-      const id = cleanId(service?.id); const slug = slugify(service?.slug);
-      if (!id || !slug) continue;
-      const current = await env.DB.prepare('SELECT id,slug FROM frezen_key_services WHERE id=?1 AND owner_id=?2 LIMIT 1').bind(id, ownerId).first();
-      if (current?.slug && current.slug !== slug) await env.DB.prepare('INSERT OR IGNORE INTO frezen_key_service_aliases (slug,service_id) VALUES (?1,?2)').bind(current.slug, id).run();
-      await env.DB.prepare(`INSERT INTO frezen_key_services (id,owner_id,name,slug,description,premium,keyless,keyless_days_json,active,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,COALESCE((SELECT created_at FROM frezen_key_services WHERE id=?1),datetime('now')),?10) ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,slug=excluded.slug,description=excluded.description,premium=excluded.premium,keyless=excluded.keyless,keyless_days_json=excluded.keyless_days_json,active=excluded.active,updated_at=excluded.updated_at`).bind(id,ownerId,String(service?.name||'Service').slice(0,100),slug,String(service?.description||'').slice(0,500),service?.premium?1:0,service?.keyless?1:0,JSON.stringify(Array.isArray(service?.days)?service.days:[]),service?.active===false?0:1,now).run();
+    for (const item of normalizedServices) {
+      const service = item.source;
+      const id = item.id;
+      await env.DB.prepare(`INSERT INTO frezen_key_services (id,owner_id,name,slug,description,premium,keyless,keyless_days_json,active,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,COALESCE((SELECT created_at FROM frezen_key_services WHERE id=?1),datetime('now')),?10) ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,slug=excluded.slug,description=excluded.description,premium=excluded.premium,keyless=excluded.keyless,keyless_days_json=excluded.keyless_days_json,active=excluded.active,updated_at=excluded.updated_at`).bind(id,ownerId,String(service?.name||'Service').slice(0,100),item.slug,String(service?.description||'').slice(0,500),service?.premium?1:0,service?.keyless?1:0,JSON.stringify(Array.isArray(service?.days)?service.days:[]),service?.active===false?0:1,now).run();
     }
 
     for (const provider of providers) {
-      const id = cleanId(provider?.id); const serviceId = cleanId(provider?.service_id);
-      if (!id || !serviceId || !serviceIds.has(serviceId)) continue;
+      const id = cleanId(provider?.id); const requestedServiceId = cleanId(provider?.service_id);
+      if (!id || !requestedServiceId) continue;
+      let serviceId = requestedServiceId;
+      if (!serviceIds.has(serviceId)) {
+        const match = normalizedServices.find((row) => String(row.source?.id || '') === requestedServiceId);
+        serviceId = match?.id || null;
+      }
+      if (!serviceId || !serviceIds.has(serviceId)) continue;
       await env.DB.prepare(`INSERT INTO frezen_key_providers (id,owner_id,service_id,name,type,active,checkpoints_json,settings_json,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,COALESCE((SELECT created_at FROM frezen_key_providers WHERE id=?1),datetime('now')),?9) ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id,service_id=excluded.service_id,name=excluded.name,type=excluded.type,active=excluded.active,checkpoints_json=excluded.checkpoints_json,settings_json=excluded.settings_json,updated_at=excluded.updated_at`).bind(id,ownerId,serviceId,String(provider?.name||'Provider').slice(0,100),String(provider?.type||'safelinku').slice(0,40),provider?.active===false?0:1,JSON.stringify(checkpointRefs(provider?.checkpoints)),JSON.stringify(provider||{}),now).run();
     }
 
@@ -84,7 +111,8 @@ export async function reconcileDashboardState(request, env, access) {
       await env.DB.prepare(`INSERT INTO frezen_key_checkpoints (id,owner_id,name,type,url,active,metadata_json,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,COALESCE((SELECT created_at FROM frezen_key_checkpoints WHERE id=?1),datetime('now')),?8) ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,type=excluded.type,url=excluded.url,active=excluded.active,metadata_json=excluded.metadata_json,updated_at=excluded.updated_at`).bind(id,ownerId,String(checkpoint?.name||'Checkpoint').slice(0,100),String(checkpoint?.type||'safelinku').slice(0,40),reference?reference.slice(0,500):null,checkpoint?.active===false?0:1,JSON.stringify(checkpoint||{}),now).run();
     }
 
-    const missingServices = await env.DB.prepare(`SELECT id FROM frezen_key_services WHERE owner_id=?1 AND active=1${serviceIds.size?` AND id NOT IN (${[...serviceIds].map(()=>'?').join(',')})`:''}`).bind(ownerId,...serviceIds).all();
+    const serviceIdList = [...serviceIds];
+    const missingServices = await env.DB.prepare(`SELECT id FROM frezen_key_services WHERE owner_id=?1 AND active=1${serviceIdList.length?` AND id NOT IN (${serviceIdList.map(()=>'?').join(',')})`:''}`).bind(ownerId,...serviceIdList).all();
     const missingServiceIds = (missingServices?.results||[]).map((row)=>row.id).filter(Boolean);
     if (missingServiceIds.length) {
       await env.DB.prepare(`UPDATE frezen_key_services SET active=0,updated_at=CURRENT_TIMESTAMP WHERE owner_id=?1 AND id IN (${missingServiceIds.map(()=>'?').join(',')})`).bind(ownerId,...missingServiceIds).run();
@@ -103,6 +131,6 @@ export async function reconcileDashboardState(request, env, access) {
     return json({ synced:true, canonical:true, services:serviceIds.size, providers:providerIds.size, checkpoints:checkpointIds.size, deactivated:{ services:missingServiceIds.length, providers:missingProviderIds.length, checkpoints:missingCheckpointIds.length } });
   } catch (error) {
     console.error('dashboard state reconcile failed',{owner_id:ownerId,message:String(error?.message||error)});
-    return json({ error:'DATABASE_ERROR' },503);
+    return json({ error:'DATABASE_ERROR', message:String(error?.message || 'Database reconciliation failed').slice(0,300) },503);
   }
 }
