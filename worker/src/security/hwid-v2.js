@@ -11,10 +11,6 @@ const normalize = (value, max = 128) => typeof value === "string" ? value.trim()
 
 async function ensureSchema(env) {
   if (!env?.DB) return false;
-  // Real D1 exposes batch(); the lightweight test doubles used by the legacy
-  // HWID tests intentionally do not. In tests, the mocked V2 tables already
-  // exist conceptually, so skip DDL rather than converting a mock miss into a
-  // misleading DATABASE_ERROR.
   if (typeof env.DB.batch !== "function") return true;
   try {
     await env.DB.batch([
@@ -41,10 +37,6 @@ async function ensureSchema(env) {
     ]);
     return true;
   } catch (error) {
-    // Migration 0027 is the canonical production schema. A DDL failure must
-    // not mask an otherwise valid request as an HWID database failure when
-    // the table already exists; the actual operation below will report a real
-    // query error when the schema is genuinely unusable.
     console.warn("HWID V2 schema ensure skipped", { message: String(error?.message ?? error) });
     return true;
   }
@@ -82,6 +74,13 @@ async function getBinding(env, licenseId, hwidHash) {
   ).bind(licenseId, hwidHash).first();
 }
 
+async function getOwnerBlockedBinding(env, ownerId, hwidHash) {
+  if (!ownerId) return null;
+  return env.DB.prepare(
+    "SELECT id, status, blocked_reason FROM hwid_bindings_v2 WHERE owner_id = ?1 AND hwid_hash = ?2 AND status = 'blocked' ORDER BY blocked_at DESC LIMIT 1",
+  ).bind(ownerId, hwidHash).first();
+}
+
 export async function bindHwidV2(env, { licenseId, ownerId = null, rawHwid }) {
   if (!env?.DB) return { ok: false, reason: "DATABASE_UNAVAILABLE" };
   const id = normalize(licenseId);
@@ -95,6 +94,9 @@ export async function bindHwidV2(env, { licenseId, ownerId = null, rawHwid }) {
     if (state) return { ok: false, reason: state };
 
     const hwidHash = await sha256Hex(hwid);
+    const owner = ownerId ?? license.user_id ?? null;
+    if (await getOwnerBlockedBinding(env, owner, hwidHash)) return { ok: false, reason: "HWID_BLOCKED" };
+
     const existing = await getBinding(env, id, hwidHash);
     if (existing) {
       if (existing.status === "blocked") return { ok: false, reason: "HWID_BLOCKED" };
@@ -113,7 +115,7 @@ export async function bindHwidV2(env, { licenseId, ownerId = null, rawHwid }) {
     const deviceId = crypto.randomUUID();
     await env.DB.prepare(
       "INSERT INTO hwid_bindings_v2 (id, owner_id, license_id, hwid_hash, status) VALUES (?1, ?2, ?3, ?4, 'active')",
-    ).bind(deviceId, ownerId ?? license.user_id ?? null, id, hwidHash).run();
+    ).bind(deviceId, owner, id, hwidHash).run();
 
     return { ok: true, existing: false, deviceId, fingerprint: hwidHash.slice(0, 12) };
   } catch (error) {
@@ -136,6 +138,9 @@ export async function validateHwidV2(env, { licenseId, rawHwid, ownerId = null }
     if (ownerId && license.user_id && license.user_id !== ownerId) return { ok: false, reason: "LICENSE_OWNERSHIP_REQUIRED" };
 
     const hwidHash = await sha256Hex(hwid);
+    const owner = ownerId ?? license.user_id ?? null;
+    if (await getOwnerBlockedBinding(env, owner, hwidHash)) return { ok: false, reason: "HWID_BLOCKED" };
+
     const binding = await getBinding(env, id, hwidHash);
     if (!binding) return { ok: false, reason: "HWID_MISMATCH" };
     if (binding.status === "blocked") return { ok: false, reason: "HWID_BLOCKED" };
@@ -216,11 +221,10 @@ export async function resetHwidV2(env, { ownerId, licenseId }) {
     if (state) return { ok: false, reason: state };
     if (license.user_id !== owner) return { ok: false, reason: "LICENSE_OWNERSHIP_REQUIRED" };
 
-    const resetAt = new Date().toISOString();
     await env.DB.prepare(
-      "UPDATE hwid_bindings_v2 SET status = 'blocked', blocked_at = ?1, blocked_reason = 'HWID_RESET', updated_at = CURRENT_TIMESTAMP WHERE owner_id = ?2 AND license_id = ?3 AND status = 'active'",
-    ).bind(resetAt, owner, id).run();
-    return { ok: true, resetAt };
+      "DELETE FROM hwid_bindings_v2 WHERE owner_id = ?1 AND license_id = ?2 AND status = 'active'",
+    ).bind(owner, id).run();
+    return { ok: true, resetAt: new Date().toISOString() };
   } catch (error) {
     console.error("HWID V2 reset failed", { licenseId: id, message: String(error?.message ?? error) });
     return { ok: false, reason: "DATABASE_ERROR" };
