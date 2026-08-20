@@ -1,4 +1,5 @@
 import "./styles.css";
+import "./theme.css";
 import { renderProducts } from "./products.js";
 import { renderLicenses } from "./licenses.js";
 import { renderHwid } from "./hwid.js";
@@ -19,7 +20,7 @@ app.innerHTML = `
     </aside>
     <div class="mobile-overlay" id="overlay"></div>
     <main class="main">
-      <header class="topbar"><button class="menu-button" id="menu" aria-label="Open navigation">☰</button><div><p class="eyebrow">CONTROL SYSTEM V3</p><h1 id="page-title">Overview</h1></div><div class="top-actions"><button class="icon-button" aria-label="Notifications">♢</button><div class="avatar">O</div></div></header>
+      <header class="topbar"><button class="menu-button" id="menu" aria-label="Open navigation">MENU</button><div><p class="eyebrow">CONTROL SYSTEM V3</p><h1 id="page-title">Overview</h1></div><div class="top-actions"><button class="icon-button" aria-label="Notifications">N</button><div class="avatar">O</div></div></header>
       <section class="content" id="content"></section>
     </main>
   </div>`;
@@ -42,8 +43,8 @@ function renderSection(section) {
   content.innerHTML = isOverview ? `
     <div class="welcome"><div><p class="eyebrow">PRIVATE ADMIN AREA</p><h2>Welcome back, Owner</h2><p>Manage Frezen services from one secure control center.</p></div><span class="protected-badge"><i></i> Protected</span></div>
     <div class="stats-grid">${stat("Total Licenses", "—", "Awaiting API data", "key")}${stat("Active Licenses", "—", "Awaiting API data", "check")}${stat("Expired Licenses", "—", "Awaiting API data", "expired")}${stat("Revoked Licenses", "—", "Awaiting API data", "revoked")}${stat("Users", "—", "Awaiting API data", "users")}${stat("Script Requests", "—", "Awaiting API data", "script")}${stat("SafeLinkU Claims", "—", "Awaiting API data", "safelinku")}${stat("HWID Resets", "—", "Awaiting API data", "hwid")}</div>
-    <div class="panel-grid"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">ACTIVITY</p><h3>Recent activity</h3></div><button class="ghost-button">View logs</button></div><div class="empty"><span>◌</span><strong>No activity loaded</strong><p>Connect the dashboard to the authenticated Frezen API to display live activity.</p></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">SYSTEM</p><h3>Service status</h3></div></div><div class="service"><span><i></i> Authentication</span><b>Protected</b></div><div class="service"><span><i></i> Authorization</span><b>Protected</b></div><div class="service"><span><i></i> Database</span><b>Protected</b></div></section></div>` : `<section class="panel section-placeholder"><p class="eyebrow">${section.toUpperCase()}</p><h2>${items.find(([id]) => id === section)?.[1] ?? section}</h2><p>This navigation surface is ready. Feature-specific data and actions will be implemented only in their corresponding roadmap phases.</p></section>`;
+    <div class="panel-grid"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">ACTIVITY</p><h3>Recent activity</h3></div><button class="ghost-button">View logs</button></div><div class="empty"><span>--</span><strong>No activity loaded</strong><p>Connect the dashboard to the authenticated Frezen API to display live activity.</p></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">SYSTEM</p><h3>Service status</h3></div></div><div class="service"><span><i></i> Authentication</span><b>Protected</b></div><div class="service"><span><i></i> Authorization</span><b>Protected</b></div><div class="service"><span><i></i> Database</span><b>Protected</b></div></section></div>` : `<section class="panel section-placeholder"><p class="eyebrow">${section.toUpperCase()}</p><h2>${items.find(([id]) => id === section)?.[1] ?? section}</h2><p>This navigation surface is ready. Feature-specific data and actions will be implemented only in their corresponding roadmap phases.</p></section>`;
 }
 function stat(label, value, note, type) { return `<article class="stat-card"><div class="stat-icon">${icon(type)}</div><p>${label}</p><strong>${value}</strong><small>${note}</small></article>`; }
-function icon(id) { const map = { overview: "◈", licenses: "◇", keys: "⌁", products: "▣", scripts: "{}", users: "♙", hwid: "⌘", safelinku: "↗", discord: "◉", analytics: "⌁", audit: "≡", invites: "✦", security: "◆", settings: "⚙", key: "◇", check: "✓", expired: "◷", revoked: "⊘", script: "{}" }; return map[id] ?? "•"; }
+function icon(id) { const map = { overview: "OV", licenses: "LC", keys: "KY", products: "PR", scripts: "SC", users: "US", hwid: "HW", safelinku: "SL", discord: "DS", analytics: "AN", audit: "AL", invites: "IN", security: "SE", settings: "ST", key: "KY", check: "OK", expired: "EX", revoked: "RV", script: "SC" }; return map[id] ?? "--"; }
 renderSection("overview");
