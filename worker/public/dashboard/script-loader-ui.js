@@ -1,5 +1,5 @@
 (() => {
-  const INTERNAL_NOTE = 'Frezen keyed loader uses a server-stored .lua file endpoint with server-side key validation.';
+  const INTERNAL_NOTE = 'Frezen keyed loader uses a server-stored .lua file endpoint with server-side key and HWID validation.';
   const INTERNAL_LOADER_MARKER = `${location.origin}/files/internal.lua`;
 
   function loaderSource(scriptId) {
@@ -7,8 +7,19 @@
     return [
       'script_key="PASTE YOUR KEY HERE";',
       'local HttpService=game:GetService("HttpService");',
-      'local ok,hwid=pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end);',
-      'if not ok then hwid="" end;',
+      'local hwid="";',
+      'local ok,value=pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end);',
+      'if ok and type(value)=="string" and value~="" then hwid=value end;',
+      'if hwid=="" then',
+      '  local getters={gethwid,get_hwid,getHWID};',
+      '  for _,getter in ipairs(getters) do',
+      '    if type(getter)=="function" then',
+      '      local gok,gvalue=pcall(getter);',
+      '      if gok and type(gvalue)=="string" and gvalue~="" then hwid=gvalue break end;',
+      '    end',
+      '  end',
+      'end;',
+      'if hwid=="" then error("FREZEN_HWID_UNAVAILABLE") end;',
       `local source=game:HttpGet("${endpoint}?key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid));`,
       'loadstring(source)();',
     ].join('\n');
@@ -41,7 +52,7 @@
     if (!scriptId) return;
     const source = loaderSource(scriptId);
     navigator.clipboard?.writeText(source)
-      .then(() => alert('Frezen server-file loader copied. Replace PASTE YOUR KEY HERE with a valid key.'))
+      .then(() => alert('Frezen server-file loader copied. Replace PASTE YOUR KEY HERE with a valid key. HWID capture is enabled.'))
       .catch(() => alert(source));
   }, true);
 
