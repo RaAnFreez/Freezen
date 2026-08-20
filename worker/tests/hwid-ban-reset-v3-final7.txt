@@ -1,0 +1,1 @@
+Server-side ban is enforced before new binding; reset removes only active bindings.
