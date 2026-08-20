@@ -9,10 +9,10 @@ export function renderHwid(container) {
     <section class="panel hwid-panel">
       <div class="hwid-header">
         <div class="hwid-title-wrap">
-          <div class="hwid-icon">♧</div>
+          <div class="hwid-icon">HW</div>
           <div><p class="eyebrow">HWID CONTROL</p><h2>HWID blacklist</h2><p class="muted">Devices are added automatically when a valid key is used by the script loader.</p></div>
         </div>
-        <button class="primary-button hwid-ban-button" id="hwid-ban">＋ Ban</button>
+        <button class="primary-button hwid-ban-button" id="hwid-ban">Ban</button>
       </div>
 
       <div class="hwid-stats">
@@ -27,12 +27,12 @@ export function renderHwid(container) {
           <button class="hwid-tab" data-filter="active" role="tab">Active</button>
           <button class="hwid-tab" data-filter="blocked" role="tab">Blocked</button>
         </div>
-        <label class="hwid-search"><span>⌕</span><input id="hwid-search" placeholder="Search HWID or key…" autocomplete="off" /><button type="button" id="hwid-refresh" title="Refresh">↻</button></label>
+        <label class="hwid-search"><span>F</span><input id="hwid-search" placeholder="Search HWID or key" autocomplete="off" /><button type="button" id="hwid-refresh" title="Refresh">Refresh</button></label>
       </div>
 
       <div id="hwid-message" class="inline-message" hidden></div>
       <div id="hwid-list" class="hwid-list">
-        <div class="hwid-empty"><div class="hwid-empty-icon">♧</div><strong>Loading HWIDs…</strong><p>Device activity will appear here automatically.</p></div>
+        <div class="hwid-empty"><div class="hwid-empty-icon">HW</div><strong>Loading HWIDs</strong><p>Device activity will appear here automatically.</p></div>
       </div>
     </section>`;
 
@@ -65,7 +65,7 @@ export function renderHwid(container) {
   const render = () => {
     const visible = devices.filter(matches);
     if (!visible.length) {
-      list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">♧</div><strong>${devices.length ? "No HWIDs match" : "No HWIDs banned yet"}</strong><p>${devices.length ? "Try another search or filter." : "Banned hardware IDs will appear here. Valid key usage will automatically create device records."}</p></div>`;
+      list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">HW</div><strong>${devices.length ? "No HWIDs match" : "No HWIDs banned yet"}</strong><p>${devices.length ? "Try another search or filter." : "Banned hardware IDs will appear here. Valid key usage will automatically create device records."}</p></div>`;
       return;
     }
 
@@ -74,7 +74,7 @@ export function renderHwid(container) {
       ${visible.map((device) => {
         const isBlocked = device.status === "blocked";
         return `<tr>
-          <td><div class="device-cell"><span class="device-dot ${isBlocked ? "blocked" : "active"}"></span><div><code>${escapeHtml(device.fingerprint || device.id.slice(0, 12))}</code><small>${escapeHtml(device.id)}</small></div></div></td>
+          <td><div class="device-cell"><span class="device-dot ${isBlocked ? "blocked" : "active"}></span><div><code>${escapeHtml(device.fingerprint || device.id.slice(0, 12))}</code><small>${escapeHtml(device.id)}</small></div></div></td>
           <td>${escapeHtml(device.key_name || device.license_id)}</td>
           <td>${escapeHtml(device.service_name || device.service_id || "—")}</td>
           <td><span class="hwid-status ${isBlocked ? "blocked" : "active"}">${isBlocked ? "BLOCKED" : "ACTIVE"}</span></td>
@@ -96,7 +96,7 @@ export function renderHwid(container) {
 
   const load = async () => {
     show("");
-    list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">◌</div><strong>Loading HWIDs…</strong><p>Refreshing device records.</p></div>`;
+    list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">HW</div><strong>Loading HWIDs</strong><p>Refreshing device records.</p></div>`;
     try {
       const data = await api("/hwid/all");
       devices = Array.isArray(data.devices) ? data.devices : [];
