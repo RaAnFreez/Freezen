@@ -40,28 +40,35 @@ export async function decryptKeySecret(secret, payload) {
 
 export async function persistKeySecret(env, keyId, plaintext) {
   if (!env?.DB || !env?.FREZEN_MASTER_SECRET) return { stored: false, reason: 'MASTER_SECRET_UNAVAILABLE' };
-  const ciphertext = await encryptKeySecret(env.FREZEN_MASTER_SECRET, plaintext);
   try {
+    const ciphertext = await encryptKeySecret(env.FREZEN_MASTER_SECRET, plaintext);
     await env.DB.prepare('UPDATE frezen_key_records SET key_secret_ciphertext = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2').bind(ciphertext, keyId).run();
     return { stored: true };
   } catch (error) {
+    console.error('key secret persistence failed', { keyId, message: String(error?.message || error) });
     return { stored: false, reason: String(error?.message || 'KEY_SECRET_COLUMN_UNAVAILABLE') };
   }
 }
 
 export async function revealKeySecret(env, keyId, ownerId) {
-  if (!env?.DB || !env?.FREZEN_MASTER_SECRET) return { ok: false, error: 'KEY_SECRET_NOT_CONFIGURED' };
-  const row = await env.DB.prepare(`SELECT k.key_secret_ciphertext
-    FROM frezen_key_records k
-    WHERE k.id = ?1 AND k.owner_id = ?2
-    LIMIT 1`).bind(keyId, ownerId).first();
-  if (!row) return { ok: false, error: 'KEY_NOT_FOUND' };
-  if (!row.key_secret_ciphertext) return { ok: false, error: 'KEY_SECRET_UNAVAILABLE' };
+  if (!env?.DB) return { ok: false, error: 'DATABASE_UNAVAILABLE' };
+  if (!env?.FREZEN_MASTER_SECRET) return { ok: false, error: 'KEY_SECRET_NOT_CONFIGURED' };
   try {
-    const plaintext = await decryptKeySecret(env.FREZEN_MASTER_SECRET, row.key_secret_ciphertext);
-    return { ok: true, plaintext };
+    const row = await env.DB.prepare(`SELECT k.key_secret_ciphertext
+      FROM frezen_key_records k
+      WHERE k.id = ?1 AND k.owner_id = ?2
+      LIMIT 1`).bind(keyId, ownerId).first();
+    if (!row) return { ok: false, error: 'KEY_NOT_FOUND' };
+    if (!row.key_secret_ciphertext) return { ok: false, error: 'KEY_SECRET_UNAVAILABLE' };
+    try {
+      const plaintext = await decryptKeySecret(env.FREZEN_MASTER_SECRET, row.key_secret_ciphertext);
+      return { ok: true, plaintext };
+    } catch (error) {
+      console.error('key secret decrypt failed', { keyId, message: String(error?.message || error) });
+      return { ok: false, error: 'KEY_SECRET_INVALID' };
+    }
   } catch (error) {
-    console.error('key secret decrypt failed', { keyId, message: String(error?.message || error) });
-    return { ok: false, error: 'KEY_SECRET_INVALID' };
+    console.error('key secret lookup failed', { keyId, message: String(error?.message || error) });
+    return { ok: false, error: 'KEY_SECRET_UNAVAILABLE' };
   }
 }
