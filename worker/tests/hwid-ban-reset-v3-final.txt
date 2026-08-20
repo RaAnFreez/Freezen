@@ -1,0 +1,1 @@
+This branch keeps the existing D1 hwid_bindings_v2 contract and separates blocked status from reset semantics.
