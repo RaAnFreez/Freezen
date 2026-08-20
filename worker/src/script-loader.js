@@ -93,7 +93,21 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
   if (request.method !== "GET") return deny("METHOD_NOT_ALLOWED", 405, requestId);
   if (!env.DB || !scriptId) return serverError(requestId);
 
-  if (isBrowserNavigation(request, { strictAccept: responseMode === "legacy-loader" })) {
+  const browserNavigation = isBrowserNavigation(request, { strictAccept: responseMode === "legacy-loader" });
+  if (browserNavigation) {
+    if (responseMode === "file") {
+      return new Response(buildLoaderSource(request, scriptId), {
+        status: 200,
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "cache-control": "no-store, no-cache, must-revalidate",
+          pragma: "no-cache",
+          "x-content-type-options": "nosniff",
+          "x-frezen-request-id": requestId,
+          "x-frezen-script-link": "loader-source",
+        },
+      });
+    }
     return blockedBrowserPage(requestId);
   }
 

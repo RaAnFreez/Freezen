@@ -49,7 +49,12 @@ describe('script loader server-file delivery regression', () => {
   it('denies legacy browser navigation without the raw marker', async () => {
     const response = await deliverScriptByKey(
       new Request('https://frezen.test/loader/s1?key=FREZEN-valid', {
-        headers: { accept: 'text/html,application/xhtml+xml' },
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-dest': 'document',
+          'user-agent': 'Mozilla/5.0 Chrome/140.0 Safari/537.36',
+        },
       }),
       { DB: dbMock() },
       'req-legacy-1',
@@ -58,9 +63,9 @@ describe('script loader server-file delivery regression', () => {
     expect(response.status).toBe(403);
   });
 
-  it('denies the server-file URL without a key', async () => {
+  it('denies the server-file URL without a key when it is not a browser navigation', async () => {
     const response = await deliverScriptFileByKey(
-      new Request('https://frezen.test/files/s1.lua', { headers: { accept: '*/*' } }),
+      new Request('https://frezen.test/files/s1.lua', { headers: { accept: '*/*', 'user-agent': 'Roblox/WinInet' } }),
       { DB: dbMock() },
       'req-file-2',
       's1',
@@ -68,15 +73,21 @@ describe('script loader server-file delivery regression', () => {
     expect(response.status).toBe(403);
   });
 
-  it('does not depend on a browser Accept header for the file URL when the key is valid', async () => {
+  it('returns loader source instead of blocking direct server-file browser navigation', async () => {
     const response = await deliverScriptFileByKey(
-      new Request('https://frezen.test/files/s1.lua?key=FREZEN-valid', {
-        headers: { accept: 'text/html,application/xhtml+xml' },
+      new Request('https://frezen.test/files/s1.lua', {
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-dest': 'document',
+          'user-agent': 'Mozilla/5.0 Chrome/140.0 Safari/537.36',
+        },
       }),
       { DB: dbMock() },
       'req-file-3',
       's1',
     );
     expect(response.status).toBe(200);
+    expect(await response.text()).toContain('PASTE YOUR KEY HERE');
   });
 });
