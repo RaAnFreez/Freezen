@@ -8,11 +8,13 @@ import { deleteKey, cleanupExpiredKeys } from "./key-lifecycle.js";
 import { persistKeySecret, revealKeySecret } from "./key-secret.js";
 import { listAllHwid } from "./hwid-admin.js";
 import { cleanupHwidV2 } from "./security/runtime-hwid.js";
-import { deliverScriptByKey, deliverScriptFileByKey } from "./script-loader.js";
+import { deliverScriptByKey, deliverScriptFileByKey, buildLoaderSource } from "./script-loader.js";
+import { buildCompactLoaderSource, buildRuntimeLoaderSource } from "./short-loader.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", ...NO_STORE };
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+const text = (body, status = 200, requestId = "") => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8", ...NO_STORE, "x-frezen-request-id": requestId } });
 
 async function asset(request, env, pathname) {
   if (!env.ASSETS || typeof env.ASSETS.fetch !== "function") return new Response("UI assets are not configured", { status: 503, headers: { ...NO_STORE, "content-type": "text/plain; charset=utf-8" } });
@@ -32,8 +34,23 @@ export default {
     const url = new URL(request.url);
     const scriptFileMatch = url.pathname.match(/^\/files\/([^/]+)\.lua\/?$/i);
     if (scriptFileMatch) return deliverScriptFileByKey(request, env, crypto.randomUUID(), decodeURIComponent(scriptFileMatch[1]));
+
     const scriptLoaderMatch = url.pathname.match(/^\/loader\/([^/]+)\/?$/);
-    if (scriptLoaderMatch) return deliverScriptByKey(request, env, crypto.randomUUID(), decodeURIComponent(scriptLoaderMatch[1]));
+    if (scriptLoaderMatch) {
+      const scriptId = decodeURIComponent(scriptLoaderMatch[1]);
+      if (url.searchParams.get("bootstrap") === "1") {
+        if (request.method !== "GET") return text("METHOD_NOT_ALLOWED", 405, crypto.randomUUID());
+        if (!url.searchParams.get("key")?.trim()) return text("INVALID_KEY", 403, crypto.randomUUID());
+        return text(buildRuntimeLoaderSource(request, scriptId), 200, crypto.randomUUID());
+      }
+      return deliverScriptByKey(request, env, crypto.randomUUID(), scriptId);
+    }
+
+    const compactLoaderMatch = url.pathname.match(/^\/compact-loader\/([^/]+)\/?$/);
+    if (compactLoaderMatch) {
+      if (request.method !== "GET") return text("METHOD_NOT_ALLOWED", 405, crypto.randomUUID());
+      return text(buildCompactLoaderSource(request, decodeURIComponent(compactLoaderMatch[1])), 200, crypto.randomUUID());
+    }
 
     if (request.method === "POST" && url.pathname === "/api/v1/safelinku/checkpoints/create") {
       const requestId = crypto.randomUUID();
@@ -104,12 +121,17 @@ export default {
       const access = await requirePrivateAccess(request, env, requestId);
       if (access instanceof Response) return access;
       if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
-      const result = await revealKeySecret(env, decodeURIComponent(keySecretMatch[1]), access.user_id);
-      if (!result.ok) {
-        const status = result.error === "KEY_NOT_FOUND" ? 404 : result.error === "KEY_SECRET_UNAVAILABLE" ? 409 : 503;
-        return json({ error: result.error, request_id: requestId }, status);
+      try {
+        const result = await revealKeySecret(env, decodeURIComponent(keySecretMatch[1]), access.user_id);
+        if (!result.ok) {
+          const status = result.error === "KEY_NOT_FOUND" ? 404 : result.error === "KEY_SECRET_NOT_CONFIGURED" ? 409 : result.error === "KEY_SECRET_UNAVAILABLE" ? 409 : result.error === "DATABASE_UNAVAILABLE" ? 503 : 503;
+          return json({ error: result.error, request_id: requestId }, status);
+        }
+        return json({ key: result.plaintext, request_id: requestId }, 200);
+      } catch (error) {
+        console.error('key secret route failed', { requestId, message: String(error?.message || error) });
+        return json({ error: "KEY_SECRET_UNAVAILABLE", request_id: requestId }, 503);
       }
-      return json({ key: result.plaintext, request_id: requestId }, 200);
     }
 
     const keyDeleteMatch = url.pathname.match(/^\/api\/v1\/key-control\/keys\/([^/]+)$/);
