@@ -38,15 +38,20 @@ describe('script loader key/service delivery', () => {
   it('keeps real browser navigation blocked', async () => {
     const response = await deliverScriptByKey(
       new Request('https://frezen.test/loader/s1?key=FREZEN-valid', {
-        headers: { accept: 'text/html,application/xhtml+xml' },
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-dest': 'document',
+          'user-agent': 'Mozilla/5.0 Chrome/140.0 Safari/537.36',
+        },
       }),
       { DB: makeDb() },
       'req-service-2',
       's1',
     );
     expect(response.status).toBe(403);
-    const body = await response.text();
-    expect(body).toContain('You cant access this link');
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(await response.text()).toContain('You cant access this link');
   });
 
   it('returns 503 for a database failure instead of masking it as an invalid key', async () => {
