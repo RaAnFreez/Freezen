@@ -55,7 +55,6 @@
   async function ensureScriptBinding(scriptId) {
     const script = await getScript(scriptId);
     if (!script?.service_id) throw new Error('SCRIPT_SERVICE_NOT_CONFIGURED');
-    await syncToServer(true);
     const state = await hydrate();
     const provider = state.providers.find((row) => String(row.service_id || '') === String(script.service_id) && row.active !== false && row.active !== 0);
     if (!provider) {
