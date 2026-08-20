@@ -1,0 +1,1 @@
+HWID state separation is implemented in hwid-v2.js.
