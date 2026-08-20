@@ -1,0 +1,1 @@
+HWID ban is enforced before binding; reset clears active bindings only.
