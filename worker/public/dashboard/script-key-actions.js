@@ -18,6 +18,17 @@
     return data;
   };
 
+  const readLocal = (key) => {
+    try {
+      const value = JSON.parse(localStorage.getItem(key) || 'null');
+      return Array.isArray(value) ? value : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const makeId = () => crypto.randomUUID();
+
   const setStatus = (text, error = false) => {
     let box = document.querySelector('[data-frezen-script-key-status]');
     if (!box) {
@@ -31,6 +42,78 @@
     clearTimeout(box._timer);
     box._timer = setTimeout(() => box.remove(), 7000);
   };
+
+  async function ensureScriptProvider(script, options) {
+    const scriptServiceId = String(script?.service_id || '').trim();
+    if (!scriptServiceId) throw new Error('SCRIPT_SERVICE_MISSING');
+
+    let provider = (options?.providers || []).find((item) => String(item.service_id || '') === scriptServiceId);
+    if (provider) return provider;
+
+    const services = readLocal('frezen.services.v1');
+    const localProviders = readLocal('frezen.providers.v1');
+    const checkpoints = readLocal('frezen.safelinku.checkpoints.v1');
+
+    const dbService = (options?.services || []).find((item) => String(item.id || '') === scriptServiceId);
+    const localService = services.find((item) =>
+      String(item.id || '') === scriptServiceId ||
+      (dbService?.slug && String(item.slug || '') === String(dbService.slug)) ||
+      (dbService?.name && String(item.name || '').trim().toLowerCase() === String(dbService.name || '').trim().toLowerCase())
+    );
+    const service = localService || dbService;
+    if (!service) throw new Error('SCRIPT_SERVICE_NOT_FOUND');
+
+    let localProvider = localProviders.find((item) => String(item.service_id || '') === scriptServiceId);
+    if (!localProvider && localService) {
+      localProvider = localProviders.find((item) => String(item.service_id || '') === String(localService.id || ''));
+    }
+
+    const providerPayload = localProvider
+      ? {
+          ...localProvider,
+          id: makeId(),
+          service_id: scriptServiceId,
+          active: localProvider.active !== false,
+        }
+      : {
+          id: makeId(),
+          name: `${service.name || 'Script'} Provider`,
+          service_id: scriptServiceId,
+          type: 'safelinku',
+          active: true,
+          checkpoints: [],
+          hwid_limit_enabled: true,
+          max_hwids_per_key: 1,
+        };
+
+    const syncResponse = await fetch('/api/v1/key-system/sync', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({
+        services: [{
+          id: scriptServiceId,
+          name: service.name || dbService?.name || 'Service',
+          slug: service.slug || dbService?.slug || scriptServiceId,
+          description: service.description || '',
+          premium: Boolean(service.premium),
+          keyless: Boolean(service.keyless),
+          days: Array.isArray(service.days) ? service.days : [],
+        }],
+        providers: [providerPayload],
+        checkpoints,
+      }),
+    });
+    const syncData = await syncResponse.json().catch(() => ({}));
+    if (!syncResponse.ok) throw new Error(syncData.message || syncData.error || `SYNC_HTTP_${syncResponse.status}`);
+
+    const refreshed = await api('/api/v1/key-control/options');
+    provider = (refreshed?.providers || []).find((item) => String(item.service_id || '') === scriptServiceId);
+    if (!provider) {
+      throw new Error('PROVIDER_SYNC_FAILED');
+    }
+    return provider;
+  }
 
   function actionButtons(card) {
     const actions = card.querySelector('.lua-actions');
@@ -70,10 +153,9 @@
       if (!scriptData?.script) throw new Error('Script not found.');
       const script = scriptData.script;
       const options = await api('/api/v1/key-control/options');
-      const provider = (options?.providers || []).find((item) => String(item.service_id || '') === String(script.service_id || ''));
-      if (!provider) {
-        throw new Error('No active provider is linked to this script service. Configure a provider for this service first.');
-      }
+      const provider = await ensureScriptProvider(script, options);
+      const hwidEnabled = provider.hwid_limit_enabled !== false;
+      const maxDevices = hwidEnabled ? Math.max(1, Math.min(100, Number(provider.max_hwids_per_key || 1))) : 100;
 
       const created = await api('/api/v1/key-control/keys', {
         method: 'POST',
@@ -84,17 +166,17 @@
           days: 30,
           hours: 0,
           minutes: 0,
-          max_devices: 1,
+          max_devices: maxDevices,
           forever: false,
         }),
       });
 
       const key = created?.license_key;
       if (!key) throw new Error('Key creation succeeded but no key was returned.');
-      setStatus(`Key created for ${script.name}:\n${key}`);
+      setStatus(`Key created for ${script.name}:\n${key}\nHWID limit: ${maxDevices}`);
       try {
         await navigator.clipboard?.writeText(key);
-        setStatus(`Key created for ${script.name} and copied to clipboard:\n${key}`);
+        setStatus(`Key created for ${script.name} and copied to clipboard:\n${key}\nHWID limit: ${maxDevices}`);
       } catch {}
     } catch (error) {
       setStatus(error.message || 'Unable to generate key.', true);
