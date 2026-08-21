@@ -1,4 +1,5 @@
 import { listHwidV2, setHwidStatusV2 } from "./security/hwid-v2.js";
+import { hydrateRobloxUsernames } from "./roblox-user.js";
 
 const json = (body, status = 200, requestId = crypto.randomUUID()) => new Response(JSON.stringify({ ...body, request_id: requestId }), {
   status,
@@ -11,7 +12,7 @@ export async function listAllHwid(env, requestId, auth) {
     const status = result.reason === "SESSION_AUTH_REQUIRED" ? 401 : 503;
     return json({ error: result.reason }, status, requestId);
   }
-  const devices = result.devices ?? [];
+  const devices = await hydrateRobloxUsernames(result.devices ?? []);
   const blocked = devices.filter((device) => device.status === "blocked").length;
   return json({ devices, stats: { total: devices.length, active: devices.length - blocked, blocked } }, 200, requestId);
 }
