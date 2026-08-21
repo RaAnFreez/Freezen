@@ -13,6 +13,8 @@ function dbMock() {
           file_id: 'f1',
           content: 'print("ok")',
           content_type: 'text/x-lua',
+          id: 'lic-1',
+          key_owner_id: null,
         }),
       }),
     }),
@@ -22,7 +24,7 @@ function dbMock() {
 describe('script loader server-file delivery regression', () => {
   it('returns Lua source for a server-file style GET with a key', async () => {
     const response = await deliverScriptFileByKey(
-      new Request('https://frezen.test/files/s1.lua?key=FREZEN-valid', {
+      new Request('https://frezen.test/files/s1.lua?key=FREZEN-valid&hwid=CI-TEST-DEVICE', {
         headers: { accept: '*/*', 'user-agent': 'Roblox/WinInet' },
       }),
       { DB: dbMock() },
@@ -36,7 +38,7 @@ describe('script loader server-file delivery regression', () => {
 
   it('serves the legacy loader when its explicit raw marker is present', async () => {
     const response = await deliverScriptByKey(
-      new Request('https://frezen.test/loader/s1?format=raw&key=FREZEN-valid', {
+      new Request('https://frezen.test/loader/s1?format=raw&key=FREZEN-valid&hwid=CI-TEST-DEVICE', {
         headers: { accept: '*/*' },
       }),
       { DB: dbMock() },
