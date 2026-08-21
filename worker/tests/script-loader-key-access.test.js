@@ -7,17 +7,27 @@ const db = {
       bind(...args) {
         return {
           async first() {
-            if (sql.includes("JOIN frezen_key_records")) {
+            if (sql.includes("JOIN frezen_key_records") && !sql.includes("hwid_bindings_v2")) {
               return {
-                script_id: args[1],
+                script_id: args[1] ?? "s1",
                 script_status: "ACTIVE",
                 version: "v1.0.0",
                 version_status: "ARCHIVED",
                 content: "print('ok')",
                 content_type: "text/x-lua",
+                license_id: "lic-1",
+                license_user_id: "owner-1",
+                key_record_id: "key-1",
               };
             }
+            if (sql.includes("FROM licenses l") && sql.includes("frezen_key_records kr")) {
+              return { id: "lic-1", user_id: "owner-1", key_owner_id: "owner-1", status: "active", expires_at: null };
+            }
+            if (sql.includes("COUNT(*)") && sql.includes("hwid_bindings_v2")) return { total: 0 };
             return null;
+          },
+          async run() {
+            return { meta: { changes: 1 } };
           },
         };
       },
@@ -36,9 +46,9 @@ describe("Script loader key access", () => {
     expect(response.status).toBe(403);
   });
 
-  it("allows a valid key to receive a newly created script version", async () => {
+  it("allows a valid key to receive a newly created script version with a runtime identifier", async () => {
     const response = await deliverScriptByKey(
-      new Request("https://frezen.test/loader/s1?key=FREZEN-TEST", { headers: { accept: "text/plain" } }),
+      new Request("https://frezen.test/loader/s1?key=FREZEN-TEST&hwid=CI-TEST-DEVICE", { headers: { accept: "text/plain" } }),
       { DB: db },
       "req-key",
       "s1",

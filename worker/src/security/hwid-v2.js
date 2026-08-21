@@ -55,9 +55,14 @@ async function maxDevicesForLicense(env, licenseId) {
 }
 
 async function licenseFor(env, licenseId) {
-  return env.DB.prepare(
-    "SELECT id, user_id, status, expires_at FROM licenses WHERE id = ?1 LIMIT 1",
-  ).bind(licenseId).first();
+  return env.DB.prepare(`
+    SELECT l.id, l.user_id, l.status, l.expires_at,
+           kr.owner_id AS key_owner_id
+    FROM licenses l
+    LEFT JOIN frezen_key_records kr ON kr.license_id = l.id
+    WHERE l.id = ?1
+    LIMIT 1
+  `).bind(licenseId).first();
 }
 
 function licenseState(license) {
@@ -66,6 +71,10 @@ function licenseState(license) {
   if (["revoked", "banned"].includes(status)) return "LICENSE_BLOCKED";
   if (license.expires_at && new Date(license.expires_at).getTime() <= Date.now()) return "LICENSE_EXPIRED";
   return null;
+}
+
+function effectiveOwner(ownerId, license) {
+  return ownerId ?? license?.key_owner_id ?? license?.user_id ?? null;
 }
 
 async function getBinding(env, licenseId, hwidHash) {
@@ -94,15 +103,19 @@ export async function bindHwidV2(env, { licenseId, ownerId = null, rawHwid }) {
     if (state) return { ok: false, reason: state };
 
     const hwidHash = await sha256Hex(hwid);
-    const owner = ownerId ?? license.user_id ?? null;
+    const owner = effectiveOwner(ownerId, license);
     if (await getOwnerBlockedBinding(env, owner, hwidHash)) return { ok: false, reason: "HWID_BLOCKED" };
 
     const existing = await getBinding(env, id, hwidHash);
     if (existing) {
       if (existing.status === "blocked") return { ok: false, reason: "HWID_BLOCKED" };
-      await env.DB.prepare(
-        "UPDATE hwid_bindings_v2 SET last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
-      ).bind(existing.id).run();
+      if (!existing.owner_id && owner) {
+        await env.DB.prepare("UPDATE hwid_bindings_v2 SET owner_id = ?1, last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?2").bind(owner, existing.id).run();
+      } else {
+        await env.DB.prepare(
+          "UPDATE hwid_bindings_v2 SET last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
+        ).bind(existing.id).run();
+      }
       return { ok: true, existing: true, deviceId: existing.id, fingerprint: hwidHash.slice(0, 12) };
     }
 
@@ -135,19 +148,23 @@ export async function validateHwidV2(env, { licenseId, rawHwid, ownerId = null }
     const license = await licenseFor(env, id);
     const state = licenseState(license);
     if (state) return { ok: false, reason: state };
-    if (ownerId && license.user_id && license.user_id !== ownerId) return { ok: false, reason: "LICENSE_OWNERSHIP_REQUIRED" };
+    const effective = effectiveOwner(ownerId, license);
+    if (ownerId && license.key_owner_id && license.key_owner_id !== ownerId) return { ok: false, reason: "LICENSE_OWNERSHIP_REQUIRED" };
 
     const hwidHash = await sha256Hex(hwid);
-    const owner = ownerId ?? license.user_id ?? null;
-    if (await getOwnerBlockedBinding(env, owner, hwidHash)) return { ok: false, reason: "HWID_BLOCKED" };
+    if (await getOwnerBlockedBinding(env, effective, hwidHash)) return { ok: false, reason: "HWID_BLOCKED" };
 
     const binding = await getBinding(env, id, hwidHash);
     if (!binding) return { ok: false, reason: "HWID_MISMATCH" };
     if (binding.status === "blocked") return { ok: false, reason: "HWID_BLOCKED" };
 
-    await env.DB.prepare(
-      "UPDATE hwid_bindings_v2 SET last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
-    ).bind(binding.id).run();
+    if (!binding.owner_id && effective) {
+      await env.DB.prepare("UPDATE hwid_bindings_v2 SET owner_id = ?1, last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?2").bind(effective, binding.id).run();
+    } else {
+      await env.DB.prepare(
+        "UPDATE hwid_bindings_v2 SET last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
+      ).bind(binding.id).run();
+    }
     return { ok: true, deviceId: binding.id, fingerprint: hwidHash.slice(0, 12) };
   } catch (error) {
     console.error("HWID V2 validation failed", { licenseId: id, message: String(error?.message ?? error) });
@@ -163,11 +180,25 @@ export async function listHwidV2(env, { ownerId, licenseId = null }) {
 
   try {
     await ensureSchema(env);
+    await env.DB.prepare(`
+      UPDATE hwid_bindings_v2
+      SET owner_id = (
+        SELECT kr.owner_id FROM frezen_key_records kr
+        WHERE kr.license_id = hwid_bindings_v2.license_id LIMIT 1
+      ),
+      updated_at = CURRENT_TIMESTAMP
+      WHERE owner_id IS NULL
+        AND EXISTS (
+          SELECT 1 FROM frezen_key_records kr
+          WHERE kr.license_id = hwid_bindings_v2.license_id AND kr.owner_id IS NOT NULL
+        )
+    `).run();
+
     const where = license ? "WHERE h.owner_id = ?1 AND h.license_id = ?2" : "WHERE h.owner_id = ?1";
     const bindings = license ? [owner, license] : [owner];
     const rows = await env.DB.prepare(`
       SELECT h.id, h.license_id, h.status, h.first_seen, h.last_seen, h.blocked_at, h.blocked_reason, h.created_at, h.updated_at,
-             l.expires_at, kr.key_name, kr.service_id, s.name AS service_name,
+             l.expires_at, kr.key_name, kr.service_id, kr.owner_id AS key_owner_id, s.name AS service_name,
              substr(h.hwid_hash, 1, 12) AS fingerprint
       FROM hwid_bindings_v2 h
       JOIN licenses l ON l.id = h.license_id
@@ -219,8 +250,11 @@ export async function resetHwidV2(env, { ownerId, licenseId }) {
     const license = await licenseFor(env, id);
     const state = licenseState(license);
     if (state) return { ok: false, reason: state };
-    if (license.user_id !== owner) return { ok: false, reason: "LICENSE_OWNERSHIP_REQUIRED" };
+    if (license.key_owner_id !== owner) return { ok: false, reason: "LICENSE_OWNERSHIP_REQUIRED" };
 
+    await env.DB.prepare(
+      "UPDATE hwid_bindings_v2 SET owner_id = ?1, updated_at = CURRENT_TIMESTAMP WHERE owner_id IS NULL AND license_id = ?2",
+    ).bind(owner, id).run();
     await env.DB.prepare(
       "DELETE FROM hwid_bindings_v2 WHERE owner_id = ?1 AND license_id = ?2 AND status = 'active'",
     ).bind(owner, id).run();

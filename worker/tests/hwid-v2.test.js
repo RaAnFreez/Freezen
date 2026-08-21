@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bindHwidV2, validateHwidV2, setHwidStatusV2, resetHwidV2 } from "../src/security/hwid-v2.js";
 
-function makeDb({ license = { id: "lic-1", user_id: "owner-1", status: "active", expires_at: null }, maxDevices = 1 } = {}) {
+function makeDb({ license = { id: "lic-1", user_id: "owner-1", key_owner_id: "owner-1", status: "active", expires_at: null }, maxDevices = 1 } = {}) {
   const bindings = new Map();
   let inserts = 0;
 
@@ -10,15 +10,15 @@ function makeDb({ license = { id: "lic-1", user_id: "owner-1", status: "active",
     const statement = {
       bind(...values) { params = values; return statement; },
       async first() {
-        if (sql.includes("SELECT id, user_id, status, expires_at FROM licenses")) return license;
+        if (sql.includes("FROM licenses l") && sql.includes("frezen_key_records kr")) return license;
         if (sql.includes("SELECT max_devices FROM frezen_key_limits")) return { max_devices: maxDevices };
         if (sql.includes("SELECT id, owner_id, license_id, status, first_seen")) return bindings.get(`${params[0]}:${params[1]}`) ?? null;
+        if (sql.includes("SELECT id FROM hwid_bindings_v2 WHERE id = ?1 AND owner_id = ?2")) {
+          return [...bindings.values()].find((row) => row.id === params[0] && row.owner_id === params[1]) ?? null;
+        }
         if (sql.includes("SELECT COUNT(*) AS total FROM hwid_bindings_v2")) {
           const active = [...bindings.values()].filter((row) => row.license_id === params[0] && row.status === "active").length;
           return { total: active };
-        }
-        if (sql.includes("SELECT id FROM hwid_bindings_v2 WHERE id = ?1 AND owner_id = ?2")) {
-          return [...bindings.values()].find((row) => row.id === params[0] && row.owner_id === params[1]) ?? null;
         }
         return null;
       },
@@ -33,18 +33,18 @@ function makeDb({ license = { id: "lic-1", user_id: "owner-1", status: "active",
           const row = [...bindings.values()].find((item) => item.id === params[3] && item.owner_id === params[4]);
           if (row) { row.status = params[0]; row.blocked_at = params[1]; row.blocked_reason = params[2]; }
         }
-        if (sql.includes("UPDATE hwid_bindings_v2 SET status = 'blocked'")) {
-          for (const row of bindings.values()) {
-            if (row.owner_id === params[1] && row.license_id === params[2] && row.status === "active") {
-              row.status = "blocked";
-              row.blocked_at = params[0];
-              row.blocked_reason = "HWID_RESET";
-            }
-          }
+        if (sql.includes("UPDATE hwid_bindings_v2 SET owner_id = ?1") && !sql.includes("WHERE owner_id IS NULL")) {
+          const row = [...bindings.values()].find((item) => item.id === params[1]);
+          if (row) row.owner_id = params[0];
         }
         if (sql.includes("UPDATE hwid_bindings_v2 SET last_seen")) {
           const row = [...bindings.values()].find((item) => item.id === params[0]);
           if (row) row.last_seen = new Date().toISOString();
+        }
+        if (sql.includes("UPDATE hwid_bindings_v2 SET owner_id = ?1") && sql.includes("WHERE owner_id IS NULL")) {
+          for (const row of bindings.values()) {
+            if (!row.owner_id && row.license_id === params[1]) row.owner_id = params[0];
+          }
         }
         if (sql.includes("DELETE FROM hwid_bindings_v2")) {
           for (const [key, row] of bindings.entries()) {
@@ -70,6 +70,17 @@ describe("HWID V2", () => {
     expect(result.fingerprint).toHaveLength(12);
     const row = [...db.bindings.values()][0];
     expect(row.hwid_hash).not.toContain("DEVICE-123");
+  });
+
+  it("uses frezen_key_records ownership when licenses.user_id is null", async () => {
+    const db = makeDb({ license: { id: "lic-1", user_id: null, key_owner_id: "owner-key", status: "active", expires_at: null } });
+    const result = await bindHwidV2({ DB: db }, { licenseId: "lic-1", rawHwid: "DEVICE-KEY-OWNER" });
+    expect(result.ok).toBe(true);
+    const row = [...db.bindings.values()][0];
+    expect(row.owner_id).toBe("owner-key");
+
+    const validation = await validateHwidV2({ DB: db }, { licenseId: "lic-1", ownerId: "owner-key", rawHwid: "DEVICE-KEY-OWNER" });
+    expect(validation.ok).toBe(true);
   });
 
   it("treats the same HWID as an existing binding", async () => {
@@ -100,7 +111,7 @@ describe("HWID V2", () => {
   });
 
   it("rejects expired licenses before binding", async () => {
-    const db = makeDb({ license: { id: "lic-1", user_id: "owner-1", status: "active", expires_at: "2000-01-01T00:00:00.000Z" } });
+    const db = makeDb({ license: { id: "lic-1", user_id: "owner-1", key_owner_id: "owner-1", status: "active", expires_at: "2000-01-01T00:00:00.000Z" } });
     const result = await bindHwidV2({ DB: db }, { licenseId: "lic-1", ownerId: "owner-1", rawHwid: "DEVICE-123" });
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("LICENSE_EXPIRED");
