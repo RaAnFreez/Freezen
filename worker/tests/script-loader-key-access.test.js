@@ -38,7 +38,7 @@ describe("Script loader key access", () => {
 
   it("allows a valid key to receive a newly created script version", async () => {
     const response = await deliverScriptByKey(
-      new Request("https://frezen.test/loader/s1?key=FREZEN-TEST", { headers: { accept: "text/plain" } }),
+      new Request("https://frezen.test/loader/s1?key=FREZEN-TEST&hwid=CI-TEST-DEVICE", { headers: { accept: "text/plain" } }),
       { DB: db },
       "req-key",
       "s1",

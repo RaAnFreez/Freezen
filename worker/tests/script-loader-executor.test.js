@@ -22,7 +22,7 @@ describe('executor loader delivery', () => {
   it('allows executor requests while keeping browser navigation denied', async () => {
     const db = dbMock();
     const executor = await deliverScriptByKey(
-      new Request('https://frezen.test/loader/s1?key=FREZEN-valid', {
+      new Request('https://frezen.test/loader/s1?key=FREZEN-valid&hwid=CI-TEST-DEVICE', {
         headers: { accept: '*/*' },
       }),
       { DB: db },
