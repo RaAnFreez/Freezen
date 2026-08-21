@@ -61,10 +61,10 @@ describe('Frezen server-file keyed script delivery', () => {
     const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
     const keyHash = await hash(key);
     const response = await deliverScriptFileByKey(
-      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}`, {
+      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}&hwid=CI-TEST-DEVICE`, {
         headers: { accept: '*/*', 'user-agent': 'FrezenExecutor/1.0' },
       }),
-      { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', file_id: 's1', content: 'print("hello")', content_type: 'text/x-lua' }) },
+      { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', file_id: 's1', content: 'print("hello")', content_type: 'text/x-lua', id: 'lic-1', key_owner_id: null }) },
       'req-2',
       's1',
     );
@@ -72,7 +72,7 @@ describe('Frezen server-file keyed script delivery', () => {
     expect(await response.text()).toBe('print("hello")');
     expect(response.headers.get('x-frezen-file-id')).toBe('s1');
     expect(response.headers.get('content-type')).toContain('text/x-lua');
-    expect(response.headers.get('x-frezen-hwid-bound')).toBe('false');
+    expect(response.headers.get('x-frezen-hwid-bound')).toBe('true');
   });
 
   it('denies non-navigation file requests without a key', async () => {
@@ -91,10 +91,10 @@ describe('Frezen server-file keyed script delivery', () => {
     const key = 'FREZEN-AAAA-BBBB-CCCC-DDDD';
     const keyHash = await hash(key);
     const response = await deliverScriptFileByKey(
-      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}`, {
+      new Request(`https://frezen.test/files/s1.lua?key=${encodeURIComponent(key)}&hwid=CI-TEST-DEVICE`, {
         headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': 'FrezenExecutor/1.0' },
       }),
-      { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', file_id: 's1', content: 'print("hello")', content_type: 'text/x-lua' }) },
+      { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', file_id: 's1', content: 'print("hello")', content_type: 'text/x-lua', id: 'lic-1', key_owner_id: null }) },
       'req-file-3',
       's1',
     );
@@ -114,7 +114,7 @@ describe('Frezen server-file keyed script delivery', () => {
           'user-agent': 'Mozilla/5.0 Chrome/140.0 Safari/537.36',
         },
       }),
-      { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', content: 'print("hello")', content_type: 'text/x-lua' }) },
+      { DB: dbMock(keyHash, { script_id: 's1', script_status: 'ACTIVE', version: 'v1.0.0', version_status: 'ACTIVE', content: 'print("hello")', content_type: 'text/x-lua', id: 'lic-1', key_owner_id: null }) },
       'req-legacy-browser',
       's1',
     );
