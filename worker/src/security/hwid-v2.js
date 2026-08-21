@@ -19,6 +19,8 @@ async function ensureSchema(env) {
         owner_id TEXT,
         license_id TEXT NOT NULL,
         hwid_hash TEXT NOT NULL,
+        game_username TEXT,
+        game_user_id TEXT,
         status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','blocked')),
         first_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -35,6 +37,8 @@ async function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_hwid_v2_hash ON hwid_bindings_v2(hwid_hash)"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_hwid_v2_last_seen ON hwid_bindings_v2(last_seen)"),
     ]);
+    try { await env.DB.prepare("ALTER TABLE hwid_bindings_v2 ADD COLUMN game_username TEXT").run(); } catch {}
+    try { await env.DB.prepare("ALTER TABLE hwid_bindings_v2 ADD COLUMN game_user_id TEXT").run(); } catch {}
     return true;
   } catch (error) {
     console.warn("HWID V2 schema ensure skipped", { message: String(error?.message ?? error) });
@@ -79,7 +83,7 @@ function effectiveOwner(ownerId, license) {
 
 async function getBinding(env, licenseId, hwidHash) {
   return env.DB.prepare(
-    "SELECT id, owner_id, license_id, status, first_seen, last_seen, blocked_at, blocked_reason FROM hwid_bindings_v2 WHERE license_id = ?1 AND hwid_hash = ?2 LIMIT 1",
+    "SELECT id, owner_id, license_id, hwid_hash, game_username, game_user_id, status, first_seen, last_seen, blocked_at, blocked_reason FROM hwid_bindings_v2 WHERE license_id = ?1 AND hwid_hash = ?2 LIMIT 1",
   ).bind(licenseId, hwidHash).first();
 }
 
@@ -90,10 +94,20 @@ async function getOwnerBlockedBinding(env, ownerId, hwidHash) {
   ).bind(ownerId, hwidHash).first();
 }
 
-export async function bindHwidV2(env, { licenseId, ownerId = null, rawHwid }) {
+async function bindingBelongsToOwner(env, licenseId, ownerId) {
+  if (!ownerId) return false;
+  const row = await env.DB.prepare(
+    "SELECT id FROM hwid_bindings_v2 WHERE license_id = ?1 AND owner_id = ?2 LIMIT 1",
+  ).bind(licenseId, ownerId).first();
+  return Boolean(row?.id);
+}
+
+export async function bindHwidV2(env, { licenseId, ownerId = null, rawHwid, gameUsername = null, gameUserId = null }) {
   if (!env?.DB) return { ok: false, reason: "DATABASE_UNAVAILABLE" };
   const id = normalize(licenseId);
   const hwid = normalize(rawHwid, MAX_HWID_LENGTH);
+  const username = normalize(gameUsername, 64);
+  const userId = normalize(gameUserId, 32);
   if (!id || !hwid) return { ok: false, reason: "INVALID_HWID" };
 
   try {
@@ -110,7 +124,9 @@ export async function bindHwidV2(env, { licenseId, ownerId = null, rawHwid }) {
     if (existing) {
       if (existing.status === "blocked") return { ok: false, reason: "HWID_BLOCKED" };
       if (!existing.owner_id && owner) {
-        await env.DB.prepare("UPDATE hwid_bindings_v2 SET owner_id = ?1, last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?2").bind(owner, existing.id).run();
+        await env.DB.prepare("UPDATE hwid_bindings_v2 SET owner_id = ?1, game_username = COALESCE(NULLIF(?2, ''), game_username), game_user_id = COALESCE(NULLIF(?3, ''), game_user_id), last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?4").bind(owner, username, userId, existing.id).run();
+      } else if (username || userId) {
+        await env.DB.prepare("UPDATE hwid_bindings_v2 SET game_username = COALESCE(NULLIF(?1, ''), game_username), game_user_id = COALESCE(NULLIF(?2, ''), game_user_id), last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?3").bind(username, userId, existing.id).run();
       } else {
         await env.DB.prepare(
           "UPDATE hwid_bindings_v2 SET last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
@@ -127,8 +143,8 @@ export async function bindHwidV2(env, { licenseId, ownerId = null, rawHwid }) {
 
     const deviceId = crypto.randomUUID();
     await env.DB.prepare(
-      "INSERT INTO hwid_bindings_v2 (id, owner_id, license_id, hwid_hash, status) VALUES (?1, ?2, ?3, ?4, 'active')",
-    ).bind(deviceId, owner, id, hwidHash).run();
+      "INSERT INTO hwid_bindings_v2 (id, owner_id, license_id, hwid_hash, game_username, game_user_id, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active')",
+    ).bind(deviceId, owner, id, hwidHash, username || null, userId || null).run();
 
     return { ok: true, existing: false, deviceId, fingerprint: hwidHash.slice(0, 12) };
   } catch (error) {
@@ -198,6 +214,7 @@ export async function listHwidV2(env, { ownerId, licenseId = null }) {
     const bindings = license ? [owner, license] : [owner];
     const rows = await env.DB.prepare(`
       SELECT h.id, h.license_id, h.status, h.first_seen, h.last_seen, h.blocked_at, h.blocked_reason, h.created_at, h.updated_at,
+             h.game_username, h.game_user_id,
              l.expires_at, kr.key_name, kr.service_id, kr.owner_id AS key_owner_id, s.name AS service_name,
              substr(h.hwid_hash, 1, 12) AS fingerprint
       FROM hwid_bindings_v2 h
@@ -250,14 +267,19 @@ export async function resetHwidV2(env, { ownerId, licenseId }) {
     const license = await licenseFor(env, id);
     const state = licenseState(license);
     if (state) return { ok: false, reason: state };
-    if (license.key_owner_id !== owner) return { ok: false, reason: "LICENSE_OWNERSHIP_REQUIRED" };
+
+    let authorizedOwner = license.key_owner_id ?? null;
+    if (authorizedOwner !== owner) {
+      if (!await bindingBelongsToOwner(env, id, owner)) return { ok: false, reason: "LICENSE_OWNERSHIP_REQUIRED" };
+      authorizedOwner = owner;
+    }
 
     await env.DB.prepare(
       "UPDATE hwid_bindings_v2 SET owner_id = ?1, updated_at = CURRENT_TIMESTAMP WHERE owner_id IS NULL AND license_id = ?2",
-    ).bind(owner, id).run();
+    ).bind(authorizedOwner ?? owner, id).run();
     await env.DB.prepare(
       "DELETE FROM hwid_bindings_v2 WHERE owner_id = ?1 AND license_id = ?2 AND status = 'active'",
-    ).bind(owner, id).run();
+    ).bind(authorizedOwner ?? owner, id).run();
     return { ok: true, resetAt: new Date().toISOString() };
   } catch (error) {
     console.error("HWID V2 reset failed", { licenseId: id, message: String(error?.message ?? error) });

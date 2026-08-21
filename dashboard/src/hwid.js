@@ -27,7 +27,7 @@ export function renderHwid(container) {
           <button class="hwid-tab" data-filter="active" role="tab">Active</button>
           <button class="hwid-tab" data-filter="blocked" role="tab">Blocked</button>
         </div>
-        <label class="hwid-search"><span>F</span><input id="hwid-search" placeholder="Search HWID or key" autocomplete="off" /><button type="button" id="hwid-refresh" title="Refresh">Refresh</button></label>
+        <label class="hwid-search"><span>F</span><input id="hwid-search" placeholder="Search username, HWID, key or user ID" autocomplete="off" /><button type="button" id="hwid-refresh" title="Refresh">Refresh</button></label>
       </div>
 
       <div id="hwid-message" class="inline-message" hidden></div>
@@ -59,33 +59,37 @@ export function renderHwid(container) {
     const status = String(device.status || "").toLowerCase();
     if (filter !== "all" && status !== filter) return false;
     if (!query) return true;
-    return `${device.fingerprint || ""} ${device.id || ""} ${device.key_name || ""} ${device.license_id || ""} ${device.service_name || ""}`.toLowerCase().includes(query);
+    return `${device.game_username || ""} ${device.game_user_id || ""} ${device.fingerprint || ""} ${device.id || ""} ${device.key_name || ""} ${device.license_id || ""} ${device.service_name || ""}`.toLowerCase().includes(query);
   };
 
   const render = () => {
     const visible = devices.filter(matches);
     if (!visible.length) {
-      list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">HW</div><strong>${devices.length ? "No HWIDs match" : "No HWIDs banned yet"}</strong><p>${devices.length ? "Try another search or filter." : "Banned hardware IDs will appear here. Valid key usage will automatically create device records."}</p></div>`;
+      list.innerHTML = `<div class="hwid-empty"><div class="hwid-empty-icon">HW</div><strong>${devices.length ? "No HWIDs match" : "No HWIDs recorded"}</strong><p>${devices.length ? "Try another username, HWID, key or filter." : "Devices will appear here automatically after a valid key is used."}</p></div>`;
       return;
     }
 
     list.innerHTML = `
-      <div class="hwid-table-wrap"><table class="hwid-table"><thead><tr><th>Device</th><th>Key</th><th>Service</th><th>Status</th><th>Last seen</th><th>Expires</th><th></th></tr></thead><tbody>
+      <div class="hwid-table-wrap"><table class="hwid-table"><thead><tr><th>Device</th><th>Game user</th><th>Key</th><th>Service</th><th>Status</th><th>Last seen</th><th>Expires</th><th></th></tr></thead><tbody>
       ${visible.map((device) => {
         const isBlocked = device.status === "blocked";
+        const username = device.game_username || "—";
+        const userId = device.game_user_id || "";
         return `<tr>
-          <td><div class="device-cell"><span class="device-dot ${isBlocked ? "blocked" : "active"}></span><div><code>${escapeHtml(device.fingerprint || device.id.slice(0, 12))}</code><small>${escapeHtml(device.id)}</small></div></div></td>
+          <td><div class="device-cell"><span class="device-dot ${isBlocked ? "blocked" : "active"}"></span><div><code>${escapeHtml(device.fingerprint || device.id.slice(0, 12))}</code><small>${escapeHtml(device.id)}</small></div></div></td>
+          <td><div class="device-cell"><div><strong>${escapeHtml(username)}</strong><small>${escapeHtml(userId || "Username not reported")}</small></div></div></td>
           <td>${escapeHtml(device.key_name || device.license_id)}</td>
           <td>${escapeHtml(device.service_name || device.service_id || "—")}</td>
           <td><span class="hwid-status ${isBlocked ? "blocked" : "active"}">${isBlocked ? "BLOCKED" : "ACTIVE"}</span></td>
           <td>${escapeHtml(formatDate(device.last_seen || device.first_seen))}</td>
           <td>${escapeHtml(formatDate(device.expires_at))}</td>
-          <td><button class="ghost-button small" data-device="${escapeHtml(device.id)}" data-next="${isBlocked ? "unblock" : "block"}">${isBlocked ? "Unblock" : "Block"}</button></td>
+          <td><div class="hwid-row-actions"><button class="ghost-button small" data-device="${escapeHtml(device.id)}" data-next="${isBlocked ? "unblock" : "block"}">${isBlocked ? "Unblock" : "Block"}</button><button class="ghost-button small" data-reset-license="${escapeHtml(device.license_id)}">Reset</button></div></td>
         </tr>`;
       }).join("")}
       </tbody></table></div>`;
 
     list.querySelectorAll("[data-device]").forEach((button) => button.addEventListener("click", () => toggle(button.dataset.device, button.dataset.next)));
+    list.querySelectorAll("[data-reset-license]").forEach((button) => button.addEventListener("click", () => reset(button.dataset.resetLicense)));
   };
 
   const updateStats = (data) => {
@@ -115,6 +119,16 @@ export function renderHwid(container) {
       show(`Device ${next === "block" ? "banned" : "unblocked"}.`);
       await load();
     } catch (error) { show(error.message, true); }
+  };
+
+  const reset = async (licenseId) => {
+    if (!licenseId) { show("This device is missing its license reference.", true); return; }
+    if (!window.confirm("Reset the active HWID binding for this key?")) return;
+    try {
+      await api(`/hwid/licenses/${encodeURIComponent(licenseId)}/reset`, { method: "POST" });
+      show("HWID reset successfully.");
+      await load();
+    } catch (error) { show(`Reset failed: ${error.message}`, true); }
   };
 
   container.querySelectorAll(".hwid-tab").forEach((button) => button.addEventListener("click", () => {

@@ -12,7 +12,9 @@ function makeDb({ license = { id: "lic-1", user_id: "owner-1", key_owner_id: "ow
       async first() {
         if (sql.includes("FROM licenses l") && sql.includes("frezen_key_records kr")) return license;
         if (sql.includes("SELECT max_devices FROM frezen_key_limits")) return { max_devices: maxDevices };
-        if (sql.includes("SELECT id, owner_id, license_id, status, first_seen")) return bindings.get(`${params[0]}:${params[1]}`) ?? null;
+        if (sql.includes("FROM hwid_bindings_v2 WHERE license_id = ?1 AND hwid_hash = ?2")) {
+          return bindings.get(`${params[0]}:${params[1]}`) ?? null;
+        }
         if (sql.includes("SELECT id FROM hwid_bindings_v2 WHERE id = ?1 AND owner_id = ?2")) {
           return [...bindings.values()].find((row) => row.id === params[0] && row.owner_id === params[1]) ?? null;
         }
@@ -25,7 +27,15 @@ function makeDb({ license = { id: "lic-1", user_id: "owner-1", key_owner_id: "ow
       async all() { return { results: [] }; },
       async run() {
         if (sql.includes("INSERT INTO hwid_bindings_v2")) {
-          const row = { id: params[0], owner_id: params[1], license_id: params[2], hwid_hash: params[3], status: "active" };
+          const row = {
+            id: params[0],
+            owner_id: params[1],
+            license_id: params[2],
+            hwid_hash: params[3],
+            game_username: params[4] ?? null,
+            game_user_id: params[5] ?? null,
+            status: "active",
+          };
           bindings.set(`${params[2]}:${params[3]}`, row);
           inserts += 1;
         }
@@ -36,6 +46,15 @@ function makeDb({ license = { id: "lic-1", user_id: "owner-1", key_owner_id: "ow
         if (sql.includes("UPDATE hwid_bindings_v2 SET owner_id = ?1") && !sql.includes("WHERE owner_id IS NULL")) {
           const row = [...bindings.values()].find((item) => item.id === params[1]);
           if (row) row.owner_id = params[0];
+        }
+        if (sql.includes("UPDATE hwid_bindings_v2 SET game_username")) {
+          const row = [...bindings.values()].find((item) => item.id === params[2] || item.id === params[3]);
+          if (row) {
+            const username = params[0] ?? params[1];
+            const userId = params[1] ?? params[2];
+            row.game_username = username || row.game_username;
+            row.game_user_id = userId || row.game_user_id;
+          }
         }
         if (sql.includes("UPDATE hwid_bindings_v2 SET last_seen")) {
           const row = [...bindings.values()].find((item) => item.id === params[0]);
