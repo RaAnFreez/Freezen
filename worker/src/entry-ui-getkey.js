@@ -1,0 +1,56 @@
+import entryUi from './entry-ui.js';
+import {
+  startPublicGetKey,
+  getPublicGetKeyState,
+  launchPublicGetKeyCheckpoint,
+  verifyPublicGetKeyCallback,
+  getPublicGetKeyLicense,
+  validatePublicGetKeyLicense,
+  publicGetKeyPage,
+} from './getkey-public-runtime.js';
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    if (request.method === 'GET' && url.pathname === '/api/v1/get-key/checkpoint/callback') {
+      return verifyPublicGetKeyCallback(request, env, url.searchParams.get('token') || '');
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/v1/get-key/flow/start') {
+      let body = {};
+      try { body = await request.clone().json(); } catch {}
+      const slug = url.searchParams.get('slug') || body?.slug || '';
+      return startPublicGetKey(request, env, slug);
+    }
+
+    const flowMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)$/);
+    if (request.method === 'GET' && flowMatch) {
+      return getPublicGetKeyState(request, env, decodeURIComponent(flowMatch[1]));
+    }
+
+    const launchMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)\/launch$/);
+    if (request.method === 'GET' && launchMatch) {
+      return launchPublicGetKeyCheckpoint(request, env, decodeURIComponent(launchMatch[1]));
+    }
+
+    const keyMatch = url.pathname.match(/^\/api\/v1\/get-key\/key\/([^/]+)$/);
+    if (request.method === 'GET' && keyMatch) {
+      return getPublicGetKeyLicense(request, env, decodeURIComponent(keyMatch[1]));
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/v1/get-key/key/validate') {
+      return validatePublicGetKeyLicense(request, env);
+    }
+
+    const pageMatch = url.pathname.match(/^\/get-key\/([^/]+)\/?$/);
+    if (request.method === 'GET' && pageMatch) {
+      return publicGetKeyPage(decodeURIComponent(pageMatch[1]));
+    }
+
+    return entryUi.fetch(request, env, ctx);
+  },
+  async scheduled(controller, env, ctx) {
+    if (typeof entryUi.scheduled === 'function') return entryUi.scheduled(controller, env, ctx);
+  },
+};
