@@ -1,7 +1,7 @@
 import { bindHwidV2, validateHwidV2, cleanupHwidV2 } from "./hwid-v2.js";
 
-export async function bindRuntimeHwid(env, licenseId, ownerId, rawHwid) {
-  const result = await bindHwidV2(env, { licenseId, ownerId, rawHwid });
+export async function bindRuntimeHwid(env, licenseId, ownerId, rawHwid, gameUsername = null, gameUserId = null) {
+  const result = await bindHwidV2(env, { licenseId, ownerId, rawHwid, gameUsername, gameUserId });
   return {
     ok: result.ok,
     reason: result.reason,
