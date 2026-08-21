@@ -91,6 +91,6 @@ export async function unblockHwid(request, env, requestId, _json, deviceId, auth
   const resolved = await resolveAuth(request, env, requestId, auth);
   if (resolved instanceof Response) return resolved;
   const result = await setHwidStatusV2(env, { ownerId: resolved.user_id, deviceId, status: "active" });
-  if (!result.ok) return json({ updated: true, status: result.status }, 200, requestId);
+  if (!result.ok) return json({ error: result.reason }, statusCode(result.reason, 400), requestId);
   return json({ updated: true, status: result.status }, 200, requestId);
 }
