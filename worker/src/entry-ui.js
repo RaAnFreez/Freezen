@@ -1,7 +1,7 @@
 import entry from "./entry.js";
 import { requirePrivateAccess } from "./security/private-access.js";
 import { createSafeLinkUCheckpoint } from "./safelinku.js";
-import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublicFlow, launchPublicFlow, publicGetKeyPage } from "./key-system-runtime.js";
+import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublicFlow, launchPublicFlow, verifyPublicCheckpoint, publicGetKeyPage } from "./key-system-runtime.js";
 import { getCanonicalDashboardState, reconcileDashboardState } from "./dashboard-state.js";
 import { keyControlOptions, createKeyFolder, listKeys, createKey } from "./key-control.js";
 import { deleteKey, cleanupExpiredKeys } from "./key-lifecycle.js";
@@ -152,7 +152,10 @@ export default {
       return listAllHwid(env, requestId, access);
     }
 
-    if (request.method === "GET" && url.pathname === "/api/v1/get-key/checkpoint/callback") return json({ status: "callback_received", checkpoint_id: url.searchParams.get("checkpoint_id"), flow_id: url.searchParams.get("flow_id") || null, verified: false, message: "Returned from SafeLinkU. Completion remains pending until a trusted SafeLinkU completion signal is available." }, 202);
+    if (request.method === "GET" && url.pathname === "/api/v1/get-key/checkpoint/callback") {
+      const token = url.searchParams.get("token") || "";
+      return verifyPublicCheckpoint(env, token);
+    }
     const publicServiceConfig = url.pathname.match(/^\/api\/v1\/get-key\/service\/([^/]+)$/);
     if (request.method === "GET" && publicServiceConfig) return getPublicServiceConfig(env, decodeURIComponent(publicServiceConfig[1]));
     if (request.method === "POST" && url.pathname === "/api/v1/get-key/flow/start") {
