@@ -1,4 +1,5 @@
-import { createCheckpointFlow, getCheckpointFlow, startNextCheckpoint } from './getkey-checkpoint-flow.js';
+import { createCheckpointFlow, getCheckpointFlow, prepareCheckpointVerification, startNextCheckpoint, consumeCheckpointVerification } from './getkey-checkpoint-flow.js';
+import { createSafeLinkUShortLink } from './safelinku.js';
 
 const TTL_SECONDS = 30 * 60;
 const NO_STORE = { 'cache-control': 'no-store' };
@@ -23,18 +24,20 @@ const publicPage = (slug) => `<!doctype html>
 <div id="service" class="small">Service: ${escapeHtml(slug)}</div>
 <div class="progress"><div id="bar" class="bar"></div></div>
 <div class="card"><div class="row"><div id="badge" class="badge">1</div><div><div id="step" class="label">Checkpoint</div><div id="checkpoint" class="name">Waiting to start…</div></div></div><div id="checkpoints" class="checkpoint-list"></div><div class="actions"><button id="start">Start Get-Key Flow</button><button id="open" class="secondary" disabled>Open Current Checkpoint</button></div></div>
-<div id="status" class="status" hidden></div><p class="small">Checkpoint completion remains server-side. Returning to Frezen alone does not mark a checkpoint complete.</p>
+<div id="status" class="status" hidden></div><p class="small">Checkpoint completion is verified by a one-time Frezen callback token. A normal page return cannot advance the flow.</p>
 <script>
 const slug=${JSON.stringify(slug)};
+const params=new URLSearchParams(location.search);
 const start=document.getElementById('start'); const open=document.getElementById('open'); const status=document.getElementById('status'); const bar=document.getElementById('bar'); const badge=document.getElementById('badge'); const step=document.getElementById('step'); const checkpoint=document.getElementById('checkpoint'); const checkpoints=document.getElementById('checkpoints');
-let flowId=null;
+let flowId=params.get('flow')||null;
 const escapeHtml=(value)=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const show=(text,error=false)=>{status.hidden=false;status.textContent=text;status.className='status'+(error?' error':'');};
 async function req(path,options={}){const r=await fetch(path,{headers:{accept:'application/json','content-type':'application/json'},...options});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.message||d.error||('HTTP '+r.status));return d;}
 function renderCheckpoints(items,state){const completed=new Set(state.completed||[]);checkpoints.innerHTML=(items||[]).map((item,index)=>{const done=completed.has(item.checkpoint_id)||item.status==='COMPLETED';const current=item.checkpoint_id===state.next_checkpoint_id;const label=done?'Completed':current?'Current':'Waiting';return '<div class="checkpoint-item '+(done?'done ':'')+(current?'current':'')+'"><div class="number">'+(index+1)+'</div><div class="meta"><strong>'+escapeHtml(item.name||('Checkpoint '+(index+1)))+'</strong><span>'+label+'</span></div></div>';}).join('');}
-async function refresh(){if(!flowId)return;try{const d=await req('/api/v1/get-key/flow/'+encodeURIComponent(flowId));const s=d.state||{};const list=d.checkpoints||[];const total=s.total||list.length||0;const pct=total?Math.round(((s.completed||[]).length/total)*100):0;bar.style.width=pct+'%';const currentIndex=Math.min(s.current_index||0,Math.max(total-1,0));badge.textContent=String(total?currentIndex+1:1);step.textContent='Checkpoint '+(total?currentIndex+1:0)+' of '+total;checkpoint.textContent=d.next_checkpoint?.name||'All checkpoints complete';renderCheckpoints(list,s);open.disabled=!d.next_checkpoint?.launch_path;open.dataset.launch=d.next_checkpoint?.launch_path||'';if(s.status==='COMPLETED')show('All checkpoints are completed. Key issuance will remain blocked until trusted SafeLinkU completion is available.');}catch(e){show(e.message,true);}}
-start.onclick=async()=>{start.disabled=true;show('Creating checkpoint flow…');try{const d=await req('/api/v1/get-key/flow/start?slug='+encodeURIComponent(slug),{method:'POST',body:JSON.stringify({slug})});flowId=d.flow_id;show('Flow created. Start with checkpoint 1.');await refresh();}catch(e){show(e.message,true)}finally{start.disabled=false;}};
+async function refresh(){if(!flowId)return;try{const d=await req('/api/v1/get-key/flow/'+encodeURIComponent(flowId));const s=d.state||{};const list=d.checkpoints||[];const total=s.total||list.length||0;const pct=total?Math.round(((s.completed||[]).length/total)*100):0;bar.style.width=pct+'%';const currentIndex=Math.min(s.current_index||0,Math.max(total-1,0));badge.textContent=String(total?currentIndex+1:1);step.textContent='Checkpoint '+(total?currentIndex+1:0)+' of '+total;checkpoint.textContent=d.next_checkpoint?.name||'All checkpoints complete';renderCheckpoints(list,s);open.disabled=!d.next_checkpoint?.launch_path;open.dataset.launch=d.next_checkpoint?.launch_path||'';if(s.status==='COMPLETED'){show('All checkpoints are completed. License issuance remains a separate final step.');open.disabled=true;start.style.display='none';}else{start.style.display='none';if(params.get('verified')==='1')show('Checkpoint verified. Continue with the next checkpoint.');}}catch(e){show(e.message,true);}}
+start.onclick=async()=>{start.disabled=true;show('Creating checkpoint flow…');try{const d=await req('/api/v1/get-key/flow/start?slug='+encodeURIComponent(slug),{method:'POST',body:JSON.stringify({slug})});flowId=d.flow_id;history.replaceState(null,'','/get-key/'+encodeURIComponent(slug)+'?flow='+encodeURIComponent(flowId));show('Flow created. Start with checkpoint 1.');await refresh();}catch(e){show(e.message,true)}finally{start.disabled=false;}};
 open.onclick=()=>{const path=open.dataset.launch;if(path)location.href=path;};
+if(flowId){start.style.display='none';show(params.get('verified')==='1'?'Checkpoint verified. Loading the next step…':'Resuming checkpoint flow…');refresh();}
 </script></main></body></html>`;
 
 function cleanId(value, max = 128) {
@@ -168,15 +171,34 @@ export async function getPublicFlow(env, flowId) {
   return json({ flow_id: flowId, state: result.state, checkpoints, next_checkpoint: next ? { ...next, launch_path: `/api/v1/get-key/flow/${encodeURIComponent(flowId)}/launch` } : null });
 }
 
-export async function launchPublicFlow(env, flowId) {
+export async function launchPublicFlow(request, env, flowId) {
   const result = await getCheckpointFlow(env, flowId);
   if (!result.ok) return json({ error: result.error }, result.status || 503);
   const nextId = result.state.next_checkpoint_id;
   if (!nextId) return json({ error: 'FLOW_COMPLETE' }, 409);
-  const checkpoint = await env.DB.prepare('SELECT url FROM frezen_key_checkpoints WHERE id = ?1 AND active = 1 LIMIT 1').bind(nextId).first();
+  const checkpoint = await env.DB.prepare('SELECT id, url, active FROM frezen_key_checkpoints WHERE id = ?1 AND active = 1 LIMIT 1').bind(nextId).first();
   if (!checkpoint?.url || !/^https:\/\//i.test(checkpoint.url)) return json({ error: 'CHECKPOINT_URL_UNAVAILABLE' }, 409);
+
+  const verification = await prepareCheckpointVerification(env, flowId);
+  if (!verification.ok) return json({ error: verification.error }, verification.status || 503);
+  if (verification.complete) return json({ error: 'FLOW_COMPLETE' }, 409);
+
+  const callback = new URL('/api/v1/get-key/checkpoint/callback', request.url);
+  callback.searchParams.set('token', verification.token);
+  const shortLink = await createSafeLinkUShortLink(env, callback.toString(), { alias: `frezen-${flowId.slice(0, 8)}-${Number(verification.sequence) + 1}` });
+  if (shortLink.status !== 'ok' || !shortLink.url) return json({ error: shortLink.error || 'SAFELINKU_LINK_CREATION_FAILED', provider: 'safelinku', http_status: shortLink.http_status }, shortLink.http_status >= 400 ? Math.min(shortLink.http_status, 503) : 503);
+
   await startNextCheckpoint(env, flowId);
-  return new Response(null, { status: 302, headers: { location: checkpoint.url, 'set-cookie': `frezen_flow=${encodeURIComponent(flowId)}; Path=/; Max-Age=${TTL_SECONDS}; HttpOnly; Secure; SameSite=Lax`, ...NO_STORE } });
+  return new Response(null, { status: 302, headers: { location: shortLink.url, 'set-cookie': `frezen_flow=${encodeURIComponent(flowId)}; Path=/; Max-Age=${TTL_SECONDS}; HttpOnly; Secure; SameSite=Lax`, ...NO_STORE } });
+}
+
+export async function verifyPublicCheckpoint(env, token) {
+  const result = await consumeCheckpointVerification(env, token);
+  if (!result.ok) return json({ error: result.error }, result.status || 503);
+  const service = await env.DB.prepare('SELECT slug FROM frezen_key_services WHERE id = ?1 LIMIT 1').bind(result.service_id).first();
+  if (!service?.slug) return json({ error: 'SERVICE_NOT_FOUND' }, 404);
+  const location = `/get-key/${encodeURIComponent(service.slug)}?flow=${encodeURIComponent(result.flow_id)}&verified=1&checkpoint=${encodeURIComponent(result.checkpoint_id)}`;
+  return new Response(null, { status: 302, headers: { location, ...NO_STORE } });
 }
 
 export async function publicGetKeyPage(env, request, slug) {

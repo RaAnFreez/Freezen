@@ -31,9 +31,17 @@ describe('SafeLinkU checkpoint link flow', () => {
     expect(provider).toContain('window.open(target.toString()');
   });
 
-  it('does not mark callback completion as verified without a trusted SafeLinkU signal', () => {
+  it('requires the server-side one-time verification token before advancing a checkpoint', () => {
     const entryUi = read('src/entry-ui.js');
-    expect(entryUi).toContain('verified: false');
-    expect(entryUi).toContain('trusted SafeLinkU completion signal');
+    const checkpointFlow = read('src/getkey-checkpoint-flow.js');
+    const runtime = read('src/key-system-runtime.js');
+
+    expect(entryUi).toContain('/api/v1/get-key/checkpoint/callback');
+    expect(entryUi).toContain('verifyPublicCheckpoint');
+    expect(runtime).toContain('consumeCheckpointVerification');
+    expect(checkpointFlow).toContain('verification_token_hash');
+    expect(checkpointFlow).toContain('prepareCheckpointVerification');
+    expect(checkpointFlow).toContain('consumeCheckpointVerification');
+    expect(checkpointFlow).toContain('verification_token_hash = NULL');
   });
 });

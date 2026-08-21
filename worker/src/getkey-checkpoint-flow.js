@@ -11,7 +11,13 @@ function normalizeCheckpointIds(value) {
   return [...new Set(value.map((id) => String(id || '').trim()).filter(Boolean))];
 }
 
-export function checkpointFlowStatus(flow, items = []) {
+async function sha256Hex(value) {
+  const bytes = new TextEncoder().encode(String(value || ''));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function checkpointFlowStatus(flow, items = []) {
   const completed = new Set(safeJson(flow?.completed_json || '[]', []));
   const ordered = [...items].sort((a, b) => Number(a.sequence) - Number(b.sequence));
   const current = ordered.findIndex((item) => item.status !== 'COMPLETED');
@@ -26,6 +32,8 @@ export function checkpointFlowStatus(flow, items = []) {
   };
 }
 
+export { checkpointFlowStatus, sha256Hex };
+
 export async function createCheckpointFlow(env, { providerId, serviceId = null, productId, checkpointIds }) {
   if (!env?.DB) return { ok: false, status: 503, error: 'DATABASE_UNAVAILABLE' };
   const ids = normalizeCheckpointIds(checkpointIds);
@@ -37,7 +45,7 @@ export async function createCheckpointFlow(env, { providerId, serviceId = null, 
     await env.DB.prepare(`INSERT INTO getkey_checkpoint_flows (id, provider_id, service_id, product_id, current_index, status, completed_json, expires_at) VALUES (?1, ?2, ?3, ?4, 0, 'PENDING', '[]', ?5)`)
       .bind(flowId, providerId, serviceId, productId, expiry).run();
     for (let i = 0; i < ids.length; i += 1) {
-      await env.DB.prepare(`INSERT INTO getkey_checkpoint_flow_items (id, flow_id, checkpoint_id, sequence, status) VALUES (?1, ?2, ?3, ?4, 'PENDING')`)
+      await env.DB.prepare(`INSERT INTO getkey_checkpoint_flow_items (id, flow_id, checkpoint_id, sequence, status, verification_token_hash) VALUES (?1, ?2, ?3, ?4, 'PENDING', NULL)`)
         .bind(crypto.randomUUID(), flowId, ids[i], i).run();
     }
     return { ok: true, flow_id: flowId, current_index: 0, total: ids.length, next_checkpoint_id: ids[0], expires_at: expiry };
@@ -62,6 +70,18 @@ export async function getCheckpointFlow(env, flowId) {
   }
 }
 
+export async function prepareCheckpointVerification(env, flowId) {
+  const result = await getCheckpointFlow(env, flowId);
+  if (!result.ok) return result;
+  if (result.flow.status !== 'PENDING') return { ok: false, status: 409, error: `FLOW_${result.flow.status}` };
+  const next = result.items.find((item) => item.status !== 'COMPLETED');
+  if (!next) return { ok: true, complete: true, state: result.state };
+  const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+  const tokenHash = await sha256Hex(token);
+  await env.DB.prepare(`UPDATE getkey_checkpoint_flow_items SET verification_token_hash = ?1 WHERE id = ?2`).bind(tokenHash, next.id).run();
+  return { ok: true, complete: false, flow_id: flowId, checkpoint_id: next.checkpoint_id, sequence: next.sequence, token, state: result.state };
+}
+
 export async function startNextCheckpoint(env, flowId) {
   const result = await getCheckpointFlow(env, flowId);
   if (!result.ok) return result;
@@ -79,7 +99,7 @@ export async function completeCheckpoint(env, flowId, checkpointId) {
   if (!next) return { ok: true, complete: true, state: result.state };
   if (next.checkpoint_id !== checkpointId) return { ok: false, status: 409, error: 'CHECKPOINT_OUT_OF_ORDER', expected_checkpoint_id: next.checkpoint_id };
 
-  await env.DB.prepare(`UPDATE getkey_checkpoint_flow_items SET status = 'COMPLETED', completed_at = datetime('now') WHERE id = ?1`).bind(next.id).run();
+  await env.DB.prepare(`UPDATE getkey_checkpoint_flow_items SET status = 'COMPLETED', completed_at = datetime('now'), verification_token_hash = NULL WHERE id = ?1`).bind(next.id).run();
   const completed = result.items.filter((item) => item.status === 'COMPLETED').map((item) => item.checkpoint_id);
   completed.push(checkpointId);
   const done = result.items.length === completed.length;
@@ -88,4 +108,23 @@ export async function completeCheckpoint(env, flowId, checkpointId) {
 
   const fresh = await getCheckpointFlow(env, flowId);
   return { ok: true, complete: done, state: fresh.ok ? fresh.state : null, next_checkpoint_id: done ? null : fresh.state.next_checkpoint_id };
+}
+
+export async function consumeCheckpointVerification(env, token) {
+  const value = String(token || '').trim();
+  if (!env?.DB) return { ok: false, status: 503, error: 'DATABASE_UNAVAILABLE' };
+  if (!/^[A-Za-z0-9]{40,96}$/.test(value)) return { ok: false, status: 400, error: 'INVALID_VERIFICATION_TOKEN' };
+  const tokenHash = await sha256Hex(value);
+  try {
+    const row = await env.DB.prepare(`SELECT i.id, i.flow_id, i.checkpoint_id, i.sequence, f.service_id, f.status AS flow_status, f.expires_at FROM getkey_checkpoint_flow_items i INNER JOIN getkey_checkpoint_flows f ON f.id = i.flow_id WHERE i.verification_token_hash = ?1 LIMIT 1`).bind(tokenHash).first();
+    if (!row) return { ok: false, status: 404, error: 'VERIFICATION_TOKEN_NOT_FOUND' };
+    if (new Date(row.expires_at).getTime() <= Date.now() || row.flow_status === 'EXPIRED') return { ok: false, status: 410, error: 'FLOW_EXPIRED', flow_id: row.flow_id, checkpoint_id: row.checkpoint_id };
+    if (row.flow_status !== 'PENDING') return { ok: false, status: 409, error: `FLOW_${row.flow_status}` };
+
+    const result = await completeCheckpoint(env, row.flow_id, row.checkpoint_id);
+    if (!result.ok) return result;
+    return { ...result, flow_id: row.flow_id, checkpoint_id: row.checkpoint_id, service_id: row.service_id };
+  } catch {
+    return { ok: false, status: 503, error: 'DATABASE_ERROR' };
+  }
 }
