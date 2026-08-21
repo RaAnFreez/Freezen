@@ -6,6 +6,14 @@ const json = (body, status = 200, requestId = crypto.randomUUID()) => new Respon
   headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
 });
 
+export function identityStatus(device) {
+  const username = String(device?.game_username ?? "").trim();
+  const userId = String(device?.game_user_id ?? "").trim();
+  if (username && userId) return "COMPLETE";
+  if (username || userId) return "PARTIAL";
+  return "NOT_RECEIVED";
+}
+
 export async function listAllHwid(env, requestId, auth) {
   const result = await listHwidV2(env, { ownerId: auth?.user_id });
   if (!result.ok) {
@@ -13,8 +21,15 @@ export async function listAllHwid(env, requestId, auth) {
     return json({ error: result.reason }, status, requestId);
   }
   const devices = await hydrateRobloxUsernames(env, result.devices ?? []);
-  const blocked = devices.filter((device) => device.status === "blocked").length;
-  return json({ devices, stats: { total: devices.length, active: devices.length - blocked, blocked } }, 200, requestId);
+  const enriched = devices.map((device) => ({ ...device, identity_status: identityStatus(device) }));
+  const blocked = enriched.filter((device) => device.status === "blocked").length;
+  const identity = {
+    total: enriched.length,
+    complete: enriched.filter((device) => device.identity_status === "COMPLETE").length,
+    partial: enriched.filter((device) => device.identity_status === "PARTIAL").length,
+    not_received: enriched.filter((device) => device.identity_status === "NOT_RECEIVED").length,
+  };
+  return json({ devices: enriched, stats: { total: enriched.length, active: enriched.length - blocked, blocked, identity } }, 200, requestId);
 }
 
 export async function setHwidAdminStatus(env, requestId, auth, deviceId, status) {
