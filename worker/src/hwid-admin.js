@@ -12,7 +12,7 @@ export async function listAllHwid(env, requestId, auth) {
     const status = result.reason === "SESSION_AUTH_REQUIRED" ? 401 : 503;
     return json({ error: result.reason }, status, requestId);
   }
-  const devices = await hydrateRobloxUsernames(result.devices ?? []);
+  const devices = await hydrateRobloxUsernames(env, result.devices ?? []);
   const blocked = devices.filter((device) => device.status === "blocked").length;
   return json({ devices, stats: { total: devices.length, active: devices.length - blocked, blocked } }, 200, requestId);
 }
