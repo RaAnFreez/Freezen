@@ -11,6 +11,9 @@ describe("script loader runtime HWID source", () => {
     expect(source).toContain("FREZEN_HWID_UNAVAILABLE");
     expect(source).toContain("&hwid=");
     expect(source).toContain("HttpService:UrlEncode(hwid)");
+    expect(source).toContain("game_username");
+    expect(source).toContain("game_user_id");
+    expect(source).toContain("Players.LocalPlayer");
     expect(source).toContain('script_key="FREZEN-TEST";');
   });
 
