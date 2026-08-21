@@ -6,7 +6,7 @@ const json = (body, status = 200, requestId = crypto.randomUUID()) => new Respon
   headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
 });
 
-function identityStatus(device) {
+export function identityStatus(device) {
   const username = String(device?.game_username ?? "").trim();
   const userId = String(device?.game_user_id ?? "").trim();
   if (username && userId) return "COMPLETE";
