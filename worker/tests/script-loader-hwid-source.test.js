@@ -6,7 +6,7 @@ describe("script loader runtime HWID source", () => {
     const source = buildRuntimeLoaderSource(new Request("https://frezen.test/files/s1.lua"), "s1", "FREZEN-TEST");
     expect(source).toContain("Players.LocalPlayer");
     expect(source).toContain("Players:GetPlayers()");
-    expect(source).toContain("for _=1,50 do");
+    expect(source).toContain("for _=1,100 do");
     expect(source).toContain("player.Name");
     expect(source).toContain("player.DisplayName");
     expect(source).toContain("player.UserId");
