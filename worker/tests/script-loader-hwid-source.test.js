@@ -2,7 +2,19 @@ import { describe, expect, it } from "vitest";
 import { buildRuntimeLoaderSource } from "../src/short-loader.js";
 
 describe("script loader runtime HWID source", () => {
-  it("prefers RbxAnalyticsService and falls back to common executor HWID providers", () => {
+  it("captures Roblox username and user id before delivery", () => {
+    const source = buildRuntimeLoaderSource(new Request("https://frezen.test/files/s1.lua"), "s1", "FREZEN-TEST");
+
+    expect(source).toContain("Players.LocalPlayer");
+    expect(source).toContain('game_username=type(player.Name)=="string" and player.Name or ""');
+    expect(source).toContain('game_user_id=tostring(player.UserId or "")');
+    expect(source).toContain("&game_username=");
+    expect(source).toContain("&game_user_id=");
+    expect(source).toContain("HttpService:UrlEncode(game_username)");
+    expect(source).toContain("HttpService:UrlEncode(game_user_id)");
+  });
+
+  it("keeps HWID capture and fallback behavior intact", () => {
     const source = buildRuntimeLoaderSource(new Request("https://frezen.test/files/s1.lua"), "s1", "FREZEN-TEST");
 
     expect(source).toContain("RbxAnalyticsService");
@@ -11,9 +23,6 @@ describe("script loader runtime HWID source", () => {
     expect(source).toContain("FREZEN_HWID_UNAVAILABLE");
     expect(source).toContain("&hwid=");
     expect(source).toContain("HttpService:UrlEncode(hwid)");
-    expect(source).toContain("game_username");
-    expect(source).toContain("game_user_id");
-    expect(source).toContain("Players.LocalPlayer");
     expect(source).toContain('script_key="FREZEN-TEST";');
   });
 
