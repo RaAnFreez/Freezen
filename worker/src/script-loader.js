@@ -118,6 +118,8 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
   const url = new URL(request.url);
   const key = url.searchParams.get("key")?.trim() ?? "";
   const hwid = url.searchParams.get("hwid")?.trim() ?? "";
+  const gameUsername = url.searchParams.get("game_username")?.trim() ?? "";
+  const gameUserId = url.searchParams.get("game_user_id")?.trim() ?? "";
   if (!key || key.length > 512 || key === "PASTE YOUR KEY HERE") return deny("INVALID_KEY", 403, requestId);
   if (!hwid || hwid.length > 512) return deny("HWID_REQUIRED", 403, requestId);
 
@@ -139,7 +141,7 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
     if (row.license_expires_at != null && row.license_expires_at && new Date(row.license_expires_at).getTime() <= Date.now()) return deny("LICENSE_EXPIRED", 403, requestId);
     if (!row.content) return deny("SCRIPT_CONTENT_MISSING", 404, requestId);
 
-    const bound = await bindRuntimeHwid(env, row.license_id, row.license_user_id, hwid);
+    const bound = await bindRuntimeHwid(env, row.license_id, row.license_user_id, hwid, gameUsername, gameUserId);
     if (!bound.ok) return deny(bindFailureMessage(bound.reason), 403, requestId);
 
     return new Response(row.content, {
