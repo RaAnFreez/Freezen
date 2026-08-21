@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkpointFlowStatus, createCheckpointFlow, completeCheckpoint, getCheckpointFlow } from '../src/getkey-checkpoint-flow.js';
+import { checkpointFlowStatus, createCheckpointFlow, completeCheckpoint, getCheckpointFlow, sha256Hex } from '../src/getkey-checkpoint-flow.js';
 
 describe('sequential GetKey checkpoint flow', () => {
   it('keeps checkpoints ordered and exposes only the next checkpoint', () => {
@@ -46,5 +46,12 @@ describe('sequential GetKey checkpoint flow', () => {
   it('rejects missing flows', async () => {
     const db = { prepare: () => ({ bind: () => ({ first: async () => null }) }) };
     await expect(getCheckpointFlow({ DB: db }, 'missing')).resolves.toMatchObject({ ok: false, status: 404, error: 'FLOW_NOT_FOUND' });
+  });
+
+  it('hashes verification tokens deterministically', async () => {
+    const first = await sha256Hex('frezen-checkpoint-token');
+    const second = await sha256Hex('frezen-checkpoint-token');
+    expect(first).toBe(second);
+    expect(first).toMatch(/^[a-f0-9]{64}$/);
   });
 });
