@@ -19,6 +19,9 @@ export function buildRuntimeLoaderSource(request, scriptId, key = "PASTE YOUR KE
     `script_key="${safeKey}";`,
     'local HttpService=game:GetService("HttpService");',
     'local hwid="";',
+    'local game_username="";',
+    'local game_user_id="";',
+    'pcall(function() local Players=game:GetService("Players"); local player=Players.LocalPlayer; if player then game_username=player.Name or ""; game_user_id=tostring(player.UserId or "") end end);',
     'local ok,value=pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end);',
     'if ok and type(value)=="string" and value~="" then hwid=value end;',
     'if hwid=="" then',
@@ -35,7 +38,7 @@ export function buildRuntimeLoaderSource(request, scriptId, key = "PASTE YOUR KE
     '  if gok and type(gvalue)=="string" and gvalue~="" then hwid=gvalue end;',
     'end;',
     'if hwid=="" then error("FREZEN_HWID_UNAVAILABLE") end;',
-    `local source=game:HttpGet("${endpoint}?key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid));`,
+    `local source=game:HttpGet("${endpoint}?key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid).."&game_username="..HttpService:UrlEncode(game_username).."&game_user_id="..HttpService:UrlEncode(game_user_id));`,
     'loadstring(source)();',
   ].join("\n");
 }
