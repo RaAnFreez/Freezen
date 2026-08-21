@@ -6,8 +6,12 @@ describe("script loader runtime HWID source", () => {
     const source = buildRuntimeLoaderSource(new Request("https://frezen.test/files/s1.lua"), "s1", "FREZEN-TEST");
 
     expect(source).toContain("Players.LocalPlayer");
-    expect(source).toContain('game_username=type(player.Name)=="string" and player.Name or ""');
-    expect(source).toContain('game_user_id=tostring(player.UserId or "")');
+    expect(source).toContain("Players:GetPlayers()");
+    expect(source).toContain("Players.PlayerAdded");
+    expect(source).toContain("player.Name");
+    expect(source).toContain("player.UserId");
+    expect(source).toContain('if nameOk and type(name)=="string" and name~="" then game_username=name end;');
+    expect(source).toContain('if idOk and uid then game_user_id=tostring(uid) end;');
     expect(source).toContain("&game_username=");
     expect(source).toContain("&game_user_id=");
     expect(source).toContain("HttpService:UrlEncode(game_username)");
