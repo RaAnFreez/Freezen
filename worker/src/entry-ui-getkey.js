@@ -8,30 +8,36 @@ import {
   validatePublicGetKeyLicense,
   publicGetKeyPage,
 } from './getkey-public-runtime.js';
+import {
+  startPublicGetKey as startClaimedGetKey,
+  getPublicGetKeyState as getClaimedGetKeyState,
+  launchPublicGetKeyCheckpoint as launchClaimedGetKeyCheckpoint,
+  verifyPublicGetKeyCallback as verifyClaimedGetKeyCallback,
+} from './getkey-single-claim.js';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/api/v1/get-key/checkpoint/callback') {
-      return verifyPublicGetKeyCallback(request, env, url.searchParams.get('token') || '');
+      return verifyClaimedGetKeyCallback(request, env, url.searchParams.get('token') || '');
     }
 
     if (request.method === 'POST' && url.pathname === '/api/v1/get-key/flow/start') {
       let body = {};
       try { body = await request.clone().json(); } catch {}
       const slug = url.searchParams.get('slug') || body?.slug || '';
-      return startPublicGetKey(request, env, slug);
+      return startClaimedGetKey(request, env, slug);
     }
 
     const flowMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)$/);
     if (request.method === 'GET' && flowMatch) {
-      return getPublicGetKeyState(request, env, decodeURIComponent(flowMatch[1]));
+      return getClaimedGetKeyState(request, env, decodeURIComponent(flowMatch[1]));
     }
 
     const launchMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)\/launch$/);
     if (request.method === 'GET' && launchMatch) {
-      return launchPublicGetKeyCheckpoint(request, env, decodeURIComponent(launchMatch[1]));
+      return launchClaimedGetKeyCheckpoint(request, env, decodeURIComponent(launchMatch[1]));
     }
 
     const keyMatch = url.pathname.match(/^\/api\/v1\/get-key\/key\/([^/]+)$/);
