@@ -15,6 +15,13 @@ describe('Get-Key 24h and checkpoint regressions', () => {
     expect(source).not.toContain("expires_at = NULL");
   });
 
+  it('keeps the public Get-Key timeline window at 24 hours', () => {
+    const state = read('getkey-service-id-state.js');
+    expect(state).toContain('SESSION_TTL_SECONDS = 24 * 60 * 60');
+    expect(state).toContain('normalizeSessionLifetime');
+    expect(state).toContain('expires_at: session.expires_at');
+  });
+
   it('merges active SafeLinkU checkpoints into the public service configuration', () => {
     const state = read('getkey-service-id-state.js');
     const meta = read('getkey-service-meta.js');
