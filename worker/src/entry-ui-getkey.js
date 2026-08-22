@@ -5,6 +5,7 @@ import {
   publicGetKeyPage,
 } from './getkey-public-runtime.js';
 import { enhanceGetKeyPage } from './getkey-custom-page-ui.js';
+import { withGetKeyServiceResolver } from './getkey-service-id-resolver.js';
 import {
   startPublicGetKey as startClaimedGetKey,
   getPublicGetKeyState as getClaimedGetKeyState,
@@ -15,35 +16,36 @@ import {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const getKeyEnv = withGetKeyServiceResolver(env);
 
     if (request.method === 'GET' && url.pathname === '/api/v1/get-key/checkpoint/callback') {
-      return verifyClaimedGetKeyCallback(request, env, url.searchParams.get('token') || '');
+      return verifyClaimedGetKeyCallback(request, getKeyEnv, url.searchParams.get('token') || '');
     }
 
     if (request.method === 'POST' && url.pathname === '/api/v1/get-key/flow/start') {
       let body = {};
       try { body = await request.clone().json(); } catch {}
       const slug = url.searchParams.get('slug') || body?.slug || '';
-      return startClaimedGetKey(request, env, slug);
+      return startClaimedGetKey(request, getKeyEnv, slug);
     }
 
     const flowMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)$/);
     if (request.method === 'GET' && flowMatch) {
-      return getClaimedGetKeyState(request, env, decodeURIComponent(flowMatch[1]));
+      return getClaimedGetKeyState(request, getKeyEnv, decodeURIComponent(flowMatch[1]));
     }
 
     const launchMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)\/launch$/);
     if (request.method === 'GET' && launchMatch) {
-      return launchClaimedGetKeyCheckpoint(request, env, decodeURIComponent(launchMatch[1]));
+      return launchClaimedGetKeyCheckpoint(request, getKeyEnv, decodeURIComponent(launchMatch[1]));
     }
 
     const keyMatch = url.pathname.match(/^\/api\/v1\/get-key\/key\/([^/]+)$/);
     if (request.method === 'GET' && keyMatch) {
-      return getPublicGetKeyLicense(request, env, decodeURIComponent(keyMatch[1]));
+      return getPublicGetKeyLicense(request, getKeyEnv, decodeURIComponent(keyMatch[1]));
     }
 
     if (request.method === 'POST' && url.pathname === '/api/v1/get-key/key/validate') {
-      return validatePublicGetKeyLicense(request, env);
+      return validatePublicGetKeyLicense(request, getKeyEnv);
     }
 
     const pageMatch = url.pathname.match(/^\/get-key\/([^/]+)\/?$/);
