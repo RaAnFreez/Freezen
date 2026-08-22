@@ -29,7 +29,7 @@ async function getSession(env, sessionId) {
 
 async function loadServiceById(env, serviceId) {
   if (!env?.DB) return { error: 'DATABASE_UNAVAILABLE', status: 503 };
-  const service = await env.DB.prepare(`SELECT id, name, slug, description, active
+  const service = await env.DB.prepare(`SELECT id, owner_id, name, slug, description, active
     FROM frezen_key_services WHERE id = ?1 LIMIT 1`).bind(serviceId).first();
   if (!service || !service.active) return { error: 'SERVICE_NOT_FOUND', status: 404 };
 
@@ -47,6 +47,17 @@ async function loadServiceById(env, serviceId) {
   } catch {
     checkpointIds = [];
   }
+
+  const activeOwned = await env.DB.prepare(`SELECT id FROM frezen_key_checkpoints
+    WHERE owner_id = ?1 AND active = 1 AND type = 'safelinku' ORDER BY created_at ASC`).bind(service.owner_id).all().catch(() => ({ results: [] }));
+  const configured = new Set(checkpointIds);
+  for (const row of activeOwned.results || []) {
+    if (row?.id && !configured.has(row.id)) {
+      checkpointIds.push(row.id);
+      configured.add(row.id);
+    }
+  }
+
   if (!checkpointIds.length) return { error: 'CHECKPOINTS_NOT_CONFIGURED', status: 409 };
 
   const rows = await env.DB.prepare(`SELECT id, name, type, url, active
