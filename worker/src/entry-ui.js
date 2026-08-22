@@ -1,6 +1,6 @@
 import entry from "./entry.js";
 import { requirePrivateAccess } from "./security/private-access.js";
-import { createSafeLinkUCheckpoint } from "./safelinku.js";
+import { safelinkuDashboardStatus, listDashboardCheckpoints, createDashboardCheckpoint, deleteDashboardCheckpoint, testDashboardSafeLinkU } from "./safelinku-dashboard-admin.js";
 import { syncKeySystemConfig, getPublicServiceConfig, startPublicFlow, getPublicFlow, launchPublicFlow, verifyPublicCheckpoint, publicGetKeyPage } from "./key-system-runtime.js";
 import { getCanonicalDashboardState, reconcileDashboardState } from "./dashboard-state.js";
 import { keyControlOptions, createKeyFolder, listKeys, createKey } from "./key-control.js";
@@ -53,14 +53,43 @@ export default {
       return text(buildCompactLoaderSource(request, decodeURIComponent(compactLoaderMatch[1])), 200, crypto.randomUUID());
     }
 
+    if (url.pathname === "/api/v1/safelinku/status") {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+      return safelinkuDashboardStatus(env);
+    }
+
+    if (url.pathname === "/api/v1/safelinku/checkpoints") {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+      return listDashboardCheckpoints(env, access);
+    }
+
     if (request.method === "POST" && url.pathname === "/api/v1/safelinku/checkpoints/create") {
       const requestId = crypto.randomUUID();
       const access = await requirePrivateAccess(request, env, requestId);
       if (access instanceof Response) return access;
-      let body = {};
-      try { body = await request.json(); } catch { return json({ error: "INVALID_JSON", request_id: requestId }, 400); }
-      const result = await createSafeLinkUCheckpoint(env, request, body?.checkpoint_id, requestId);
-      return json({ provider: "safelinku", ...result, request_id: requestId }, result.http_status || (result.status === "ok" ? 200 : 503));
+      return createDashboardCheckpoint(request, env, access);
+    }
+
+    const checkpointDeleteMatch = url.pathname.match(/^\/api\/v1\/safelinku\/checkpoints\/([^/]+)$/);
+    if (checkpointDeleteMatch) {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      if (request.method !== "DELETE") return json({ error: "METHOD_NOT_ALLOWED", request_id: requestId }, 405);
+      return deleteDashboardCheckpoint(env, access, decodeURIComponent(checkpointDeleteMatch[1]));
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/v1/safelinku/test-connection") {
+      const requestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return access;
+      return testDashboardSafeLinkU(env);
     }
 
     if (url.pathname === "/api/v1/dashboard/state") {
