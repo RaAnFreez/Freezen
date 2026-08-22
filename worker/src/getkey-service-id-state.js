@@ -16,14 +16,33 @@ function readCookie(request, name) {
   return null;
 }
 
+function futureIso(seconds) {
+  return new Date(Date.now() + seconds * 1000).toISOString();
+}
+
 async function getSession(env, sessionId) {
   if (!env?.DB || !sessionId) return null;
   const session = await env.DB.prepare('SELECT * FROM getkey_public_sessions WHERE id = ?1 LIMIT 1').bind(sessionId).first();
   if (!session) return null;
+
   if (new Date(session.expires_at).getTime() <= Date.now()) {
-    await env.DB.prepare('DELETE FROM getkey_public_sessions WHERE id = ?1').bind(sessionId).run().catch(() => {});
-    return null;
+    // Keep the per-session identity, but reset the completed flow in-place.
+    // Historical licenses/keys remain in D1 for the dashboard; only the
+    // public flow state is cleared so the same session can start a fresh 24h cycle.
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM getkey_public_checkpoints WHERE session_id = ?1').bind(sessionId),
+      env.DB.prepare('DELETE FROM getkey_public_keys WHERE session_id = ?1').bind(sessionId),
+      env.DB.prepare(`UPDATE getkey_public_sessions
+        SET issued_license_id = NULL,
+            created_at = datetime('now'),
+            last_seen_at = datetime('now'),
+            expires_at = ?1
+        WHERE id = ?2`).bind(futureIso(SESSION_TTL_SECONDS), sessionId),
+    ]).catch(() => {});
+    const refreshed = await env.DB.prepare('SELECT * FROM getkey_public_sessions WHERE id = ?1 LIMIT 1').bind(sessionId).first();
+    return refreshed || null;
   }
+
   await env.DB.prepare("UPDATE getkey_public_sessions SET last_seen_at = datetime('now') WHERE id = ?1").bind(sessionId).run().catch(() => {});
   return session;
 }
@@ -103,6 +122,7 @@ function publicState(session, checkpointRows) {
     current_step: next?.step_index || rows.length,
     next_checkpoint_id: next?.checkpoint_id || null,
     expires_at: session.expires_at,
+    expires_label: 'Expired Key',
     completed: completed.map((row) => row.checkpoint_id),
   };
 }
