@@ -7,8 +7,8 @@ import {
   startPublicGetKey as startClaimedGetKey,
   getPublicGetKeyState as getClaimedGetKeyState,
   launchPublicGetKeyCheckpoint as launchClaimedGetKeyCheckpoint,
-  verifyPublicGetKeyCallback as verifyClaimedGetKeyCallback,
 } from './getkey-single-claim-service-id.js';
+import { verifyGetKeyCheckpointCallback } from './getkey-callback-runtime.js';
 import { getPublicGetKeyServiceMeta } from './getkey-service-meta.js';
 import { resolveGetKeyService } from './getkey-slug-resolver.js';
 import { renderSlugGetKeyPage } from './getkey-slug-ui.js';
@@ -38,9 +38,6 @@ async function renderSlugPageWithDirectCheckpointRedirect(slug) {
     const text = String(button.textContent || '').trim().toUpperCase();
     let launchPath = button.dataset.launch || '';
 
-    // START must still use the normal flow-creation handler. Once a flow exists,
-    // CONTINUE should navigate to the Worker launch endpoint directly so its
-    // HTTP 302 reaches the SafeLinkU short URL without a JSON-fetch round trip.
     if (isPrimary) {
       if (!text.includes('CONTINUE')) return;
       const flowId = new URL(location.href).searchParams.get('flow');
@@ -68,7 +65,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/api/v1/get-key/checkpoint/callback') {
-      return verifyClaimedGetKeyCallback(request, env, url.searchParams.get('token') || '');
+      return verifyGetKeyCheckpointCallback(request, env, url.searchParams.get('token') || '');
     }
 
     if (request.method === 'GET' && url.pathname === '/api/v1/get-key/service') {
