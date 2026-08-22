@@ -171,6 +171,26 @@ async function issueLicenseWithProductionSchema(env, sessionId) {
   return { licenseId, alreadyIssued: false, expiresAt };
 }
 
+async function ensureActiveCheckpointsForFlow(env, sessionId, serviceId) {
+  const service = await env.DB.prepare('SELECT owner_id FROM frezen_key_services WHERE id = ?1 LIMIT 1').bind(serviceId).first().catch(() => null);
+  if (!service?.owner_id) return;
+
+  const active = await env.DB.prepare(`SELECT id FROM frezen_key_checkpoints
+    WHERE owner_id = ?1 AND active = 1 AND type = 'safelinku' ORDER BY created_at ASC`).bind(service.owner_id).all().catch(() => ({ results: [] }));
+  const existing = await env.DB.prepare('SELECT checkpoint_id FROM getkey_public_checkpoints WHERE session_id = ?1').bind(sessionId).all().catch(() => ({ results: [] }));
+  const known = new Set((existing.results || []).map((row) => row?.checkpoint_id).filter(Boolean));
+  let step = Number((await env.DB.prepare('SELECT COALESCE(MAX(step_index), 0) AS max_step FROM getkey_public_checkpoints WHERE session_id = ?1').bind(sessionId).first().catch(() => null))?.max_step || 0);
+
+  for (const row of active.results || []) {
+    if (!row?.id || known.has(row.id)) continue;
+    step += 1;
+    await env.DB.prepare(`INSERT OR IGNORE INTO getkey_public_checkpoints
+      (id, session_id, step_index, checkpoint_id, status, created_at)
+      VALUES (?1, ?2, ?3, ?4, 'pending', datetime('now'))`)
+      .bind(crypto.randomUUID(), sessionId, step, row.id).run();
+  }
+}
+
 export async function verifyGetKeyCheckpointCallback(request, env, token) {
   const value = String(token || '').trim();
   if (!/^[A-Za-z0-9]{40,96}$/.test(value)) {
@@ -201,6 +221,8 @@ export async function verifyGetKeyCheckpointCallback(request, env, token) {
       .bind(row.id, row.session_id, tokenHash).run();
 
     if (!updated?.meta?.changes) return json({ error: 'VERIFICATION_RACE' }, 409);
+
+    await ensureActiveCheckpointsForFlow(env, row.session_id, row.service_id);
 
     const rows = await env.DB.prepare(
       'SELECT checkpoint_id, status FROM getkey_public_checkpoints WHERE session_id = ?1 ORDER BY step_index ASC',
