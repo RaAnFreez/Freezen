@@ -23,14 +23,15 @@ describe('SafeLinkU checkpoint link flow', () => {
     fetchSpy.mockRestore();
   });
 
-  it('keeps checkpoint URLs in the dashboard checkpoint records', () => {
+  it('uses backend checkpoint definitions and per-flow SafeLinkU launch URLs', () => {
     const panel = read('public/dashboard/safelinku-panel.js');
     const provider = read('public/dashboard/provider-flow-enhancer.js');
     expect(panel).toContain('/api/v1/safelinku/checkpoints/create');
-    expect(panel).toContain('reference = result.url');
-    expect(panel).toContain('checkpoint-url');
-    expect(provider).toContain('no SafeLinkU checkpoint URL configured');
-    expect(provider).toContain('window.open(target.toString()');
+    expect(panel).toContain('Generated at GetKey launch');
+    expect(panel).toContain('Delete Integration');
+    expect(provider).toContain('/api/v1/safelinku/checkpoints');
+    expect(provider).toContain('data.service.slug');
+    expect(provider).toContain('backend SafeLinkU checkpoints');
   });
 
   it('requires the server-side one-time verification token before advancing a checkpoint', () => {
