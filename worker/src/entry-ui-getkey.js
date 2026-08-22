@@ -25,11 +25,99 @@ function getSlugFromPath(pathname) {
   }
 }
 
+function readCookie(request, name) {
+  const raw = request.headers.get('cookie') || '';
+  for (const part of raw.split(';')) {
+    const [key, ...rest] = part.trim().split('=');
+    if (key === name) return decodeURIComponent(rest.join('='));
+  }
+  return null;
+}
+
+async function recoverCompletedCallback(request, env, response) {
+  if (response.status !== 404 || !env?.DB) return response;
+  const body = await response.clone().json().catch(() => null);
+  if (body?.error !== 'VERIFICATION_TOKEN_NOT_FOUND') return response;
+
+  const sessionId = readCookie(request, 'frezen_getkey_session');
+  if (!sessionId) return response;
+
+  try {
+    const session = await env.DB.prepare(`SELECT s.id, s.service_id, f.slug
+      FROM getkey_public_sessions s
+      JOIN frezen_key_services f ON f.id = s.service_id
+      WHERE s.id = ?1 LIMIT 1`).bind(sessionId).first();
+    if (!session?.id || !session?.slug) return response;
+
+    const counts = await env.DB.prepare(`SELECT COUNT(*) AS total,
+      SUM(CASE WHEN status = 'passed' THEN 1 ELSE 0 END) AS passed
+      FROM getkey_public_checkpoints WHERE session_id = ?1`).bind(sessionId).first();
+    const total = Number(counts?.total || 0);
+    const passed = Number(counts?.passed || 0);
+    if (!total || passed !== total) return response;
+
+    const issued = await env.DB.prepare(
+      'SELECT license_id FROM getkey_public_keys WHERE session_id = ?1 LIMIT 1',
+    ).bind(sessionId).first();
+    if (!issued?.license_id) return response;
+
+    const location = `/get-key/${encodeURIComponent(session.slug)}?flow=${encodeURIComponent(sessionId)}&verified=1&unlocked=1`;
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location,
+        'cache-control': 'no-store',
+      },
+    });
+  } catch (error) {
+    console.error('Completed Get-Key callback recovery failed', {
+      message: String(error?.message || error),
+      session_id: sessionId,
+    });
+    return response;
+  }
+}
+
 async function renderSlugPageWithDirectCheckpointRedirect(slug) {
   const response = renderSlugGetKeyPage(slug);
   const html = await response.text();
   const script = `<script>
 (() => {
+  const flowStorageKey = 'frezen:getkey:flow:' + ${JSON.stringify(String(slug || ''))};
+
+  const autoStartIfNeeded = () => {
+    const button = document.getElementById('primary');
+    if (!button || button.dataset.autoStarted === '1') return;
+
+    const params = new URL(location.href).searchParams;
+    const hasUrlFlow = Boolean(params.get('flow'));
+    const savedFlow = localStorage.getItem(flowStorageKey);
+    if (hasUrlFlow || savedFlow) return;
+
+    const text = String(button.textContent || '').trim().toUpperCase();
+    if (text !== 'START') return;
+
+    button.dataset.autoStarted = '1';
+    setTimeout(() => {
+      if (!localStorage.getItem(flowStorageKey) && !new URL(location.href).searchParams.get('flow')) {
+        button.click();
+      }
+    }, 250);
+  };
+
+  const observe = () => {
+    autoStartIfNeeded();
+    const observer = new MutationObserver(autoStartIfNeeded);
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+    setTimeout(() => observer.disconnect(), 20000);
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', observe, { once: true });
+  } else {
+    observe();
+  }
+
   document.addEventListener('click', (event) => {
     const button = event.target?.closest?.('#primary, .ghost[data-launch]');
     if (!button) return;
@@ -65,7 +153,8 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/api/v1/get-key/checkpoint/callback') {
-      return verifyGetKeyCheckpointCallback(request, env, url.searchParams.get('token') || '');
+      const callback = await verifyGetKeyCheckpointCallback(request, env, url.searchParams.get('token') || '');
+      return recoverCompletedCallback(request, env, callback);
     }
 
     if (request.method === 'GET' && url.pathname === '/api/v1/get-key/service') {
