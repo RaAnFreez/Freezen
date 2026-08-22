@@ -4,6 +4,7 @@ import {
   validatePublicGetKeyLicense,
   publicGetKeyPage,
 } from './getkey-public-runtime.js';
+import { enhanceGetKeyPage } from './getkey-custom-page-ui.js';
 import {
   startPublicGetKey as startClaimedGetKey,
   getPublicGetKeyState as getClaimedGetKeyState,
@@ -47,7 +48,8 @@ export default {
 
     const pageMatch = url.pathname.match(/^\/get-key\/([^/]+)\/?$/);
     if (request.method === 'GET' && pageMatch) {
-      return publicGetKeyPage(decodeURIComponent(pageMatch[1]));
+      const page = publicGetKeyPage(decodeURIComponent(pageMatch[1]));
+      return enhanceGetKeyPage(page);
     }
 
     return entryUi.fetch(request, env, ctx);
