@@ -2,20 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 import { safelinkuConfigStatus, testSafeLinkUConnection, createClaim, getSafeLinkUStats } from "../src/safelinku.js";
 
 describe("Phase 21 SafeLinkU integration", () => {
-  it("requires an API key for the documented SafeLinkU REST API", () => {
+  it("requires an API key for the real SafeLinkU query-param API", () => {
     expect(safelinkuConfigStatus({})).toMatchObject({ configured: false, api_key_configured: false });
     expect(safelinkuConfigStatus({ SAFELINKU_API_KEY: "secret" })).toMatchObject({
       configured: true,
       api_key_configured: true,
-      endpoint: "https://safelinku.com/api/v1/links",
+      endpoint: "https://safelinku.com/api",
     });
   });
 
-  it("keeps a legacy HTTPS base URL as non-secret compatibility metadata", () => {
-    expect(safelinkuConfigStatus({ SAFELINKU_API_KEY: "secret", SAFELINKU_API_BASE_URL: "https://provider.example" }))
-      .toMatchObject({ configured: true, base_url_configured: true, base_url: "https://provider.example" });
+  it("uses a configured SAFELINKU_API_BASE_URL as the real request endpoint", () => {
+    expect(safelinkuConfigStatus({ SAFELINKU_API_KEY: "secret", SAFELINKU_API_BASE_URL: "https://provider.example/api" }))
+      .toMatchObject({ configured: true, endpoint: "https://provider.example/api" });
     expect(safelinkuConfigStatus({ SAFELINKU_API_KEY: "secret", SAFELINKU_API_BASE_URL: "http://example.test" }))
-      .not.toHaveProperty("base_url_configured", true);
+      .toMatchObject({ endpoint: "https://safelinku.com/api" });
   });
 
   it("does not expose the API key in configuration status", () => {
@@ -31,16 +31,20 @@ describe("Phase 21 SafeLinkU integration", () => {
     fetchSpy.mockRestore();
   });
 
-  it("uses the provider secret server-side for the documented link creation API", async () => {
+  it("uses the provider secret server-side as a query param against the real link creation API", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(
-      JSON.stringify({ url: "https://safelinku.com/test" }),
-      { status: 200, headers: { "content-type": "application/json" } },
+      "https://safelinku.com/test",
+      { status: 200, headers: { "content-type": "text/plain" } },
     ));
     const result = await testSafeLinkUConnection({ SAFELINKU_API_KEY: "TOP_SECRET" });
     expect(result).toMatchObject({ status: "ok", http_status: 200, url: "https://safelinku.com/test" });
-    expect(fetchSpy.mock.calls[0][0]).toBe("https://safelinku.com/api/v1/links");
-    expect(fetchSpy.mock.calls[0][1].method).toBe("POST");
-    expect(fetchSpy.mock.calls[0][1].headers.authorization).toBe("Bearer TOP_SECRET");
+
+    const [calledUrl, options] = fetchSpy.mock.calls[0];
+    expect(options.method).toBe("GET");
+    expect(options.body).toBeUndefined();
+    const parsed = new URL(calledUrl);
+    expect(parsed.origin + parsed.pathname).toBe("https://safelinku.com/api");
+    expect(parsed.searchParams.get("api")).toBe("TOP_SECRET");
     fetchSpy.mockRestore();
   });
 
