@@ -12,7 +12,13 @@ describe('Custom Get-Key slug UI routing', () => {
     expect(entry).toContain("import { renderSlugGetKeyPage } from './getkey-slug-ui.js';");
     expect(entry).toContain('const slug = getSlugFromPath(url.pathname);');
     expect(entry).toContain('return renderSlugGetKeyPage(slug);');
-    expect(page).toContain('Open Current Checkpoint');
+
+    expect(page).toContain('id="primary"');
+    expect(page).toContain("els.primaryText.textContent = 'CONTINUE'");
+    expect(page).toContain("status === 'current' ? 'OPEN' : '—'");
+    expect(page).toContain('launchCurrentCheckpoint');
+    expect(page).toContain('/api/v1/get-key/flow/start?slug=');
+    expect(page).toContain('/launch?json=1');
   });
 
   it('keeps the legacy helper JSON launch path available for compatibility', () => {
