@@ -1,9 +1,5 @@
 import entryUi from './entry-ui.js';
 import {
-  startPublicGetKey,
-  getPublicGetKeyState,
-  launchPublicGetKeyCheckpoint,
-  verifyPublicGetKeyCallback,
   getPublicGetKeyLicense,
   validatePublicGetKeyLicense,
   publicGetKeyPage,
