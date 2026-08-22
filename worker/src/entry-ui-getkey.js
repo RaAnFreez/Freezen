@@ -10,6 +10,7 @@ import {
   verifyPublicGetKeyCallback as verifyClaimedGetKeyCallback,
 } from './getkey-single-claim-service-id.js';
 import { getPublicGetKeyServiceMeta } from './getkey-service-meta.js';
+import { resolveGetKeyService } from './getkey-slug-resolver.js';
 import { renderSlugGetKeyPage } from './getkey-slug-ui.js';
 
 function getSlugFromPath(pathname) {
@@ -33,14 +34,35 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname === '/api/v1/get-key/service') {
-      return getPublicGetKeyServiceMeta(env, url.searchParams.get('slug') || '');
+      const requestedSlug = url.searchParams.get('slug') || '';
+      const resolved = await resolveGetKeyService(env, requestedSlug);
+      if (resolved.error) return new Response(JSON.stringify({ error: resolved.error }), {
+        status: resolved.status,
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      });
+      const response = await getPublicGetKeyServiceMeta(env, resolved.canonical_slug);
+      if (resolved.alias && response.ok) {
+        const body = await response.json().catch(() => ({}));
+        body.requested_slug = resolved.requested_slug;
+        body.service = { ...(body.service || {}), public_slug: resolved.requested_slug };
+        return new Response(JSON.stringify(body), {
+          status: response.status,
+          headers: response.headers,
+        });
+      }
+      return response;
     }
 
     if (request.method === 'POST' && url.pathname === '/api/v1/get-key/flow/start') {
       let body = {};
       try { body = await request.clone().json(); } catch {}
-      const slug = url.searchParams.get('slug') || body?.slug || '';
-      return startClaimedGetKey(request, env, slug);
+      const requestedSlug = url.searchParams.get('slug') || body?.slug || '';
+      const resolved = await resolveGetKeyService(env, requestedSlug);
+      if (resolved.error) return new Response(JSON.stringify({ error: resolved.error }), {
+        status: resolved.status,
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      });
+      return startClaimedGetKey(request, env, resolved.canonical_slug);
     }
 
     const flowMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)$/);
