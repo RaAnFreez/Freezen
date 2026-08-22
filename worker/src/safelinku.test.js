@@ -54,6 +54,54 @@ describe("SafeLinkU API integration", () => {
     expect(JSON.stringify(result)).not.toContain("super-secret");
   });
 
+  it("retries once without alias when SafeLinkU rejects only the optional alias with an empty error array", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        status: 400,
+        ok: false,
+        text: async () => JSON.stringify({ error: [] }),
+      })
+      .mockResolvedValueOnce({
+        status: 201,
+        ok: true,
+        text: async () => JSON.stringify({ url: "https://safelinku.com/retry123" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createSafeLinkUShortLink(
+      { SAFELINKU_API_KEY: "super-secret" },
+      "https://example.com/flow",
+      { alias: "my-alias" },
+    );
+
+    expect(result).toEqual({
+      status: "ok",
+      http_status: 201,
+      configured: true,
+      url: "https://safelinku.com/retry123",
+      error: null,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ url: "https://example.com/flow" });
+  });
+
+  it("normalizes an empty SafeLinkU error array into a useful HTTP error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      status: 400,
+      ok: false,
+      text: async () => JSON.stringify({ error: [] }),
+    }));
+    const result = await createSafeLinkUShortLink(
+      { SAFELINKU_API_KEY: "bad-key" },
+      "https://example.com/flow",
+      {},
+    );
+    expect(result.status).toBe("error");
+    expect(result.http_status).toBe(400);
+    expect(result.error).toBe("SAFELINKU_HTTP_400");
+    expect(JSON.stringify(result)).not.toContain("bad-key");
+  });
+
   it("treats an empty response body as a failure", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       status: 200,
