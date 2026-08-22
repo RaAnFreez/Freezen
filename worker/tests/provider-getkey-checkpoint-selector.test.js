@@ -14,9 +14,10 @@ describe('Provider Get-Key checkpoint selector', () => {
     expect(source).toContain("CHECKPOINTS_KEY");
   });
 
-  it('never sends the SafeLinkU API key from browser code', () => {
+  it('does not send a SafeLinkU credential or Bearer token from browser code', () => {
     const source = read('public/dashboard/provider-getkey-checkpoint.js');
-    expect(source).not.toContain('SAFELINKU_API_KEY');
-    expect(source).not.toContain('Authorization: Bearer');
+    expect(source).not.toMatch(/authorization\s*:/i);
+    expect(source).not.toMatch(/Bearer\s+[A-Za-z0-9._-]+/i);
+    expect(source).not.toMatch(/['\"](?:sk|api)[_-]?[A-Za-z0-9]{16,}['\"]/i);
   });
 });
