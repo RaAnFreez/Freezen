@@ -34,7 +34,74 @@ function randomHex(bytes = 4) {
 }
 
 function makeLicenseKey() {
-  return `NX-${randomHex()}-${randomHex()}-${randomHex()}-${randomHex()}`;
+  return `FREZEN-${randomHex()}-${randomHex()}-${randomHex()}-${randomHex()}`;
+}
+
+async function syncDashboardKeyRecord(env, sessionId, licenseId, licenseKey, keyCiphertext) {
+  if (!env?.DB || !sessionId || !licenseId || !licenseKey || !env?.FREZEN_MASTER_SECRET) return false;
+
+  const [session, existingRecord] = await Promise.all([
+    env.DB.prepare('SELECT id, service_id FROM getkey_public_sessions WHERE id = ?1 LIMIT 1').bind(sessionId).first(),
+    env.DB.prepare('SELECT id FROM frezen_key_records WHERE license_id = ?1 LIMIT 1').bind(licenseId).first().catch(() => null),
+  ]);
+  if (existingRecord?.id) return true;
+  if (!session?.service_id) return false;
+
+  const [service, provider] = await Promise.all([
+    env.DB.prepare(`SELECT id, owner_id, name, slug, active
+      FROM frezen_key_services WHERE id = ?1 LIMIT 1`).bind(session.service_id).first(),
+    env.DB.prepare(`SELECT id, name, service_id, active
+      FROM frezen_key_providers WHERE service_id = ?1 AND active = 1
+      ORDER BY updated_at DESC LIMIT 1`).bind(session.service_id).first(),
+  ]);
+
+  if (!service?.owner_id || !service.active || !provider?.id) {
+    console.error('GetKey dashboard context unavailable', {
+      session_id: sessionId,
+      service_id: session.service_id,
+      has_owner_id: Boolean(service?.owner_id),
+      has_provider: Boolean(provider?.id),
+    });
+    return false;
+  }
+
+  const keyHash = await sha256Hex(licenseKey);
+  const ciphertext = keyCiphertext || await encryptKeySecret(env.FREZEN_MASTER_SECRET, licenseKey);
+  const recordId = crypto.randomUUID();
+
+  await env.DB.prepare(`UPDATE licenses
+    SET license_key_hash = ?1, status = 'active', expires_at = NULL, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?2`).bind(keyHash, licenseId).run();
+
+  await env.DB.prepare(`UPDATE getkey_public_keys
+    SET key_hash = ?1, key_ciphertext = ?2
+    WHERE session_id = ?3 AND license_id = ?4`).bind(keyHash, ciphertext, sessionId, licenseId).run();
+
+  await env.DB.prepare(`INSERT INTO frezen_key_records
+    (id, owner_id, license_id, provider_id, service_id, folder_id, key_name, premium, forever)
+    VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, 0, 1)`)
+    .bind(
+      recordId,
+      service.owner_id,
+      licenseId,
+      provider.id,
+      service.id,
+      `Get-Key — ${String(service.name || service.slug || 'Service').slice(0, 80)}`,
+    ).run();
+
+  await env.DB.prepare('INSERT INTO frezen_key_limits (key_id, max_devices) VALUES (?1, 1)')
+    .bind(recordId).run();
+
+  await env.DB.prepare(`UPDATE frezen_key_records
+    SET key_secret_ciphertext = ?1, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?2`).bind(ciphertext, recordId).run().catch((error) => {
+      console.warn('GetKey dashboard secret column unavailable', {
+        message: String(error?.message || error),
+        key_id: recordId,
+      });
+    });
+
+  return true;
 }
 
 async function issueLicenseWithProductionSchema(env, sessionId) {
@@ -66,6 +133,18 @@ async function issueLicenseWithProductionSchema(env, sessionId) {
   await env.DB.prepare(
     'UPDATE getkey_public_sessions SET issued_license_id = ?1 WHERE id = ?2',
   ).bind(licenseId, sessionId).run();
+
+  if (env.FREZEN_MASTER_SECRET) {
+    try {
+      await syncDashboardKeyRecord(env, sessionId, licenseId, licenseKey, ciphertext);
+    } catch (error) {
+      console.error('GetKey dashboard key sync failed', {
+        session_id: sessionId,
+        license_id: licenseId,
+        message: String(error?.message || error),
+      });
+    }
+  }
 
   return { licenseId, alreadyIssued: false };
 }
