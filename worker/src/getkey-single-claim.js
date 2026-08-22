@@ -1,10 +1,10 @@
 import {
   startPublicGetKey as startRuntime,
   getPublicGetKeyState as getStateRuntime,
-  launchPublicGetKeyCheckpoint as launchRuntime,
   verifyPublicGetKeyCallback as verifyRuntime,
   getPublicGetKeyLicense,
 } from './getkey-public-runtime.js';
+import { launchGetKeyCheckpointByServiceId } from './getkey-service-id-launch.js';
 
 const SESSION_COOKIE = 'frezen_getkey_session';
 const CLAIM_MAX_AGE = 365 * 24 * 60 * 60;
@@ -113,8 +113,8 @@ export async function getPublicGetKeyState(request, env, flowId) {
 
 export async function launchPublicGetKeyCheckpoint(request, env, flowId) {
   const sessionRequest = requestWithSession(request, readCookie(request, SESSION_COOKIE) || flowId);
-  const response = await launchRuntime(sessionRequest, env, flowId);
-  return withLaunchJson(response, request);
+  const jsonMode = new URL(request.url).searchParams.get('json') === '1';
+  return launchGetKeyCheckpointByServiceId(sessionRequest, env, flowId, jsonMode);
 }
 
 export async function verifyPublicGetKeyCallback(request, env, token) {
