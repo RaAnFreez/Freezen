@@ -2,15 +2,27 @@ import entryUi from './entry-ui.js';
 import {
   getPublicGetKeyLicense,
   validatePublicGetKeyLicense,
-  publicGetKeyPage,
 } from './getkey-public-runtime.js';
-import { enhanceGetKeyPage } from './getkey-custom-page-ui.js';
 import {
   startPublicGetKey as startClaimedGetKey,
   getPublicGetKeyState as getClaimedGetKeyState,
   launchPublicGetKeyCheckpoint as launchClaimedGetKeyCheckpoint,
   verifyPublicGetKeyCallback as verifyClaimedGetKeyCallback,
 } from './getkey-single-claim-service-id.js';
+import { getPublicGetKeyServiceMeta } from './getkey-service-meta.js';
+import { renderSlugGetKeyPage } from './getkey-slug-ui.js';
+
+function getSlugFromPath(pathname) {
+  const prefix = '/get-key/';
+  if (!pathname.startsWith(prefix)) return null;
+  const tail = pathname.slice(prefix.length).replace(/\/+$/, '');
+  if (!tail || tail.includes('/')) return null;
+  try {
+    return decodeURIComponent(tail);
+  } catch {
+    return null;
+  }
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -20,6 +32,10 @@ export default {
       return verifyClaimedGetKeyCallback(request, env, url.searchParams.get('token') || '');
     }
 
+    if (request.method === 'GET' && url.pathname === '/api/v1/get-key/service') {
+      return getPublicGetKeyServiceMeta(env, url.searchParams.get('slug') || '');
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/v1/get-key/flow/start') {
       let body = {};
       try { body = await request.clone().json(); } catch {}
@@ -27,17 +43,17 @@ export default {
       return startClaimedGetKey(request, env, slug);
     }
 
-    const flowMatch = url.pathname.match(/^\\/api\\/v1\\/get-key\\/flow\\/([^/]+)$/);
+    const flowMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)$/);
     if (request.method === 'GET' && flowMatch) {
       return getClaimedGetKeyState(request, env, decodeURIComponent(flowMatch[1]));
     }
 
-    const launchMatch = url.pathname.match(/^\\/api\\/v1\\/get-key\\/flow\\/([^/]+)\\/launch$/);
+    const launchMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)\/launch$/);
     if (request.method === 'GET' && launchMatch) {
       return launchClaimedGetKeyCheckpoint(request, env, decodeURIComponent(launchMatch[1]));
     }
 
-    const keyMatch = url.pathname.match(/^\\/api\\/v1\\/get-key\\/key\\/([^/]+)$/);
+    const keyMatch = url.pathname.match(/^\/api\/v1\/get-key\/key\/([^/]+)$/);
     if (request.method === 'GET' && keyMatch) {
       return getPublicGetKeyLicense(request, env, decodeURIComponent(keyMatch[1]));
     }
@@ -46,10 +62,9 @@ export default {
       return validatePublicGetKeyLicense(request, env);
     }
 
-    const pageMatch = url.pathname.match(/^\\/get-key\\/([^/]+)\\/?$/);
-    if (request.method === 'GET' && pageMatch) {
-      const page = publicGetKeyPage(decodeURIComponent(pageMatch[1]));
-      return enhanceGetKeyPage(page);
+    const slug = getSlugFromPath(url.pathname);
+    if (request.method === 'GET' && slug) {
+      return renderSlugGetKeyPage(slug);
     }
 
     return entryUi.fetch(request, env, ctx);
