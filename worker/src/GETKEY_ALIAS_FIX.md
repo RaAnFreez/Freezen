@@ -1,0 +1,1 @@
+This branch fixes Get-Key custom slug flow start by resolving the requested slug against the canonical service and service-alias table before calling the service-id runtime. No D1 schema changes are required.
