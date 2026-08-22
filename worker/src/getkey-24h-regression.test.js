@@ -10,8 +10,10 @@ describe('Get-Key 24h and checkpoint regressions', () => {
   it('issues Get-Key licenses with a 24 hour expiry and non-forever dashboard records', () => {
     const source = read('getkey-callback-runtime.js');
     expect(source).toContain('KEY_TTL_SECONDS = 24 * 60 * 60');
-    expect(source).toContain("expires_at)\n    VALUES (?1, ?2, NULL, 'active'");
+    expect(source).toContain("(id, license_key_hash, user_id, status, created_at, updated_at, expires_at)");
+    expect(source).toContain("VALUES (?1, ?2, NULL, 'active', datetime('now'), datetime('now'), ?3)");
     expect(source).toContain('VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, 0, 0)');
+    expect(source).toContain('expires_at = ?3');
     expect(source).not.toContain("expires_at = NULL");
   });
 
