@@ -8,7 +8,7 @@ import { getPublicGetKeyStateByServiceId } from './getkey-service-id-state.js';
 import { encryptKeySecret } from './key-secret.js';
 
 const SESSION_COOKIE = 'frezen_getkey_session';
-const CLAIM_MAX_AGE = 365 * 24 * 60 * 60;
+const CLAIM_MAX_AGE = 24 * 60 * 60;
 
 function readCookie(request, name) {
   const raw = request.headers.get('cookie') || '';
@@ -106,10 +106,11 @@ async function syncIssuedLicenseToDashboard(env, sessionId) {
     const licenseKey = makeFrezenKey();
     const keyHash = await sha256Hex(licenseKey);
     const ciphertext = await encryptKeySecret(env.FREZEN_MASTER_SECRET, licenseKey);
+    const expiresAt = new Date(Date.now() + CLAIM_MAX_AGE * 1000).toISOString();
 
     await env.DB.prepare(`UPDATE licenses
-      SET license_key_hash = ?1, status = 'active', expires_at = NULL, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?2`).bind(keyHash, keyRow.license_id).run();
+      SET license_key_hash = ?1, status = 'active', expires_at = ?2, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?3`).bind(keyHash, expiresAt, keyRow.license_id).run();
     await env.DB.prepare(`UPDATE getkey_public_keys
       SET key_hash = ?1, key_ciphertext = ?2
       WHERE session_id = ?3 AND license_id = ?4`).bind(keyHash, ciphertext, sessionId, keyRow.license_id).run();
@@ -117,7 +118,7 @@ async function syncIssuedLicenseToDashboard(env, sessionId) {
     const recordId = crypto.randomUUID();
     await env.DB.prepare(`INSERT INTO frezen_key_records
       (id, owner_id, license_id, provider_id, service_id, folder_id, key_name, premium, forever)
-      VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, 0, 1)`)
+      VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, 0, 0)`)
       .bind(recordId, service.owner_id, keyRow.license_id, provider.id, service.id, `Get-Key — ${String(service.name || service.slug || 'Service').slice(0, 80)}`).run();
     await env.DB.prepare('INSERT INTO frezen_key_limits (key_id, max_devices) VALUES (?1, 1)').bind(recordId).run();
 
@@ -182,11 +183,11 @@ export async function startPublicGetKey(request, env, slug) {
 }
 
 export async function getPublicGetKeyState(request, env, flowId) {
-  return getPublicGetKeyStateByServiceId(requestWithSession(request, readCookie(request, SESSION_COOKIE) || flowId), env, flowId);
+  return getPublicGetKeyStateByServiceId(requestWithSession(request, flowId), env, flowId);
 }
 
 export async function launchPublicGetKeyCheckpoint(request, env, flowId) {
-  const sessionRequest = requestWithSession(request, readCookie(request, SESSION_COOKIE) || flowId);
+  const sessionRequest = requestWithSession(request, flowId);
   const jsonMode = new URL(request.url).searchParams.get('json') === '1';
   return launchGetKeyCheckpointByServiceId(sessionRequest, env, flowId, jsonMode);
 }
