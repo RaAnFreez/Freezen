@@ -8,16 +8,18 @@ const read = (file) => fs.readFileSync(path.resolve(process.cwd(), file), 'utf8'
 describe('SafeLinkU checkpoint link flow', () => {
   it('creates a SafeLinkU checkpoint using a Frezen callback destination', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
-      JSON.stringify({ url: 'https://safelinku.com/abc123' }),
-      { status: 201, headers: { 'content-type': 'application/json' } },
+      'https://safelinku.com/abc123',
+      { status: 200, headers: { 'content-type': 'text/plain' } },
     ));
     const result = await createSafeLinkUCheckpoint({ SAFELINKU_API_KEY: 'TOP_SECRET' }, new Request('https://frezen.example/dashboard'), 'checkpoint_1234');
     expect(result.status).toBe('ok');
     expect(result.url).toBe('https://safelinku.com/abc123');
-    const request = fetchSpy.mock.calls[0][1];
-    const body = JSON.parse(request.body);
-    expect(body.url).toContain('/api/v1/get-key/checkpoint/callback?checkpoint_id=checkpoint_1234');
-    expect(request.headers.authorization).toBe('Bearer TOP_SECRET');
+    const [calledUrl, options] = fetchSpy.mock.calls[0];
+    expect(options.method).toBe('GET');
+    expect(options.body).toBeUndefined();
+    const parsed = new URL(calledUrl);
+    expect(parsed.searchParams.get('url')).toContain('/api/v1/get-key/checkpoint/callback?checkpoint_id=checkpoint_1234');
+    expect(parsed.searchParams.get('api')).toBe('TOP_SECRET');
     fetchSpy.mockRestore();
   });
 
