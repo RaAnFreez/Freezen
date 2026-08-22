@@ -1,6 +1,7 @@
 import { encryptKeySecret } from './key-secret.js';
 
 const SESSION_COOKIE = 'frezen_getkey_session';
+const KEY_TTL_SECONDS = 24 * 60 * 60;
 const NO_STORE = { 'cache-control': 'no-store' };
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
@@ -37,14 +38,21 @@ function makeLicenseKey() {
   return `FREZEN-${randomHex()}-${randomHex()}-${randomHex()}-${randomHex()}`;
 }
 
-async function syncDashboardKeyRecord(env, sessionId, licenseId, licenseKey, keyCiphertext) {
+function futureKeyExpiry() {
+  return new Date(Date.now() + KEY_TTL_SECONDS * 1000).toISOString();
+}
+
+async function syncDashboardKeyRecord(env, sessionId, licenseId, licenseKey, keyCiphertext, expiresAt) {
   if (!env?.DB || !sessionId || !licenseId || !licenseKey || !env?.FREZEN_MASTER_SECRET) return false;
 
   const [session, existingRecord] = await Promise.all([
     env.DB.prepare('SELECT id, service_id FROM getkey_public_sessions WHERE id = ?1 LIMIT 1').bind(sessionId).first(),
     env.DB.prepare('SELECT id FROM frezen_key_records WHERE license_id = ?1 LIMIT 1').bind(licenseId).first().catch(() => null),
   ]);
-  if (existingRecord?.id) return true;
+  if (existingRecord?.id) {
+    await env.DB.prepare('UPDATE frezen_key_records SET forever = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?1').bind(existingRecord.id).run().catch(() => {});
+    return true;
+  }
   if (!session?.service_id) return false;
 
   const [service, provider] = await Promise.all([
@@ -70,8 +78,8 @@ async function syncDashboardKeyRecord(env, sessionId, licenseId, licenseKey, key
   const recordId = crypto.randomUUID();
 
   await env.DB.prepare(`UPDATE licenses
-    SET license_key_hash = ?1, status = 'active', expires_at = NULL, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?2`).bind(keyHash, licenseId).run();
+    SET license_key_hash = ?1, status = 'active', expires_at = ?3, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?2`).bind(keyHash, licenseId, expiresAt).run();
 
   await env.DB.prepare(`UPDATE getkey_public_keys
     SET key_hash = ?1, key_ciphertext = ?2
@@ -79,7 +87,7 @@ async function syncDashboardKeyRecord(env, sessionId, licenseId, licenseKey, key
 
   await env.DB.prepare(`INSERT INTO frezen_key_records
     (id, owner_id, license_id, provider_id, service_id, folder_id, key_name, premium, forever)
-    VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, 0, 1)`)
+    VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, 0, 0)`)
     .bind(
       recordId,
       service.owner_id,
@@ -108,7 +116,21 @@ async function issueLicenseWithProductionSchema(env, sessionId) {
   const existing = await env.DB.prepare(
     'SELECT * FROM getkey_public_keys WHERE session_id = ?1 LIMIT 1',
   ).bind(sessionId).first();
-  if (existing) return { licenseId: existing.license_id, alreadyIssued: true };
+  const expiresAt = futureKeyExpiry();
+
+  if (existing) {
+    await env.DB.prepare(`UPDATE licenses
+      SET expires_at = CASE
+        WHEN expires_at IS NULL OR datetime(expires_at) <= datetime('now') THEN ?1
+        ELSE expires_at
+      END,
+      updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?2`).bind(expiresAt, existing.license_id).run().catch(() => {});
+    await env.DB.prepare(`UPDATE frezen_key_records
+      SET forever = 0, updated_at = CURRENT_TIMESTAMP
+      WHERE license_id = ?1`).bind(existing.license_id).run().catch(() => {});
+    return { licenseId: existing.license_id, alreadyIssued: true, expiresAt };
+  }
 
   const licenseKey = makeLicenseKey();
   const keyHash = await sha256Hex(licenseKey);
@@ -117,8 +139,8 @@ async function issueLicenseWithProductionSchema(env, sessionId) {
   // Production licenses schema does not contain product_id.
   await env.DB.prepare(`INSERT INTO licenses
     (id, license_key_hash, user_id, status, created_at, updated_at, expires_at)
-    VALUES (?1, ?2, NULL, 'active', datetime('now'), datetime('now'), NULL)`)
-    .bind(licenseId, keyHash).run();
+    VALUES (?1, ?2, NULL, 'active', datetime('now'), datetime('now'), ?3)`)
+    .bind(licenseId, keyHash, expiresAt).run();
 
   let ciphertext = null;
   if (env.FREZEN_MASTER_SECRET) {
@@ -136,7 +158,7 @@ async function issueLicenseWithProductionSchema(env, sessionId) {
 
   if (env.FREZEN_MASTER_SECRET) {
     try {
-      await syncDashboardKeyRecord(env, sessionId, licenseId, licenseKey, ciphertext);
+      await syncDashboardKeyRecord(env, sessionId, licenseId, licenseKey, ciphertext, expiresAt);
     } catch (error) {
       console.error('GetKey dashboard key sync failed', {
         session_id: sessionId,
@@ -146,7 +168,27 @@ async function issueLicenseWithProductionSchema(env, sessionId) {
     }
   }
 
-  return { licenseId, alreadyIssued: false };
+  return { licenseId, alreadyIssued: false, expiresAt };
+}
+
+async function ensureActiveCheckpointsForFlow(env, sessionId, serviceId) {
+  const service = await env.DB.prepare('SELECT owner_id FROM frezen_key_services WHERE id = ?1 LIMIT 1').bind(serviceId).first().catch(() => null);
+  if (!service?.owner_id) return;
+
+  const active = await env.DB.prepare(`SELECT id FROM frezen_key_checkpoints
+    WHERE owner_id = ?1 AND active = 1 AND type = 'safelinku' ORDER BY created_at ASC`).bind(service.owner_id).all().catch(() => ({ results: [] }));
+  const existing = await env.DB.prepare('SELECT checkpoint_id FROM getkey_public_checkpoints WHERE session_id = ?1').bind(sessionId).all().catch(() => ({ results: [] }));
+  const known = new Set((existing.results || []).map((row) => row?.checkpoint_id).filter(Boolean));
+  let step = Number((await env.DB.prepare('SELECT COALESCE(MAX(step_index), 0) AS max_step FROM getkey_public_checkpoints WHERE session_id = ?1').bind(sessionId).first().catch(() => null))?.max_step || 0);
+
+  for (const row of active.results || []) {
+    if (!row?.id || known.has(row.id)) continue;
+    step += 1;
+    await env.DB.prepare(`INSERT OR IGNORE INTO getkey_public_checkpoints
+      (id, session_id, step_index, checkpoint_id, status, created_at)
+      VALUES (?1, ?2, ?3, ?4, 'pending', datetime('now'))`)
+      .bind(crypto.randomUUID(), sessionId, step, row.id).run();
+  }
 }
 
 export async function verifyGetKeyCheckpointCallback(request, env, token) {
@@ -179,6 +221,8 @@ export async function verifyGetKeyCheckpointCallback(request, env, token) {
       .bind(row.id, row.session_id, tokenHash).run();
 
     if (!updated?.meta?.changes) return json({ error: 'VERIFICATION_RACE' }, 409);
+
+    await ensureActiveCheckpointsForFlow(env, row.session_id, row.service_id);
 
     const rows = await env.DB.prepare(
       'SELECT checkpoint_id, status FROM getkey_public_checkpoints WHERE session_id = ?1 ORDER BY step_index ASC',

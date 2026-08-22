@@ -1,4 +1,5 @@
 const SESSION_COOKIE = 'frezen_getkey_session';
+const SESSION_TTL_SECONDS = 24 * 60 * 60;
 const NO_STORE = { 'cache-control': 'no-store' };
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
@@ -27,9 +28,20 @@ async function getSession(env, sessionId) {
   return session;
 }
 
+async function normalizeSessionLifetime(env, session) {
+  const createdAt = new Date(session?.created_at || 0).getTime();
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return session;
+  const target = new Date(createdAt + SESSION_TTL_SECONDS * 1000).toISOString();
+  if (new Date(session.expires_at).getTime() >= new Date(target).getTime()) return session;
+  await env.DB.prepare(`UPDATE getkey_public_sessions
+    SET expires_at = ?1, last_seen_at = datetime('now')
+    WHERE id = ?2`).bind(target, session.id).run().catch(() => {});
+  return { ...session, expires_at: target };
+}
+
 async function loadServiceById(env, serviceId) {
   if (!env?.DB) return { error: 'DATABASE_UNAVAILABLE', status: 503 };
-  const service = await env.DB.prepare(`SELECT id, name, slug, description, active
+  const service = await env.DB.prepare(`SELECT id, owner_id, name, slug, description, active
     FROM frezen_key_services WHERE id = ?1 LIMIT 1`).bind(serviceId).first();
   if (!service || !service.active) return { error: 'SERVICE_NOT_FOUND', status: 404 };
 
@@ -47,6 +59,17 @@ async function loadServiceById(env, serviceId) {
   } catch {
     checkpointIds = [];
   }
+
+  const activeOwned = await env.DB.prepare(`SELECT id FROM frezen_key_checkpoints
+    WHERE owner_id = ?1 AND active = 1 AND type = 'safelinku' ORDER BY created_at ASC`).bind(service.owner_id).all().catch(() => ({ results: [] }));
+  const configured = new Set(checkpointIds);
+  for (const row of activeOwned.results || []) {
+    if (row?.id && !configured.has(row.id)) {
+      checkpointIds.push(row.id);
+      configured.add(row.id);
+    }
+  }
+
   if (!checkpointIds.length) return { error: 'CHECKPOINTS_NOT_CONFIGURED', status: 409 };
 
   const rows = await env.DB.prepare(`SELECT id, name, type, url, active
@@ -87,9 +110,10 @@ function publicState(session, checkpointRows) {
 export async function getPublicGetKeyStateByServiceId(request, env, flowId) {
   const sessionId = readCookie(request, SESSION_COOKIE);
   if (!sessionId || sessionId !== flowId) return json({ error: 'SESSION_MISMATCH' }, 403);
-  const session = await getSession(env, sessionId);
+  let session = await getSession(env, sessionId);
   if (!session) return json({ error: 'FLOW_NOT_FOUND' }, 404);
 
+  session = await normalizeSessionLifetime(env, session);
   const config = await loadServiceById(env, session.service_id);
   if (config.error) return json({ error: config.error }, config.status);
 

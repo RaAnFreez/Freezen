@@ -9,7 +9,7 @@ async function loadService(env, slug) {
   const normalizedSlug = String(slug || '').trim().toLowerCase();
   if (!normalizedSlug || normalizedSlug.length > 128) return { error: 'INVALID_SLUG', status: 400 };
 
-  const service = await env.DB.prepare(`SELECT id, name, slug, description, active
+  const service = await env.DB.prepare(`SELECT id, owner_id, name, slug, description, active
     FROM frezen_key_services WHERE slug = ?1 LIMIT 1`).bind(normalizedSlug).first();
   if (!service || !service.active) return { error: 'SERVICE_NOT_FOUND', status: 404 };
 
@@ -28,6 +28,17 @@ async function loadService(env, slug) {
   } catch {
     checkpointIds = [];
   }
+
+  const activeOwned = await env.DB.prepare(`SELECT id FROM frezen_key_checkpoints
+    WHERE owner_id = ?1 AND active = 1 AND type = 'safelinku' ORDER BY created_at ASC`).bind(service.owner_id).all().catch(() => ({ results: [] }));
+  const configured = new Set(checkpointIds);
+  for (const row of activeOwned.results || []) {
+    if (row?.id && !configured.has(row.id)) {
+      checkpointIds.push(row.id);
+      configured.add(row.id);
+    }
+  }
+
   if (!checkpointIds.length) return { error: 'CHECKPOINTS_NOT_CONFIGURED', status: 409 };
 
   const rows = await env.DB.prepare(`SELECT id, name, type, active
