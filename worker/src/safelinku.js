@@ -1,40 +1,60 @@
+// SafeLinkU integration.
+//
+// The previous adapter used POST /api/v1/links with a JSON body and Bearer
+// authentication. The supplied SafeLinkU integration reference uses the
+// long-standing query-param API shape instead. The default base can be
+// overridden with SAFELINKU_API_BASE_URL so the account's Developer/API panel
+// remains authoritative if the endpoint differs.
+
 const DEFAULT_TIMEOUT_MS = 8000;
-const SAFELINKU_LINKS_ENDPOINT = "https://safelinku.com/api/v1/links";
+const DEFAULT_API_BASE = "https://safelinku.com/api";
 
 function configured(env) { return Boolean(env?.SAFELINKU_API_KEY); }
-function legacyBaseUrl(env) {
-  if (!env?.SAFELINKU_API_BASE_URL) return null;
-  try {
-    const url = new URL(env.SAFELINKU_API_BASE_URL);
-    if (url.protocol !== "https:" || url.username || url.password) return null;
-    return url.toString().replace(/\/$/, "");
-  } catch { return null; }
+
+function apiBase(env) {
+  const configuredBase = env?.SAFELINKU_API_BASE_URL;
+  if (configuredBase) {
+    try {
+      const url = new URL(configuredBase);
+      if (url.protocol === "https:" && !url.username && !url.password) {
+        return url.toString().replace(/\/$/, "");
+      }
+    } catch { /* fall through to default */ }
+  }
+  return DEFAULT_API_BASE;
 }
+
 function isHttpSuccess(status) { return Number.isInteger(status) && status >= 200 && status < 300; }
 
-async function requestSafeLinkU(env, options = {}) {
-  if (!env?.SAFELINKU_API_KEY) return { configured: false, status: 503, ok: false, error: "SAFELINKU_NOT_CONFIGURED", data: null };
+async function requestSafeLinkU(env, params, options = {}) {
+  if (!env?.SAFELINKU_API_KEY) return { configured: false, status: 503, ok: false, error: "SAFELINKU_NOT_CONFIGURED", body: null };
+  const url = new URL(apiBase(env));
+  url.searchParams.set("api", env.SAFELINKU_API_KEY);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
+  }
+  url.searchParams.set("format", "text");
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   try {
-    const response = await fetch(SAFELINKU_LINKS_ENDPOINT, {
-      method: "POST",
-      headers: { accept: "application/json", "content-type": "application/json", authorization: `Bearer ${env.SAFELINKU_API_KEY}` },
-      body: JSON.stringify(options.body ?? {}),
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: { accept: "text/plain, */*" },
       signal: controller.signal,
     });
     const status = response.status;
-    const data = await response.json().catch(() => ({}));
-    const ok = isHttpSuccess(status) || response.ok === true;
-    return { configured: true, status, ok, error: ok ? null : data?.error ?? data?.message ?? `SAFELINKU_HTTP_${status}`, data };
+    const text = (await response.text().catch(() => "")).trim();
+    const looksLikeUrl = /^https?:\/\//i.test(text);
+    const ok = isHttpSuccess(status) && looksLikeUrl;
+    return { configured: true, status, ok, error: ok ? null : (text || `SAFELINKU_HTTP_${status}`), body: text || null };
   } catch (error) {
-    return { configured: true, status: 503, ok: false, error: error?.name === "AbortError" ? "SAFELINKU_TIMEOUT" : "SAFELINKU_NETWORK_ERROR", data: null };
+    return { configured: true, status: 503, ok: false, error: error?.name === "AbortError" ? "SAFELINKU_TIMEOUT" : "SAFELINKU_NETWORK_ERROR", body: null };
   } finally { clearTimeout(timeout); }
 }
 
 export function safelinkuConfigStatus(env) {
-  const legacyBase = legacyBaseUrl(env);
-  return { configured: configured(env), api_key_configured: Boolean(env?.SAFELINKU_API_KEY), endpoint: SAFELINKU_LINKS_ENDPOINT, ...(legacyBase ? { base_url_configured: true, base_url: new URL(legacyBase).origin } : {}) };
+  return { configured: configured(env), api_key_configured: Boolean(env?.SAFELINKU_API_KEY), endpoint: apiBase(env) };
 }
 
 export async function createSafeLinkUShortLink(env, targetUrl, options = {}, requestId = null) {
@@ -50,14 +70,13 @@ export async function createSafeLinkUShortLink(env, targetUrl, options = {}, req
     if (requestId) await recordSafeLinkURequest(env, requestId, "failed");
     return { status: "invalid_target", http_status: 400, configured: true, url: null, error: error?.message || "INVALID_TARGET_URL" };
   }
-  const body = { url: target.toString() };
-  if (options.alias) body.alias = String(options.alias).slice(0, 80);
-  if (options.passcode) body.passcode = String(options.passcode).slice(0, 120);
-  const result = await requestSafeLinkU(env, { body });
-  const shortUrl = typeof result.data?.url === "string" ? result.data.url : typeof result.data?.short_url === "string" ? result.data.short_url : null;
+  const params = { url: target.toString() };
+  if (options.alias) params.alias = String(options.alias).slice(0, 80);
+  const result = await requestSafeLinkU(env, params);
+  const shortUrl = result.ok ? result.body : null;
   const status = result.ok && shortUrl ? "ok" : "error";
   if (requestId) await recordSafeLinkURequest(env, requestId, status === "ok" ? "success" : "failed");
-  return { status, http_status: result.status, configured: result.configured, url: shortUrl, error: status === "ok" ? null : result.error ?? "SAFELINKU_LINK_CREATION_FAILED" };
+  return { status, http_status: result.status, configured: result.configured, url: shortUrl, error: status === "ok" ? null : (result.error ?? "SAFELINKU_LINK_CREATION_FAILED") };
 }
 
 export async function createSafeLinkUCheckpoint(env, request, checkpointId, requestId = null) {
