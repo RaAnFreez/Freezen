@@ -1,4 +1,4 @@
-import { createSafeLinkUShortLink, testSafeLinkUConnection, safelinkuConfigStatus } from './safelinku.js';
+import { testSafeLinkUConnection, safelinkuConfigStatus } from './safelinku.js';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -24,18 +24,17 @@ export async function listDashboardCheckpoints(env, access) {
 
 export async function createDashboardCheckpoint(request, env, access) {
   if (!env?.DB || !access?.user_id) return json({ error: 'DATABASE_UNAVAILABLE' }, 503);
+  if (!env?.SAFELINKU_API_KEY) return json({ error: 'SAFELINKU_NOT_CONFIGURED' }, 503);
   let body = {};
   try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
   const id = clean(body?.checkpoint_id, 128) || crypto.randomUUID();
   const name = clean(body?.name, 100) || `Checkpoint ${new Date().toISOString().slice(0, 10)}`;
-  const result = await createSafeLinkUShortLink(env, new URL(`/api/v1/get-key/checkpoint/callback?checkpoint_id=${encodeURIComponent(id)}`, request.url).toString(), { alias: `frezen-${id.slice(0, 40)}` });
-  if (result.status !== 'ok' || !result.url) return json({ error: result.error || 'SAFELINKU_LINK_CREATION_FAILED', provider: 'safelinku', http_status: result.http_status }, result.http_status >= 400 ? Math.min(result.http_status, 503) : 503);
   await env.DB.prepare(`INSERT INTO frezen_key_checkpoints
     (id, owner_id, name, type, url, active, metadata_json, created_at, updated_at)
-    VALUES (?1,?2,?3,'safelinku',?4,1,?5,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-    ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,type='safelinku',url=excluded.url,active=1,metadata_json=excluded.metadata_json,updated_at=CURRENT_TIMESTAMP`)
-    .bind(id, access.user_id, name, result.url, JSON.stringify({ generated_by: 'safelinku-api', provider: 'safelinku' })).run();
-  return json({ status: 'ok', checkpoint: { id, name, type: 'safelinku', url: result.url, active: true, generated_by: 'safelinku-api' } }, 201);
+    VALUES (?1,?2,?3,'safelinku',NULL,1,?4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,type='safelinku',url=NULL,active=1,metadata_json=excluded.metadata_json,updated_at=CURRENT_TIMESTAMP`)
+    .bind(id, access.user_id, name, JSON.stringify({ generated_by: 'safelinku-runtime', provider: 'safelinku' })).run();
+  return json({ status: 'ok', checkpoint: { id, name, type: 'safelinku', url: null, active: true, generated_by: 'safelinku-runtime' } }, 201);
 }
 
 export async function deleteDashboardCheckpoint(env, access, id) {
