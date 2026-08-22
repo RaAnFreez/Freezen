@@ -25,6 +25,44 @@ function getSlugFromPath(pathname) {
   }
 }
 
+async function renderSlugPageWithDirectCheckpointRedirect(slug) {
+  const response = renderSlugGetKeyPage(slug);
+  const html = await response.text();
+  const script = `<script>
+(() => {
+  document.addEventListener('click', (event) => {
+    const button = event.target?.closest?.('#primary, .ghost[data-launch]');
+    if (!button) return;
+
+    const isPrimary = button.id === 'primary';
+    const text = String(button.textContent || '').trim().toUpperCase();
+    let launchPath = button.dataset.launch || '';
+
+    // START must still use the normal flow-creation handler. Once a flow exists,
+    // CONTINUE should navigate to the Worker launch endpoint directly so its
+    // HTTP 302 reaches the SafeLinkU short URL without a JSON-fetch round trip.
+    if (isPrimary) {
+      if (!text.includes('CONTINUE')) return;
+      const flowId = new URL(location.href).searchParams.get('flow');
+      if (!flowId) return;
+      launchPath = '/api/v1/get-key/flow/' + encodeURIComponent(flowId) + '/launch';
+    }
+
+    if (!launchPath) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    window.location.assign(launchPath);
+  }, true);
+})();
+</script>`;
+  const body = html.replace('</body>', `${script}</body>`);
+  const headers = new Headers(response.headers);
+  headers.set('content-type', 'text/html; charset=utf-8');
+  headers.set('cache-control', 'no-store');
+  return new Response(body, { status: response.status, statusText: response.statusText, headers });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -86,7 +124,7 @@ export default {
 
     const slug = getSlugFromPath(url.pathname);
     if (request.method === 'GET' && slug) {
-      return renderSlugGetKeyPage(slug);
+      return renderSlugPageWithDirectCheckpointRedirect(slug);
     }
 
     return entryUi.fetch(request, env, ctx);
