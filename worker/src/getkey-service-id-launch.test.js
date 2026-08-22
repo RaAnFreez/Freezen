@@ -7,10 +7,14 @@ const read = (file) => fs.readFileSync(path.resolve(process.cwd(), file), 'utf8'
 describe('Get-Key service-id checkpoint launch regression', () => {
   it('resolves the session service by id instead of treating it as a slug', () => {
     const helper = read('src/getkey-service-id-launch.js');
+    const stateHelper = read('src/getkey-service-id-state.js');
     const claim = read('src/getkey-single-claim.js');
 
     expect(helper).toContain('FROM frezen_key_services WHERE id = ?1 LIMIT 1');
     expect(helper).toContain('loadServiceById(env, session.service_id)');
+    expect(stateHelper).toContain('FROM frezen_key_services WHERE id = ?1 LIMIT 1');
+    expect(stateHelper).toContain('loadServiceById(env, session.service_id)');
+    expect(claim).toContain("getPublicGetKeyStateByServiceId(requestWithSession(request, readCookie(request, SESSION_COOKIE) || flowId), env, flowId)");
     expect(claim).toContain("launchGetKeyCheckpointByServiceId(sessionRequest, env, flowId, jsonMode)");
   });
 
