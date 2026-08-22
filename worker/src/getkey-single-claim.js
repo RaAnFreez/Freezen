@@ -39,6 +39,28 @@ function withPersistentCookie(response, sessionId) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
+function withNextCheckpoint(response, payload) {
+  const flowId = payload?.flow_id;
+  const nextId = payload?.state?.next_checkpoint_id;
+  if (!flowId || !nextId || payload?.state?.status === 'COMPLETED') return response;
+  const row = (payload.checkpoints || []).find((item) => item?.checkpoint_id === nextId);
+  if (!row) return response;
+
+  const body = JSON.stringify({
+    ...payload,
+    next_checkpoint: {
+      checkpoint_id: row.checkpoint_id,
+      name: row.name,
+      type: row.type,
+      step: row.step,
+      launch_path: `/api/v1/get-key/flow/${encodeURIComponent(flowId)}/launch`,
+    },
+  });
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  return new Response(body, { status: response.status, statusText: response.statusText, headers });
+}
+
 function sessionIdFromLocation(location) {
   try {
     return new URL(location, 'https://frezen.invalid').searchParams.get('flow') || null;
@@ -60,12 +82,13 @@ export async function startPublicGetKey(request, env, slug) {
   const response = await startRuntime(request, env, slug);
   let payload = null;
   try { payload = await response.clone().json(); } catch {}
+  const nextResponse = withNextCheckpoint(response, payload);
   const flowId = payload?.flow_id || null;
   if (flowId && payload?.state?.status === 'COMPLETED') {
     const extended = await extendClaimedSession(env, flowId);
-    if (extended) return withPersistentCookie(response, flowId);
+    if (extended) return withPersistentCookie(nextResponse, flowId);
   }
-  return response;
+  return nextResponse;
 }
 
 export async function getPublicGetKeyState(request, env, flowId) {
