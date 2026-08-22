@@ -5,6 +5,7 @@ import {
 } from './getkey-public-runtime.js';
 import { launchGetKeyCheckpointByServiceId } from './getkey-service-id-launch.js';
 import { getPublicGetKeyStateByServiceId } from './getkey-service-id-state.js';
+import { encryptKeySecret } from './key-secret.js';
 
 const SESSION_COOKIE = 'frezen_getkey_session';
 const CLAIM_MAX_AGE = 365 * 24 * 60 * 60;
@@ -68,6 +69,71 @@ function sessionIdFromLocation(location) {
   }
 }
 
+function randomHex(bytes = 4) {
+  const value = new Uint8Array(bytes);
+  crypto.getRandomValues(value);
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+function makeFrezenKey() {
+  return `FREZEN-${randomHex()}-${randomHex()}-${randomHex()}-${randomHex()}`;
+}
+
+async function sha256Hex(value) {
+  const bytes = new TextEncoder().encode(String(value || ''));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function syncIssuedLicenseToDashboard(env, sessionId) {
+  if (!env?.DB || !sessionId || !env?.FREZEN_MASTER_SECRET) return false;
+  try {
+    const [session, keyRow] = await Promise.all([
+      env.DB.prepare('SELECT id, service_id, issued_license_id FROM getkey_public_sessions WHERE id = ?1 LIMIT 1').bind(sessionId).first(),
+      env.DB.prepare('SELECT license_id, key_ciphertext FROM getkey_public_keys WHERE session_id = ?1 LIMIT 1').bind(sessionId).first(),
+    ]);
+    if (!session?.service_id || !keyRow?.license_id) return false;
+
+    const existingRecord = await env.DB.prepare('SELECT id FROM frezen_key_records WHERE license_id = ?1 LIMIT 1').bind(keyRow.license_id).first().catch(() => null);
+    if (existingRecord?.id) return true;
+
+    const [service, provider] = await Promise.all([
+      env.DB.prepare(`SELECT id, owner_id, name, slug, active FROM frezen_key_services WHERE id = ?1 LIMIT 1`).bind(session.service_id).first(),
+      env.DB.prepare(`SELECT id, name, service_id, active FROM frezen_key_providers WHERE service_id = ?1 AND active = 1 ORDER BY updated_at DESC LIMIT 1`).bind(session.service_id).first(),
+    ]);
+    if (!service?.owner_id || !service.active || !provider?.id) return false;
+
+    const licenseKey = makeFrezenKey();
+    const keyHash = await sha256Hex(licenseKey);
+    const ciphertext = await encryptKeySecret(env.FREZEN_MASTER_SECRET, licenseKey);
+
+    await env.DB.prepare(`UPDATE licenses
+      SET license_key_hash = ?1, status = 'active', expires_at = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?2`).bind(keyHash, keyRow.license_id).run();
+    await env.DB.prepare(`UPDATE getkey_public_keys
+      SET key_hash = ?1, key_ciphertext = ?2
+      WHERE session_id = ?3 AND license_id = ?4`).bind(keyHash, ciphertext, sessionId, keyRow.license_id).run();
+
+    const recordId = crypto.randomUUID();
+    await env.DB.prepare(`INSERT INTO frezen_key_records
+      (id, owner_id, license_id, provider_id, service_id, folder_id, key_name, premium, forever)
+      VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, 0, 1)`)
+      .bind(recordId, service.owner_id, keyRow.license_id, provider.id, service.id, `Get-Key — ${String(service.name || service.slug || 'Service').slice(0, 80)}`).run();
+    await env.DB.prepare('INSERT INTO frezen_key_limits (key_id, max_devices) VALUES (?1, 1)').bind(recordId).run();
+
+    await env.DB.prepare(`UPDATE frezen_key_records
+      SET key_secret_ciphertext = ?1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?2`).bind(ciphertext, recordId).run().catch((error) => {
+      console.warn('Get-Key dashboard secret column unavailable', { message: String(error?.message || error) });
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Get-Key dashboard license sync failed', { sessionId, message: String(error?.message || error) });
+    return false;
+  }
+}
+
 async function extendClaimedSession(env, sessionId) {
   if (!env?.DB || !sessionId) return false;
   const expiresAt = new Date(Date.now() + CLAIM_MAX_AGE * 1000).toISOString();
@@ -103,8 +169,6 @@ export async function startPublicGetKey(request, env, slug) {
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   });
 
-  // The runtime expects a canonical service slug. Resolve aliases first so a
-  // custom/public slug can still create the same service-bound session.
   const response = await startRuntime(request, env, service.slug);
   let payload = null;
   try { payload = await response.clone().json(); } catch {}
@@ -134,6 +198,8 @@ export async function verifyPublicGetKeyCallback(request, env, token) {
   if (!/unlocked=1(?:&|$)/.test(location)) return response;
   const sessionId = sessionIdFromLocation(location);
   if (!sessionId) return response;
+
+  await syncIssuedLicenseToDashboard(env, sessionId);
   const extended = await extendClaimedSession(env, sessionId);
   return extended ? withPersistentCookie(response, sessionId) : response;
 }
