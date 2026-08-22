@@ -77,8 +77,35 @@ async function extendClaimedSession(env, sessionId) {
   return Boolean(result?.meta?.changes);
 }
 
+async function resolveServiceForStart(env, slug) {
+  if (!env?.DB) return { error: 'DATABASE_UNAVAILABLE', status: 503 };
+  const normalized = String(slug || '').trim().toLowerCase();
+  if (!normalized || normalized.length > 128) return { error: 'INVALID_SERVICE_SLUG', status: 400 };
+
+  const direct = await env.DB.prepare(`SELECT id, name, slug, description, active
+    FROM frezen_key_services WHERE slug = ?1 LIMIT 1`).bind(normalized).first();
+  if (direct?.active) return direct;
+
+  const alias = await env.DB.prepare(`SELECT service_id FROM frezen_key_service_aliases
+    WHERE slug = ?1 LIMIT 1`).bind(normalized).first();
+  if (!alias?.service_id) return { error: 'SERVICE_NOT_FOUND', status: 404 };
+
+  const canonical = await env.DB.prepare(`SELECT id, name, slug, description, active
+    FROM frezen_key_services WHERE id = ?1 LIMIT 1`).bind(alias.service_id).first();
+  if (!canonical?.active) return { error: 'SERVICE_NOT_FOUND', status: 404 };
+  return canonical;
+}
+
 export async function startPublicGetKey(request, env, slug) {
-  const response = await startRuntime(request, env, slug);
+  const service = await resolveServiceForStart(env, slug);
+  if (service?.error) return new Response(JSON.stringify({ error: service.error }), {
+    status: service.status,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+  });
+
+  // The runtime expects a canonical service slug. Resolve aliases first so a
+  // custom/public slug can still create the same service-bound session.
+  const response = await startRuntime(request, env, service.slug);
   let payload = null;
   try { payload = await response.clone().json(); } catch {}
   const nextResponse = withNextCheckpoint(response, payload);
