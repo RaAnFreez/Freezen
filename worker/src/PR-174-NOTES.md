@@ -1,0 +1,1 @@
+PR intent: resolve custom Get-Key slugs before starting the runtime so alias-backed services can create a valid session and launch their configured checkpoint. No migration changes.
