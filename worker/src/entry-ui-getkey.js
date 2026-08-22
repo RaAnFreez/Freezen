@@ -10,7 +10,7 @@ import {
   getPublicGetKeyState as getClaimedGetKeyState,
   launchPublicGetKeyCheckpoint as launchClaimedGetKeyCheckpoint,
   verifyPublicGetKeyCallback as verifyClaimedGetKeyCallback,
-} from './getkey-single-claim.js';
+} from './getkey-single-claim-service-id.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -27,17 +27,17 @@ export default {
       return startClaimedGetKey(request, env, slug);
     }
 
-    const flowMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)$/);
+    const flowMatch = url.pathname.match(/^\\/api\\/v1\\/get-key\\/flow\\/([^/]+)$/);
     if (request.method === 'GET' && flowMatch) {
       return getClaimedGetKeyState(request, env, decodeURIComponent(flowMatch[1]));
     }
 
-    const launchMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)\/launch$/);
+    const launchMatch = url.pathname.match(/^\\/api\\/v1\\/get-key\\/flow\\/([^/]+)\\/launch$/);
     if (request.method === 'GET' && launchMatch) {
       return launchClaimedGetKeyCheckpoint(request, env, decodeURIComponent(launchMatch[1]));
     }
 
-    const keyMatch = url.pathname.match(/^\/api\/v1\/get-key\/key\/([^/]+)$/);
+    const keyMatch = url.pathname.match(/^\\/api\\/v1\\/get-key\\/key\\/([^/]+)$/);
     if (request.method === 'GET' && keyMatch) {
       return getPublicGetKeyLicense(request, env, decodeURIComponent(keyMatch[1]));
     }
@@ -46,7 +46,7 @@ export default {
       return validatePublicGetKeyLicense(request, env);
     }
 
-    const pageMatch = url.pathname.match(/^\/get-key\/([^/]+)\/?$/);
+    const pageMatch = url.pathname.match(/^\\/get-key\\/([^/]+)\\/?$/);
     if (request.method === 'GET' && pageMatch) {
       const page = publicGetKeyPage(decodeURIComponent(pageMatch[1]));
       return enhanceGetKeyPage(page);
