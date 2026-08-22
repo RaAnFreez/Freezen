@@ -23,13 +23,28 @@ function apiBase(env) {
 
 function isHttpSuccess(status) { return Number.isInteger(status) && status >= 200 && status < 300; }
 
+function normalizeProviderError(value, status) {
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text || `SAFELINKU_HTTP_${status}`;
+  }
+  if (Array.isArray(value)) {
+    const messages = value.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim());
+    return messages.length ? messages.join("; ") : `SAFELINKU_HTTP_${status}`;
+  }
+  if (value && typeof value === "object") {
+    return normalizeProviderError(value.error ?? value.message ?? value.detail, status);
+  }
+  return `SAFELINKU_HTTP_${status}`;
+}
+
 function summarizeProviderError(text, status) {
   const body = String(text || "").trim();
   if (!body) return `SAFELINKU_HTTP_${status}`;
   if (/<!doctype html|<html[\s>]|attention required|cloudflare/i.test(body)) return `SAFELINKU_NON_API_RESPONSE_HTTP_${status}`;
   try {
     const parsed = JSON.parse(body);
-    return parsed?.error || parsed?.message || parsed?.detail || `SAFELINKU_HTTP_${status}`;
+    return normalizeProviderError(parsed, status);
   } catch { return body.slice(0, 300); }
 }
 
@@ -60,6 +75,7 @@ async function requestSafeLinkU(env, payload, options = {}) {
       status,
       ok,
       error: ok ? null : summarizeProviderError(text, status),
+      empty_error_array: Array.isArray(parsed?.error) && parsed.error.length === 0,
       body: parsed,
       text,
       url: ok ? returnedUrl : null,
@@ -93,11 +109,20 @@ export async function createSafeLinkUShortLink(env, targetUrl, options = {}, req
     return { status: "invalid_target", http_status: 400, configured: true, url: null, error: error?.message || "INVALID_TARGET_URL" };
   }
 
-  const payload = { url: target.toString() };
-  if (options.alias) payload.alias = String(options.alias).slice(0, 120);
-  if (options.passcode) payload.passcode = String(options.passcode).slice(0, 120);
+  const basePayload = { url: target.toString() };
+  if (options.passcode) basePayload.passcode = String(options.passcode).slice(0, 120);
 
-  const result = await requestSafeLinkU(env, payload);
+  const requestedAlias = options.alias ? String(options.alias).slice(0, 120) : "";
+  const payload = requestedAlias ? { ...basePayload, alias: requestedAlias } : basePayload;
+  let result = await requestSafeLinkU(env, payload);
+
+  // Some SafeLinkU accounts reject alias validation with a 400 and return
+  // an empty `error` array. Retry once without the optional alias so that a
+  // valid target URL can still produce the checkpoint link.
+  if (!result.ok && requestedAlias && result.status === 400 && result.empty_error_array) {
+    result = await requestSafeLinkU(env, basePayload);
+  }
+
   const status = result.ok && result.url ? "ok" : "error";
   if (requestId) await recordSafeLinkURequest(env, requestId, status === "ok" ? "success" : "failed");
   return {
@@ -105,7 +130,7 @@ export async function createSafeLinkUShortLink(env, targetUrl, options = {}, req
     http_status: result.status,
     configured: result.configured,
     url: result.url ?? null,
-    error: status === "ok" ? null : (result.error ?? "SAFELINKU_LINK_CREATION_FAILED"),
+    error: status === "ok" ? null : (result.error ?? `SAFELINKU_HTTP_${result.status}`),
   };
 }
 
