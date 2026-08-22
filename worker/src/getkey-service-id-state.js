@@ -1,4 +1,5 @@
 const SESSION_COOKIE = 'frezen_getkey_session';
+const SESSION_TTL_SECONDS = 24 * 60 * 60;
 const NO_STORE = { 'cache-control': 'no-store' };
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
@@ -25,6 +26,17 @@ async function getSession(env, sessionId) {
   }
   await env.DB.prepare("UPDATE getkey_public_sessions SET last_seen_at = datetime('now') WHERE id = ?1").bind(sessionId).run().catch(() => {});
   return session;
+}
+
+async function normalizeSessionLifetime(env, session) {
+  const createdAt = new Date(session?.created_at || 0).getTime();
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return session;
+  const target = new Date(createdAt + SESSION_TTL_SECONDS * 1000).toISOString();
+  if (new Date(session.expires_at).getTime() >= new Date(target).getTime()) return session;
+  await env.DB.prepare(`UPDATE getkey_public_sessions
+    SET expires_at = ?1, last_seen_at = datetime('now')
+    WHERE id = ?2`).bind(target, session.id).run().catch(() => {});
+  return { ...session, expires_at: target };
 }
 
 async function loadServiceById(env, serviceId) {
@@ -98,9 +110,10 @@ function publicState(session, checkpointRows) {
 export async function getPublicGetKeyStateByServiceId(request, env, flowId) {
   const sessionId = readCookie(request, SESSION_COOKIE);
   if (!sessionId || sessionId !== flowId) return json({ error: 'SESSION_MISMATCH' }, 403);
-  const session = await getSession(env, sessionId);
+  let session = await getSession(env, sessionId);
   if (!session) return json({ error: 'FLOW_NOT_FOUND' }, 404);
 
+  session = await normalizeSessionLifetime(env, session);
   const config = await loadServiceById(env, session.service_id);
   if (config.error) return json({ error: config.error }, config.status);
 
