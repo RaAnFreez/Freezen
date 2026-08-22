@@ -39,22 +39,6 @@ function withPersistentCookie(response, sessionId) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
-function withLaunchJson(response, request) {
-  const url = new URL(request.url);
-  if (url.searchParams.get('json') !== '1') return response;
-  const location = response.headers.get('location');
-  if (!location) return response;
-
-  const headers = new Headers(response.headers);
-  headers.delete('location');
-  headers.set('content-type', 'application/json; charset=utf-8');
-  headers.set('cache-control', 'no-store');
-  return new Response(JSON.stringify({ status: 'ok', url: location }), {
-    status: 200,
-    headers,
-  });
-}
-
 function withNextCheckpoint(response, payload) {
   const flowId = payload?.flow_id;
   const nextId = payload?.state?.next_checkpoint_id;
