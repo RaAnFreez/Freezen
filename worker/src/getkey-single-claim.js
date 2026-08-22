@@ -5,6 +5,7 @@ import {
   getPublicGetKeyLicense,
 } from './getkey-public-runtime.js';
 import { launchGetKeyCheckpointByServiceId } from './getkey-service-id-launch.js';
+import { getPublicGetKeyStateByServiceId } from './getkey-service-id-state.js';
 
 const SESSION_COOKIE = 'frezen_getkey_session';
 const CLAIM_MAX_AGE = 365 * 24 * 60 * 60;
@@ -92,7 +93,7 @@ export async function startPublicGetKey(request, env, slug) {
 }
 
 export async function getPublicGetKeyState(request, env, flowId) {
-  return getStateRuntime(requestWithSession(request, readCookie(request, SESSION_COOKIE) || flowId), env, flowId);
+  return getPublicGetKeyStateByServiceId(requestWithSession(request, readCookie(request, SESSION_COOKIE) || flowId), env, flowId);
 }
 
 export async function launchPublicGetKeyCheckpoint(request, env, flowId) {
