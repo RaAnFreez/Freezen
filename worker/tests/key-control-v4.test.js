@@ -57,7 +57,7 @@ function makeOptionsDb() {
 
 describe('Key Control v4', () => {
   it('creates a key linked to provider and service with custom validity', async () => {
-    const response = await createKey(request({ provider_id: 'p1', service_id: 's1', days: 0, hours: 1, minutes: 0, max_devices: 2, premium: true }), { DB: makeDb() }, 'req-1', { user_id: 'owner-1' });
+    const response = await createKey(request({ provider_id: 'p1', service_id: 's1', days: 0, hours: 1, minutes: 0, max_devices: 2, premium: true }), { DB: makeDb(), FREZEN_MASTER_SECRET: 'ci-test-master-secret' }, 'req-1', { user_id: 'owner-1' });
     expect(response.status).toBe(201);
     const body = await response.json();
     expect(body.created).toBe(true);
@@ -68,7 +68,7 @@ describe('Key Control v4', () => {
   });
 
   it('inherits the provider service when service_id is omitted', async () => {
-    const response = await createKey(request({ provider_id: 'p1', days: 1 }), { DB: makeDb() }, 'req-implicit-service', { user_id: 'owner-1' });
+    const response = await createKey(request({ provider_id: 'p1', days: 1 }), { DB: makeDb(), FREZEN_MASTER_SECRET: 'ci-test-master-secret' }, 'req-implicit-service', { user_id: 'owner-1' });
     expect(response.status).toBe(201);
     const body = await response.json();
     expect(body.key.provider_id).toBe('p1');
