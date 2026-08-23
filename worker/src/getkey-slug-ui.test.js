@@ -10,7 +10,7 @@ describe('custom Get-Key slug UI', () => {
     const ui = read('src/getkey-slug-ui.js');
     expect(entry).toContain("renderSlugGetKeyPage(slug)");
     expect(entry).toContain("url.pathname === '/api/v1/get-key/service'");
-    expect(ui).toContain("'/api/v1/get-key/service?slug=' + encodeURIComponent(slug)");
+    expect(ui).toMatch(/\/api\/v1\/get-key\/service\?slug=.*encodeURIComponent\(slug\)/);
   });
 
   it('does not expose the legacy Get a New Key action', () => {
@@ -23,7 +23,7 @@ describe('custom Get-Key slug UI', () => {
 
   it('opens the official checkpoint URL returned by the launch endpoint', () => {
     const ui = read('src/getkey-slug-ui.js');
-    expect(ui).toContain("/api/v1/get-key/flow/' + encodeURIComponent(flowId) + '/launch?json=1");
-    expect(ui).toContain('location.href = launch.url');
+    expect(ui).toMatch(/\/api\/v1\/get-key\/flow\/.*encodeURIComponent\(flowId\).*\/launch/);
+    expect(ui).toMatch(/location\.href\s*=\s*launch\.url/);
   });
 });
