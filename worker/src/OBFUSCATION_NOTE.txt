@@ -1,1 +1,0 @@
-Advanced Techniques v1.1 / Very High / Protection 100% is enforced for new Lua version uploads through the script upload Worker wrapper.
