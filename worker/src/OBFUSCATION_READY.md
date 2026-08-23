@@ -1,1 +1,0 @@
-This branch is ready for PR review. New Lua version uploads are transformed before persistence and the existing keyed loader serves the persisted transformed payload.
