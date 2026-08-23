@@ -5,7 +5,23 @@ import path from 'node:path';
 const read = (file) => fs.readFileSync(path.resolve(process.cwd(), file), 'utf8');
 
 describe('Get-Key custom slug expiry UI', () => {
-  it('labels the completed-key timer as Expired Key and resets after 24h', () => {
+  it('does not start a countdown while checkpoints are pending', () => {
+    const source = read('src/getkey-slug-ui.js');
+    expect(source).toContain("renderCheckpointTimer(s.expires_at)");
+    expect(source).toContain("$('timeLeft').textContent='—'");
+    expect(source).toContain("function startExpiryTimer(generatedAt)");
+    expect(source).toContain("startExpiryTimer(d.generated_at)");
+  });
+
+  it('uses a 24-hour window beginning at key generation and resets after expiry', () => {
+    const source = read('src/getkey-slug-ui.js');
+    expect(source).toContain("start+86400000-Date.now()");
+    expect(source).toContain("$('timeLeft').textContent='Expired'");
+    expect(source).toContain("localStorage.removeItem(storageKey)");
+    expect(source).toContain("u.searchParams.delete('flow')");
+  });
+
+  it('keeps the server-side completed-key expiry behavior', () => {
     const source = read('src/entry-ui-getkey.js');
     expect(source).toContain("const KEY_VALIDITY_MS = 24 * 60 * 60 * 1000");
     expect(source).toContain("expiryLabel.textContent = 'Expired Key'");
