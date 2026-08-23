@@ -1,0 +1,1 @@
+Get-Key custom slug expiry UI regression coverage is implemented in getkey-ui-expiry.test.js.
