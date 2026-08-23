@@ -34,9 +34,9 @@ describe('Advanced Techniques v1.1 Very High obfuscation', () => {
     expect(result.code).toContain('and true or false');
   });
 
-  it('does not flatten scripts containing unsafe flow controls', () => {
+  it('preserves unsafe flow constructs instead of wrapping them in a state machine', () => {
     const result = obfuscateLuaV11(`for i=1,3 do\n  if i == 2 then break end\nend`);
+    expect(result.code).toContain('for');
     expect(result.code).toContain('break');
-    expect(result.code).toContain('while');
   });
 });
