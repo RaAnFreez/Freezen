@@ -3,13 +3,19 @@ import { recordSecurityEvent } from "./security-events.js";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 5;
+const IP_MAX_ATTEMPTS = 20;
 const MIN_PASSWORD_LENGTH = 12;
 const safeJson = async (request) => { try { const body = await request.json(); return body && typeof body === "object" ? body : null; } catch { return null; } };
 const normalizeEmail = (value) => typeof value === "string" ? value.trim().toLowerCase() : "";
+const clientIp = (request) => (request.headers.get("cf-connecting-ip") || request.headers.get("x-real-ip") || request.headers.get("x-forwarded-for")?.split(",")[0] || "unknown").trim().slice(0, 128);
+const digestIdentifier = async (prefix, value) => {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${prefix}:${value}`));
+  return `${prefix}:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+};
 const rateLimitKey = (email) => `login:${email}`;
-async function isLoginRateLimited(db, email) { const row = await db.prepare("SELECT window_started_at, attempts FROM auth_rate_limits WHERE identifier = ?1 LIMIT 1").bind(rateLimitKey(email)).first(); if (!row) return false; const started = Date.parse(row.window_started_at); if (!Number.isFinite(started) || Date.now() - started >= LOGIN_WINDOW_MS) { await db.prepare("DELETE FROM auth_rate_limits WHERE identifier = ?1").bind(rateLimitKey(email)).run(); return false; } return Number(row.attempts) >= LOGIN_MAX_ATTEMPTS; }
-async function recordLoginFailure(db, email) { const key = rateLimitKey(email); const row = await db.prepare("SELECT window_started_at, attempts FROM auth_rate_limits WHERE identifier = ?1 LIMIT 1").bind(key).first(); const now = new Date().toISOString(); if (!row || Date.now() - Date.parse(row.window_started_at) >= LOGIN_WINDOW_MS) { await db.prepare("INSERT OR REPLACE INTO auth_rate_limits (identifier, window_started_at, attempts, updated_at) VALUES (?1, ?2, 1, ?2)").bind(key, now).run(); return; } await db.prepare("UPDATE auth_rate_limits SET attempts = attempts + 1, updated_at = ?2 WHERE identifier = ?1").bind(key, now).run(); }
-async function clearLoginFailures(db, email) { await db.prepare("DELETE FROM auth_rate_limits WHERE identifier = ?1").bind(rateLimitKey(email)).run(); }
+async function isRateLimited(db, identifier, maxAttempts) { const row = await db.prepare("SELECT window_started_at, attempts FROM auth_rate_limits WHERE identifier = ?1 LIMIT 1").bind(identifier).first(); if (!row) return false; const started = Date.parse(row.window_started_at); if (!Number.isFinite(started) || Date.now() - started >= LOGIN_WINDOW_MS) { await db.prepare("DELETE FROM auth_rate_limits WHERE identifier = ?1").bind(identifier).run(); return false; } return Number(row.attempts) >= maxAttempts; }
+async function recordFailure(db, identifier) { const row = await db.prepare("SELECT window_started_at, attempts FROM auth_rate_limits WHERE identifier = ?1 LIMIT 1").bind(identifier).first(); const now = new Date().toISOString(); if (!row || Date.now() - Date.parse(row.window_started_at) >= LOGIN_WINDOW_MS) { await db.prepare("INSERT OR REPLACE INTO auth_rate_limits (identifier, window_started_at, attempts, updated_at) VALUES (?1, ?2, 1, ?2)").bind(identifier, now).run(); return; } await db.prepare("UPDATE auth_rate_limits SET attempts = attempts + 1, updated_at = ?2 WHERE identifier = ?1").bind(identifier, now).run(); }
+async function clearFailure(db, identifier) { await db.prepare("DELETE FROM auth_rate_limits WHERE identifier = ?1").bind(identifier).run(); }
 
 export async function login(request, env, requestId, json) {
   if (!env.DB) return json({ error: "DATABASE_UNAVAILABLE", request_id: requestId }, 503, requestId);
@@ -22,12 +28,21 @@ export async function login(request, env, requestId, json) {
   const email = normalizeEmail(body?.email);
   const password = body?.password;
   if (!email || email.length > 320 || typeof password !== "string" || password.length > 256) return json({ error: "INVALID_CREDENTIALS", request_id: requestId }, 400, requestId);
+  const ipKey = await digestIdentifier("ip", clientIp(request));
+  const emailKey = rateLimitKey(email);
   try {
-    if (await isLoginRateLimited(env.DB, email)) { await recordSecurityEvent(env, { event_type: "LOGIN_RATE_LIMITED", severity: "WARNING", request_id: requestId, metadata: { email } }); return json({ error: "RATE_LIMITED", message: "Too many login attempts. Try again later.", request_id: requestId }, 429, requestId); }
+    if (await isRateLimited(env.DB, emailKey, LOGIN_MAX_ATTEMPTS) || await isRateLimited(env.DB, ipKey, IP_MAX_ATTEMPTS)) {
+      await recordSecurityEvent(env, { event_type: "LOGIN_RATE_LIMITED", severity: "WARNING", request_id: requestId, metadata: { email } });
+      return json({ error: "RATE_LIMITED", message: "Too many login attempts. Try again later.", request_id: requestId }, 429, requestId);
+    }
     const user = await env.DB.prepare("SELECT id, email, username, password_hash, role, status FROM users WHERE email = ?1 LIMIT 1").bind(email).first();
     const validPassword = user?.password_hash ? await verifyPassword(password, user.password_hash) : false;
-    if (!user || !validPassword || user.status !== "ACTIVE") { await recordLoginFailure(env.DB, email); await recordSecurityEvent(env, { event_type: "LOGIN_FAILED", severity: "WARNING", user_id: user?.id || null, request_id: requestId, metadata: { email } }); return json({ error: "INVALID_CREDENTIALS", request_id: requestId }, 401, requestId); }
-    await clearLoginFailures(env.DB, email);
+    if (!user || !validPassword || user.status !== "ACTIVE") {
+      await Promise.all([recordFailure(env.DB, emailKey), recordFailure(env.DB, ipKey)]);
+      await recordSecurityEvent(env, { event_type: "LOGIN_FAILED", severity: "WARNING", user_id: user?.id || null, request_id: requestId, metadata: { email } });
+      return json({ error: "INVALID_CREDENTIALS", request_id: requestId }, 401, requestId);
+    }
+    await Promise.all([clearFailure(env.DB, emailKey), clearFailure(env.DB, ipKey)]);
     await env.DB.prepare("UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = ?1 AND revoked_at IS NULL").bind(user.id).run();
     const session = await createSession(env.DB, user.id);
     await env.DB.prepare("UPDATE users SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?1").bind(user.id).run();
