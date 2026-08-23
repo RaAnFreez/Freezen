@@ -1,7 +1,7 @@
 import protectedEntry from './entry-ui-getkey-protected.js';
 import { obfuscateLuaV11, ADVANCED_V11_PROFILE } from './script-obfuscator-v11.js';
 
-const MAX_LUA_BYTES = 512 * 1024;
+const MAX_LUA_BYTES = 3 * 1024 * 1024;
 const VERSION_UPLOAD_RE = /^\/api\/v1\/scripts\/([^/]+)\/versions$/;
 
 function jsonError(code, message, status = 422, requestId = '') {
@@ -29,7 +29,7 @@ async function obfuscateVersionUpload(request) {
     return { response: jsonError('LUA_FILE_REQUIRED', 'A .lua file is required.', 400, requestId) };
   }
   if (file.size <= 0 || file.size > MAX_LUA_BYTES) {
-    return { response: jsonError('LUA_FILE_TOO_LARGE_OR_EMPTY', 'The Lua source must be between 1 byte and 512 KiB.', 413, requestId) };
+    return { response: jsonError('LUA_FILE_TOO_LARGE_OR_EMPTY', 'The Lua source must be between 1 byte and 3 MiB.', 413, requestId) };
   }
 
   let source;
@@ -53,7 +53,7 @@ async function obfuscateVersionUpload(request) {
   }
 
   if (result.outputBytes <= 0 || result.outputBytes > MAX_LUA_BYTES) {
-    return { response: jsonError('OBFUSCATED_LUA_TOO_LARGE', 'The obfuscated Lua output exceeds the maximum delivery size.', 413, requestId) };
+    return { response: jsonError('OBFUSCATED_LUA_TOO_LARGE', 'The obfuscated Lua output exceeds the maximum 3 MiB delivery size.', 413, requestId) };
   }
 
   const forwardedForm = new FormData();
