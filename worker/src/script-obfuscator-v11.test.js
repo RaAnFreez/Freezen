@@ -29,9 +29,9 @@ describe('Advanced Techniques v1.1 Very High obfuscation', () => {
     expect(isAdvancedV11Obfuscated(result.code)).toBe(true);
   });
 
-  it('applies control-flow protection without changing a simple condition into raw source', () => {
+  it('applies control-flow protection without leaving the plain condition form', () => {
     const result = obfuscateLuaV11(`local x = 8\nif x > 3 then\n  print("ok")\nend`);
-    expect(result.code).toContain('andtrueorfalse');
+    expect(result.code).toContain('and true or false');
   });
 
   it('does not flatten scripts containing unsafe flow controls', () => {
