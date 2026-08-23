@@ -355,5 +355,5 @@ export function obfuscateLuaV11(source) {
 
 export function isAdvancedV11Obfuscated(value) {
   const text = String(value ?? '');
-  return text.includes('Debug library detected') || (text.includes('string.char') && text.includes('FREZEN'));
+  return text.includes('string.char') && /\bfunction\b/.test(text);
 }
