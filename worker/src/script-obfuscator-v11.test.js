@@ -37,12 +37,13 @@ describe('Advanced Techniques v1.1 Very High obfuscation', () => {
   });
 
   it('uses compatibility mode for risky Lua features instead of rewriting their execution model', () => {
-    const source = `local function make(value)\n  local t = setmetatable({}, { __index = value })\n  return t\nend\nreturn make(3)`;
+    const source = `local marker = "compatibility"\nlocal function make(value)\n  local t = setmetatable({}, { __index = value })\n  return t\nend\nreturn make(3)`;
     const result = obfuscateLuaV11(source);
     expect(result.compatibilityMode).toBe(true);
     expect(result.code).toContain('setmetatable');
     expect(result.code).toContain('__index');
     expect(result.code).toContain('string.char');
+    expect(result.code).not.toContain('compatibility');
     expect(result.code).not.toContain('Debug library detected');
   });
 
