@@ -1,5 +1,6 @@
 import { bindRuntimeHwid } from "./security/runtime-hwid.js";
 import { isBrowserNavigation, blockedBrowserPage } from "./browser-link-guard.js";
+import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from "./script-obfuscation-contract.js";
 
 const deny = (code = "ACCESS_DENIED", status = 403, requestId = "") => new Response(code, {
   status,
@@ -50,6 +51,8 @@ async function findScriptFile(env, keyHash, scriptId) {
       f.id AS file_id,
       f.content,
       f.content_type,
+      f.size_bytes,
+      f.sha256,
       l.id AS license_id,
       l.user_id AS license_user_id,
       l.status AS license_status,
@@ -96,7 +99,7 @@ async function keyLicenseExists(env, keyHash) {
 function loaderSource(endpoint) {
   return [
     'script_key="PASTE YOUR KEY HERE";',
-    `loadstring(game:HttpGet("${endpoint.replace(/\/files\/(.+)\.lua$/i, "/loader/$1?bootstrap=1&key=")}"..game:GetService("HttpService"):UrlEncode(script_key)))()`,
+    `local _frezen_http=game:GetService("HttpService");local _frezen_ok,_frezen_src=pcall(function() return game:HttpGet("${endpoint.replace(/\/files\/(.+)\.lua$/i, "/loader/$1?bootstrap=1&key=")}".._frezen_http:UrlEncode(script_key)) end);if not _frezen_ok then error("FREZEN_BOOTSTRAP_HTTP_FAILED:"..tostring(_frezen_src)) end;if type(_frezen_src)~="string" or _frezen_src=="" then error("FREZEN_BOOTSTRAP_EMPTY") end;local _frezen_load=loadstring or load;if type(_frezen_load)~="function" then error("FREZEN_LOADSTRING_UNAVAILABLE") end;local _frezen_chunk,_frezen_compile_error=_frezen_load(_frezen_src);if type(_frezen_chunk)~="function" then error("FREZEN_BOOTSTRAP_COMPILE_FAILED:"..tostring(_frezen_compile_error)) end;local _frezen_run_ok,_frezen_run_error=pcall(_frezen_chunk);if not _frezen_run_ok then error("FREZEN_BOOTSTRAP_RUNTIME_FAILED:"..tostring(_frezen_run_error)) end`,
   ].join("\n");
 }
 
@@ -141,6 +144,10 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
     if (row.license_expires_at != null && row.license_expires_at && new Date(row.license_expires_at).getTime() <= Date.now()) return deny("LICENSE_EXPIRED", 403, requestId);
     if (!row.content) return deny("SCRIPT_CONTENT_MISSING", 404, requestId);
 
+    const obfuscationVerified = isFrezenObfuscated(row.content);
+    const payloadSha256 = row.sha256 || await sha256Hex(row.content);
+    const payloadBytes = Number(row.size_bytes ?? new TextEncoder().encode(row.content).byteLength);
+
     const bound = await bindRuntimeHwid(env, row.license_id, row.license_user_id, hwid, gameUsername, gameUserId);
     if (!bound.ok) return deny(bindFailureMessage(bound.reason), 403, requestId);
 
@@ -158,6 +165,11 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
         "x-frezen-hwid-bound": "true",
         "x-frezen-hwid-fingerprint": bound.fingerprint,
         "x-frezen-hwid-device": bound.device_id,
+        "x-frezen-payload-sha256": payloadSha256,
+        "x-frezen-payload-bytes": String(payloadBytes),
+        "x-frezen-obfuscation-status": obfuscationVerified ? "verified" : "legacy-or-unverified",
+        "x-frezen-obfuscation-profile": obfuscationVerified ? `${OBFUSCATION_PROFILE.mode};${OBFUSCATION_PROFILE.version};${OBFUSCATION_PROFILE.strength};${OBFUSCATION_PROFILE.protectionLevel};${OBFUSCATION_PROFILE.algorithm}` : "legacy;marker-missing",
+        "x-frezen-obfuscation-marker": obfuscationVerified ? OBFUSCATION_MARKER : "marker-missing",
       },
     });
   } catch (error) {
