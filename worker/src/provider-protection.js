@@ -21,6 +21,7 @@ function parseCsv(value) {
 
 function detectBrowser(userAgent = '', clientBrowser = '') {
   const client = String(clientBrowser || '').trim();
+  if (client) return client;
   const ua = String(userAgent || '');
   if (/FBAN|FBAV/i.test(ua)) return 'Facebook In-App Browser';
   if (/Instagram/i.test(ua)) return 'Instagram In-App Browser';
@@ -38,7 +39,7 @@ function detectBrowser(userAgent = '', clientBrowser = '') {
   if (/OPR\//i.test(ua)) return 'Opera';
   if (/Vivaldi/i.test(ua)) return 'Vivaldi';
   if (/Edg\//i.test(ua)) return 'Edge';
-  if (/Brave/i.test(ua) || client === 'Brave') return 'Brave';
+  if (/Brave/i.test(ua)) return 'Brave';
   if (/Chrome\//i.test(ua)) return 'Chrome';
   if (/Firefox\//i.test(ua)) return 'Firefox';
   if (/CriOS\//i.test(ua)) return 'Chrome';
@@ -47,7 +48,7 @@ function detectBrowser(userAgent = '', clientBrowser = '') {
   if (/Android/i.test(ua)) return 'Android Browser';
   if (/Trident\//i.test(ua) || /MSIE/i.test(ua)) return 'Internet Explorer';
   if (/Chromium/i.test(ua)) return 'Chromium';
-  return client || 'Other/Unknown';
+  return 'Other/Unknown';
 }
 
 function getPolicy(provider) {
