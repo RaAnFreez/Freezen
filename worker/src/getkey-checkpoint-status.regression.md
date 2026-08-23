@@ -1,1 +1,0 @@
-Regression target: the public Get-Key state API returns completed checkpoint rows with status `COMPLETED`, backed by database status `passed`. The custom slug UI must render those rows as green ✓/COMPLETED instead of grey `—`.
