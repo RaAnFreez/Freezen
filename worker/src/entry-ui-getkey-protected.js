@@ -1,13 +1,23 @@
 import baseEntry from './entry-ui-getkey.js';
 import { enforceProviderProtectionBySlug, enforceProviderProtectionByFlow } from './provider-protection.js';
-
-const NO_STORE = { 'cache-control': 'no-store' };
+import { requirePrivateAccess } from './security/private-access.js';
+import { isPublicSurface, isOwnerSetupSurface, sameOriginMutation, applySecurityHeaders, surfaceDenied } from './security/surface-firewall.js';
 
 function getSlug(pathname) {
   if (!pathname.startsWith('/get-key/')) return null;
   const tail = pathname.slice('/get-key/'.length).replace(/\/+$/, '');
   if (!tail || tail.includes('/')) return null;
   try { return decodeURIComponent(tail); } catch { return null; }
+}
+
+async function ownerSetupAllowed(env) {
+  if (!env?.DB) return false;
+  try {
+    const owner = await env.DB.prepare("SELECT id FROM users WHERE role = 'OWNER' LIMIT 1").first();
+    return !owner?.id;
+  } catch {
+    return false;
+  }
 }
 
 async function injectProtectionScript(response) {
@@ -113,31 +123,41 @@ async function injectProtectionScript(response) {
   const body = html.replace('</body>', `${script}</body>`);
   const headers = new Headers(response.headers);
   headers.set('content-type', 'text/html; charset=utf-8');
-  Object.entries(NO_STORE).forEach(([key, value]) => headers.set(key, value));
+  headers.set('cache-control', 'no-store');
   return new Response(body, { status: response.status, statusText: response.statusText, headers });
 }
 
 export default {
   async fetch(request, env, ctx) {
+    const requestId = crypto.randomUUID();
     const url = new URL(request.url);
+
+    if (isOwnerSetupSurface(url.pathname)) {
+      if (!await ownerSetupAllowed(env)) return surfaceDenied(requestId);
+    } else if (!isPublicSurface(url.pathname)) {
+      if (!sameOriginMutation(request)) return surfaceDenied(requestId);
+      const access = await requirePrivateAccess(request, env, requestId);
+      if (access instanceof Response) return applySecurityHeaders(access);
+    }
 
     if (request.method === 'POST' && url.pathname === '/api/v1/get-key/flow/start') {
       let body = {};
       try { body = await request.clone().json(); } catch {}
       const slug = String(url.searchParams.get('slug') || body?.slug || '').trim().toLowerCase();
       const blocked = await enforceProviderProtectionBySlug(request, env, slug);
-      if (blocked) return blocked;
+      if (blocked) return applySecurityHeaders(blocked);
     }
 
     const launchMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)\/launch$/);
     if ((request.method === 'GET' || request.method === 'POST') && launchMatch) {
       const blocked = await enforceProviderProtectionByFlow(request, env, decodeURIComponent(launchMatch[1]));
-      if (blocked) return blocked;
+      if (blocked) return applySecurityHeaders(blocked);
     }
 
     const response = await baseEntry.fetch(request, env, ctx);
     const slug = request.method === 'GET' ? getSlug(url.pathname) : null;
-    return slug ? injectProtectionScript(response) : response;
+    const finalResponse = slug ? await injectProtectionScript(response) : response;
+    return applySecurityHeaders(finalResponse);
   },
   async scheduled(controller, env, ctx) {
     if (typeof baseEntry.scheduled === 'function') return baseEntry.scheduled(controller, env, ctx);
