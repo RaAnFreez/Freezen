@@ -42,6 +42,10 @@ async function obfuscateVersionUpload(request) {
   let result;
   try {
     result = obfuscateLuaV11(source);
+    // Minification can turn `a - -b` into `a--b`, which Lua reads as a comment.
+    // Restore an explicit binary/unary-minus separator without touching strings.
+    result.code = result.code.replace(/([A-Za-z0-9_)\]])--([A-Za-z_(])/g, '$1- -$2');
+    result.outputBytes = new TextEncoder().encode(result.code).byteLength;
   } catch (error) {
     const message = String(error?.message || 'OBFUSCATION_FAILED');
     const status = message === 'OBFUSCATED_LUA_TOO_LARGE' ? 413 : 422;
