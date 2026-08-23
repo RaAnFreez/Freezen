@@ -159,7 +159,7 @@ function encodeNumber(value) {
   const numeric = parseNumericLiteral(value);
   if (numeric === null || !Number.isFinite(numeric)) return value;
   const delta = randomInt(3, 97);
-  if (Number.isInteger(numeric) && Math.abs(numeric) < 3) return value;
+  if (Number.isInteger(numeric) && (Math.abs(numeric) < 3 || Math.abs(numeric) > 1000000000)) return value;
   return `((${numeric + delta})-${delta})`;
 }
 
@@ -274,8 +274,8 @@ function injectDeadCode() {
 }
 
 function injectAntiDebug() {
-  const t = randomInt(500, 1500);
-  return `do if type(debug)=="table" then error("Debug library detected",0) end;local _c=os and os.clock;if _c then local _a=_c();for _i=1,${t} do end;local _b=_c();if _b-_a>0.1 then error("Timing anomaly detected",0) end end;if _G and (_G._DEBUG or _G._TRACE or _G._HOOK) then error("Debug environment detected",0) end;if getfenv and _G and getfenv(0)~=_G then error("Environment manipulation detected",0) end end`;
+  const t = randomInt(50, 150);
+  return `do local _frezen_dbg=(type(debug)=="table");local _frezen_clock=os and os.clock;if type(_frezen_clock)=="function" then local _frezen_a=_frezen_clock();for _i=1,${t} do end;local _frezen_b=_frezen_clock();local _frezen_slow=(_frezen_b-_frezen_a)>0.1 end;if type(getfenv)=="function" then pcall(getfenv,0) end end`;
 }
 
 function conservativeFlatten(code) {
@@ -297,23 +297,48 @@ function minifySource(code) {
   return code.replace(/\s+/g, ' ').replace(/\s*([{}()\[\],;:+\-*\/%^<>=])\s*/g, '$1').trim();
 }
 
+function requiresCompatibilityMode(source) {
+  const riskyPatterns = [
+    /\blocal\s+function\b/i,
+    /\bfunction\b[^\n]*:/i,
+    /\bsetmetatable\b/i,
+    /\bgetmetatable\b/i,
+    /\b__index\b/i,
+    /\b__newindex\b/i,
+    /\b_ENV\b/i,
+    /\bgetfenv\b/i,
+    /\bsetfenv\b/i,
+    /\bloadstring\b/i,
+    /\bload\s*\(/i,
+    /\bcoroutine\b/i,
+  ];
+  return riskyPatterns.some((pattern) => pattern.test(source));
+}
+
 export function obfuscateLuaV11(source) {
   const text = String(source ?? '');
   const sourceBytes = new TextEncoder().encode(text).byteLength;
   if (!text.trim()) throw new Error('EMPTY_LUA_SOURCE');
   if (sourceBytes > MAX_SOURCE_BYTES) throw new Error('LUA_SOURCE_TOO_LARGE');
 
+  const compatibilityMode = requiresCompatibilityMode(text);
   let tokens = tokenize(text);
-  tokens = mangleIdentifiers(tokens);
+  if (!compatibilityMode) tokens = mangleIdentifiers(tokens);
   tokens = tokens.map((token) => {
-    if (token.type === 'string') return { type: 'raw', value: encodeString(unescapeLuaString(token.raw)), raw: encodeString(unescapeLuaString(token.raw)) };
-    if (token.type === 'number') return { type: 'raw', value: encodeNumber(token.value), raw: encodeNumber(token.value) };
+    if (token.type === 'string') {
+      const encoded = encodeString(unescapeLuaString(token.raw));
+      return { type: 'raw', value: encoded, raw: encoded };
+    }
+    if (token.type === 'number') {
+      const encoded = encodeNumber(token.value);
+      return { type: 'raw', value: encoded, raw: encoded };
+    }
     return token;
   });
-  tokens = transformControlFlow(tokens);
+  if (!compatibilityMode) tokens = transformControlFlow(tokens);
 
   let body = renderTokens(tokens);
-  body = conservativeFlatten(body);
+  body = compatibilityMode ? body : conservativeFlatten(body);
   const prefix = [injectAntiDebug(), injectDeadCode()].join(' ');
   const result = minifySource(`${prefix} ${body}`);
   const outputBytes = new TextEncoder().encode(result).byteLength;
@@ -324,10 +349,11 @@ export function obfuscateLuaV11(source) {
     profile: ADVANCED_V11_PROFILE,
     sourceBytes,
     outputBytes,
+    compatibilityMode,
   };
 }
 
 export function isAdvancedV11Obfuscated(value) {
   const text = String(value ?? '');
-  return text.includes('Debug library detected') && text.includes('string.char') && /\bfunction\b/.test(text);
+  return text.includes('string.char') && /\bfunction\b/.test(text);
 }

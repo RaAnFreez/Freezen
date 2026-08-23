@@ -1,3 +1,5 @@
+import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from '../script-obfuscation-contract.js';
+
 const encoder = new TextEncoder();
 const TOKEN_TTL_SECONDS = 60;
 const MAX_TOKEN_BYTES = 4096;
@@ -84,8 +86,26 @@ export async function deliverScript(request, env, requestId, json) {
     if (String(row.product_status).toUpperCase() !== "ACTIVE" || row.product_id !== row.script_product_id) return deny(json, requestId, "PRODUCT_NOT_ACTIVE");
     if (String(row.device_status).toUpperCase() !== "ACTIVE") return deny(json, requestId, "HWID_BLOCKED");
     if (String(row.version_status).toUpperCase() !== "ACTIVE") return deny(json, requestId, "SCRIPT_VERSION_NOT_ACTIVE");
-    await audit(env, claims.user_id, "SCRIPT_REQUESTED", row.script_id, "SUCCESS", requestId, { license_id: row.user_id === claims.user_id ? claims.license_id : null, version_id: row.version_id });
-    await audit(env, claims.user_id, "SCRIPT_DELIVERED", row.script_id, "SUCCESS", requestId, { version_id: row.version_id, size_bytes: row.size_bytes });
-    return new Response(row.content, { status: 200, headers: { "content-type": row.content_type || "text/x-lua; charset=utf-8", "cache-control": "no-store, no-cache, must-revalidate", "pragma": "no-cache", "x-content-type-options": "nosniff", "content-disposition": `attachment; filename="${row.file_name.replace(/[\"\\\r\n]/g, "_")}"`, "x-frezen-version": row.version, "x-frezen-request-id": requestId } });
+
+    const obfuscationVerified = isFrezenObfuscated(row.content);
+    await audit(env, claims.user_id, "SCRIPT_REQUESTED", row.script_id, "SUCCESS", requestId, { license_id: row.user_id === claims.user_id ? claims.license_id : null, version_id: row.version_id, obfuscation_verified: obfuscationVerified });
+    await audit(env, claims.user_id, "SCRIPT_DELIVERED", row.script_id, "SUCCESS", requestId, { version_id: row.version_id, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: obfuscationVerified });
+
+    return new Response(row.content, {
+      status: 200,
+      headers: {
+        "content-type": row.content_type || "text/x-lua; charset=utf-8",
+        "cache-control": "no-store, no-cache, must-revalidate",
+        "pragma": "no-cache",
+        "x-content-type-options": "nosniff",
+        "content-disposition": `attachment; filename="${row.file_name.replace(/[\"\\\r\n]/g, "_")}"`,
+        "x-frezen-version": row.version,
+        "x-frezen-request-id": requestId,
+        "x-frezen-payload-sha256": row.sha256,
+        "x-frezen-obfuscation-status": obfuscationVerified ? "verified" : "legacy-or-unverified",
+        "x-frezen-obfuscation-profile": obfuscationVerified ? `${OBFUSCATION_PROFILE.mode};${OBFUSCATION_PROFILE.version};${OBFUSCATION_PROFILE.strength};${OBFUSCATION_PROFILE.protectionLevel};${OBFUSCATION_PROFILE.algorithm}` : `legacy;marker-missing`,
+        "x-frezen-obfuscation-marker": obfuscationVerified ? OBFUSCATION_MARKER : "marker-missing",
+      }
+    });
   } catch { await audit(env, claims.user_id, "SCRIPT_DELIVERY_DENIED", claims.script_id, "ERROR", requestId, { reason: "DATABASE_ERROR" }); return deny(json, requestId, "DATABASE_ERROR", 503); }
 }
