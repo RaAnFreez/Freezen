@@ -1,1 +1,0 @@
-Get-Key expiry UI regression is covered by getkey-ui-expiry.test.js.
