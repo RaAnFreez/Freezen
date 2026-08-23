@@ -42,8 +42,6 @@ async function obfuscateVersionUpload(request) {
   let result;
   try {
     result = obfuscateLuaV11(source);
-    // Minification can turn `a - -b` into `a--b`, which Lua reads as a comment.
-    // Restore an explicit binary/unary-minus separator without touching strings.
     result.code = result.code.replace(/([A-Za-z0-9_)\]])--([A-Za-z_(])/g, '$1- -$2');
     result.outputBytes = new TextEncoder().encode(result.code).byteLength;
   } catch (error) {
@@ -58,11 +56,8 @@ async function obfuscateVersionUpload(request) {
 
   const forwardedForm = new FormData();
   for (const [key, value] of form.entries()) {
-    if (key === 'file') {
-      forwardedForm.append('file', new File([result.code], file.name, { type: 'text/x-lua' }));
-    } else {
-      forwardedForm.append(key, value);
-    }
+    if (key === 'file') forwardedForm.append('file', new File([result.code], file.name, { type: 'text/x-lua' }));
+    else forwardedForm.append(key, value);
   }
   forwardedForm.set('obfuscation_version', ADVANCED_V11_PROFILE.version);
   forwardedForm.set('obfuscation_mode', ADVANCED_V11_PROFILE.mode);
@@ -77,13 +72,7 @@ async function obfuscateVersionUpload(request) {
   headers.set('x-frezen-obfuscation-output-bytes', String(result.outputBytes));
   headers.set('x-frezen-obfuscation-request-id', requestId);
 
-  const forwarded = new Request(request.url, {
-    method: request.method,
-    headers,
-    body: forwardedForm,
-  });
-
-  return { request: forwarded };
+  return { request: new Request(request.url, { method: request.method, headers, body: forwardedForm }) };
 }
 
 export default {
