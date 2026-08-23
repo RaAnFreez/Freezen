@@ -83,6 +83,13 @@ async function renderSlugPageWithDirectCheckpointRedirect(slug) {
   const html = await response.text();
   const script = `<script>
 (() => {
+  globalThis.parseUtcTimestamp = (value) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return NaN;
+    const normalized = /(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(raw) ? raw : raw + 'Z';
+    return new Date(normalized).getTime();
+  };
+
   const flowStorageKey = 'frezen:getkey:flow:' + ${JSON.stringify(String(slug || ''))};
   const KEY_VALIDITY_MS = 24 * 60 * 60 * 1000;
   let expiryInterval = null;
