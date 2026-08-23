@@ -20,6 +20,16 @@ async function sha256Hex(value) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+// The Advanced v1.1 encoder historically emitted Luau's binary `~` XOR operator.
+// Some Lua runtimes used by executors reject that syntax during compilation. Keep
+// the XOR algorithm but emit a parser-compatible decoder with a bit32 fast path and
+// a pure-arithmetic fallback instead of shipping the incompatible operator.
+export function normalizeLuaRuntimeCompatibility(code) {
+  const binaryXorExpression = /t\[i\]~\(\(\(k\+i-1\)%255\)\+1\)/g;
+  const compatibleXor = '(function(a,b)local bx=bit32 and bit32.bxor;if type(bx)=="function" then return bx(a,b) end;local r,p=0,1;while a>0 or b>0 do local x=a%2;local y=b%2;if x~=y then r=r+p end;a=(a-x)/2;b=(b-y)/2;p=p*2 end;return r end)(t[i],(((k+i-1)%255)+1))';
+  return String(code ?? '').replace(binaryXorExpression, compatibleXor);
+}
+
 async function obfuscateVersionUpload(request) {
   const requestId = crypto.randomUUID();
   let form;
@@ -47,6 +57,7 @@ async function obfuscateVersionUpload(request) {
   let result;
   try {
     result = obfuscateLuaV11(source);
+    result.code = normalizeLuaRuntimeCompatibility(result.code);
     result.code = result.code.replace(/([A-Za-z0-9_)\]])--([A-Za-z_(])/g, '$1- -$2');
     result.code = `${OBFUSCATION_MARKER}\n${result.code}`;
     result.outputBytes = new TextEncoder().encode(result.code).byteLength;
