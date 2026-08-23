@@ -187,3 +187,14 @@ export async function deleteScript(request, env, requestId, json, auth, scriptId
     return json({ status: 'deleted', request_id: requestId });
   } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
 }
+
+export async function getScript(request, env, requestId, json, scriptId) {
+  if (!env.DB) return bad(json, requestId, 'DATABASE_UNAVAILABLE', 503);
+  try {
+    await ensureScriptSchema(env);
+    const script = await env.DB.prepare(`SELECT s.id,s.service_id,s.name,s.description,s.loader_url,s.status,s.created_at,s.updated_at,sv.name AS service_name,sv.slug AS service_slug FROM scripts s LEFT JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 LIMIT 1`).bind(scriptId).first();
+    if (!script) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
+    const versions = await env.DB.prepare('SELECT id,version,file_reference,release_notes,status,created_at FROM script_versions WHERE script_id=?1 ORDER BY created_at DESC').bind(scriptId).all();
+    return json({ script, versions: versions.results ?? [], request_id: requestId });
+  } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
+}
