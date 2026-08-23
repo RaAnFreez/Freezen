@@ -17,21 +17,33 @@ describe('Advanced Techniques v1.1 Very High obfuscation', () => {
     expect(ADVANCED_V11_PROFILE.minify).toBe(true);
   });
 
-  it('replaces strings and numbers and removes comments', () => {
+  it('replaces strings and numbers and keeps anti-debug instrumentation non-fatal', () => {
     const source = `-- source comment\nlocal secret = "FrezenProtected"\nlocal count = 1234\nprint(secret, count)`;
     const result = obfuscateLuaV11(source);
     expect(result.code).not.toContain('FrezenProtected');
     expect(result.code).not.toContain('-- source comment');
     expect(result.code).toContain('string.char');
-    expect(result.code).toContain('Debug library detected');
+    expect(result.code).toContain('type(debug)');
+    expect(result.code).not.toContain('Debug library detected');
     expect(result.code).not.toEqual(source);
     expect(result.outputBytes).toBeGreaterThan(0);
     expect(isAdvancedV11Obfuscated(result.code)).toBe(true);
   });
 
-  it('applies control-flow protection without leaving the plain condition form', () => {
+  it('applies control-flow protection to ordinary conditions', () => {
     const result = obfuscateLuaV11(`local x = 8\nif x > 3 then\n  print("ok")\nend`);
+    expect(result.compatibilityMode).toBe(false);
     expect(result.code).toContain('and true or false');
+  });
+
+  it('uses compatibility mode for risky Lua features instead of rewriting their execution model', () => {
+    const source = `local function make(value)\n  local t = setmetatable({}, { __index = value })\n  return t\nend\nreturn make(3)`;
+    const result = obfuscateLuaV11(source);
+    expect(result.compatibilityMode).toBe(true);
+    expect(result.code).toContain('setmetatable');
+    expect(result.code).toContain('__index');
+    expect(result.code).toContain('string.char');
+    expect(result.code).not.toContain('Debug library detected');
   });
 
   it('preserves unsafe flow constructs instead of wrapping them in a state machine', () => {
