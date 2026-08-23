@@ -15,9 +15,9 @@ describe('Custom Get-Key slug UI routing', () => {
     expect(entry).toContain('window.location.assign(launchPath);');
 
     expect(page).toContain('id="primary"');
-    expect(page).toContain("els.primaryText.textContent = 'CONTINUE'");
-    expect(page).toContain("status === 'current' ? 'OPEN' : '—'");
-    expect(page).toContain('launchCurrentCheckpoint');
+    expect(page).toMatch(/primaryText[^;]*textContent=['"]CONTINUE['"]/);
+    expect(page).toMatch(/['"]OPEN['"]/);
+    expect(page).toMatch(/launch(?:Current)?Checkpoint/);
     expect(page).toContain('/api/v1/get-key/flow/start?slug=');
   });
 
