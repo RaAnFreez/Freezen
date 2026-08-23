@@ -10,7 +10,7 @@ function getSlug(pathname) {
   try { return decodeURIComponent(tail); } catch { return null; }
 }
 
-async function injectProtectionScript(response, slug) {
+async function injectProtectionScript(response) {
   const type = response.headers.get('content-type') || '';
   if (!type.includes('text/html')) return response;
   const html = await response.text();
@@ -32,6 +32,7 @@ async function injectProtectionScript(response, slug) {
     if (/QQBrowser/i.test(ua)) return 'QQ Browser';
     if (/YaBrowser/i.test(ua)) return 'Yandex Browser';
     if (/SamsungBrowser/i.test(ua)) return 'Samsung Internet';
+    if (/DuckDuckGo/i.test(ua)) return 'DuckDuckGo';
     if (/OPR\\//i.test(ua)) return 'Opera';
     if (/Vivaldi/i.test(ua)) return 'Vivaldi';
     if (/Edg\\//i.test(ua)) return 'Edge';
@@ -45,27 +46,38 @@ async function injectProtectionScript(response, slug) {
   };
 
   const detectAdblock = async () => {
-    const bait = document.createElement('div');
-    bait.className = 'adsbox ad-banner ad-unit adsbygoogle text-ad pub_300x250';
-    bait.setAttribute('aria-hidden', 'true');
-    bait.style.cssText = 'position:absolute!important;left:-10000px!important;top:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important;pointer-events:none!important;';
-    document.body.appendChild(bait);
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    const style = getComputedStyle(bait);
-    const blocked = bait.offsetParent === null || bait.offsetHeight === 0 || style.display === 'none' || style.visibility === 'hidden';
-    bait.remove();
-    return blocked;
+    try {
+      const bait = document.createElement('div');
+      bait.className = 'adsbox ad-banner ad-unit adsbygoogle text-ad pub_300x250';
+      bait.setAttribute('aria-hidden', 'true');
+      bait.style.cssText = 'position:absolute!important;left:-10000px!important;top:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important;pointer-events:none!important;';
+      document.body.appendChild(bait);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const style = getComputedStyle(bait);
+      const blocked = bait.offsetParent === null || bait.offsetHeight === 0 || style.display === 'none' || style.visibility === 'hidden';
+      bait.remove();
+      return blocked;
+    } catch {
+      return false;
+    }
   };
 
   const detectIncognito = async () => {
+    const signals = [];
     try {
       if (navigator.storage?.estimate) {
         const result = await navigator.storage.estimate();
         const quota = Number(result?.quota || 0);
-        if (quota > 0 && quota < 120 * 1024 * 1024) return true;
+        if (quota > 0 && quota < 120 * 1024 * 1024) signals.push('quota');
       }
     } catch {}
-    return false;
+    try {
+      if (navigator.storage?.persisted) {
+        const persisted = await navigator.storage.persisted();
+        if (!persisted) signals.push('not-persisted');
+      }
+    } catch {}
+    return signals.length >= 2;
   };
 
   let signalsPromise;
@@ -77,9 +89,18 @@ async function injectProtectionScript(response, slug) {
     return signalsPromise;
   };
 
+  const protectedPath = (url) => {
+    try {
+      const parsed = new URL(url, location.href);
+      return parsed.pathname === '/api/v1/get-key/flow/start' || /^\/api\/v1\/get-key\/flow\/[^/]+\/launch$/.test(parsed.pathname);
+    } catch {
+      return false;
+    }
+  };
+
   window.fetch = async (input, init = {}) => {
     const requestUrl = typeof input === 'string' ? input : String(input?.url || '');
-    if (!requestUrl.includes('/api/v1/get-key/flow/start')) return originalFetch(input, init);
+    if (!protectedPath(requestUrl)) return originalFetch(input, init);
     const signals = await getSignals();
     const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
     headers.set('x-frezen-client-browser', detectBrowser());
@@ -109,14 +130,14 @@ export default {
     }
 
     const launchMatch = url.pathname.match(/^\/api\/v1\/get-key\/flow\/([^/]+)\/launch$/);
-    if (request.method === 'GET' && launchMatch) {
+    if ((request.method === 'GET' || request.method === 'POST') && launchMatch) {
       const blocked = await enforceProviderProtectionByFlow(request, env, decodeURIComponent(launchMatch[1]));
       if (blocked) return blocked;
     }
 
     const response = await baseEntry.fetch(request, env, ctx);
     const slug = request.method === 'GET' ? getSlug(url.pathname) : null;
-    return slug ? injectProtectionScript(response, slug) : response;
+    return slug ? injectProtectionScript(response) : response;
   },
   async scheduled(controller, env, ctx) {
     if (typeof baseEntry.scheduled === 'function') return baseEntry.scheduled(controller, env, ctx);

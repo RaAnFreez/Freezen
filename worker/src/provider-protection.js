@@ -1,7 +1,7 @@
 const COUNTRY_CODES = new Set(["AF","AX","AL","DZ","AS","AD","AO","AI","AQ","AG","AR","AM","AW","AU","AT","AZ","BS","BH","BD","BB","BY","BE","BZ","BJ","BM","BT","BO","BQ","BA","BW","BV","BR","IO","BN","BG","BF","BI","CV","KH","CM","CA","KY","CF","TD","CL","CN","CX","CC","CO","KM","CG","CD","CK","CR","CI","HR","CU","CW","CY","CZ","DK","DJ","DM","DO","EC","EG","SV","GQ","ER","EE","SZ","ET","FK","FO","FJ","FI","FR","GF","PF","TF","GA","GM","GE","DE","GH","GI","GR","GL","GD","GP","GU","GT","GG","GN","GW","GY","HT","HM","VA","HN","HK","HU","IS","IN","ID","IR","IQ","IE","IM","IL","IT","JM","JP","JE","JO","KZ","KE","KI","KP","KR","KW","KG","LA","LV","LB","LS","LR","LY","LI","LT","LU","MO","MG","MW","MY","MV","ML","MT","MH","MQ","MR","MU","YT","MX","FM","MD","MC","MN","ME","MS","MA","MZ","MM","NA","NR","NP","NL","NC","NZ","NI","NE","NG","NU","NF","MK","MP","NO","OM","PK","PW","PS","PA","PG","PY","PE","PH","PN","PL","PT","PR","QA","RE","RO","RU","RW","BL","SH","KN","LC","MF","PM","VC","WS","SM","ST","SA","SN","RS","SC","SL","SG","SX","SK","SI","SB","SO","ZA","GS","SS","ES","LK","SD","SR","SJ","SE","CH","SY","TW","TJ","TZ","TH","TL","TG","TK","TO","TT","TN","TR","TM","TC","TV","UG","UA","AE","GB","US","UM","UY","UZ","VU","VE","VN","VG","VI","WF","EH","YE","ZM","ZW"]);
 
-const AUTOMATION_UA = /headless|phantomjs|selenium|playwright|puppeteer|webdriver/i;
-const DATACENTER_ORG = /(amazon|aws|google|microsoft|azure|digitalocean|linode|vultr|hetzner|ovh|leaseweb|contabo|oracle|rackspace|hostinger|cloudways|choopa|m247|vpn|proxy|nordvpn|expressvpn|surfshark|protonvpn|private internet access|pia vpn|windscribe|tunnelbear|cyberghost|hola vpn)/i;
+const AUTOMATION_UA = /headless|phantomjs|selenium|playwright|puppeteer|webdriver|slurp|bot\b|crawler|spider/i;
+const DATACENTER_ORG = /(amazon|aws|google cloud|google llc|microsoft|azure|digitalocean|linode|vultr|hetzner|ovh|leaseweb|contabo|oracle|rackspace|hostinger|cloudways|choopa|m247|cloudsigma|scaleway|upcloud|kamatera|ionos|timeweb|vps|virtual server|datacenter|data center|hosting|server|colo|colocation|proxy|nordvpn|expressvpn|surfshark|protonvpn|private internet access|pia vpn|windscribe|tunnelbear|cyberghost|hola vpn|hide\.me|purevpn|ipvanish|mullvad)/i;
 
 function readJson(value, fallback = {}) {
   try {
@@ -10,6 +10,13 @@ function readJson(value, fallback = {}) {
   } catch {
     return fallback;
   }
+}
+
+function parseCsv(value) {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function detectBrowser(userAgent = '', clientBrowser = '') {
@@ -28,6 +35,7 @@ function detectBrowser(userAgent = '', clientBrowser = '') {
   if (/QQBrowser/i.test(ua)) return 'QQ Browser';
   if (/YaBrowser/i.test(ua)) return 'Yandex Browser';
   if (/SamsungBrowser/i.test(ua)) return 'Samsung Internet';
+  if (/DuckDuckGo/i.test(ua)) return 'DuckDuckGo';
   if (/OPR\//i.test(ua)) return 'Opera';
   if (/Vivaldi/i.test(ua)) return 'Vivaldi';
   if (/Edg\//i.test(ua)) return 'Edge';
@@ -56,6 +64,32 @@ function getPolicy(provider) {
   };
 }
 
+function getConfiguredVpnAsns(env) {
+  return new Set(parseCsv(env?.FREZEN_BLOCKED_VPN_ASNS).map((value) => value.replace(/^AS/i, '').trim()).filter((value) => /^\d+$/.test(value)));
+}
+
+function matchesBlockedBrowser(browser, blockedBrowsers) {
+  const normalized = String(browser || '').trim().toLowerCase();
+  return blockedBrowsers.some((value) => String(value || '').trim().toLowerCase() === normalized);
+}
+
+function isVerifiedBot(cf) {
+  return cf?.botManagement?.verifiedBot === true;
+}
+
+function detectVpnDatacenter(cf, env) {
+  const org = String(cf?.asOrganization || '').trim();
+  const asn = String(cf?.asn || '').trim();
+  const configuredAsns = getConfiguredVpnAsns(env);
+  return {
+    organization: org,
+    asn,
+    corporateProxy: cf?.botManagement?.corporateProxy === true,
+    configuredAsn: Boolean(asn && configuredAsns.has(asn)),
+    suspiciousOrganization: Boolean(org && DATACENTER_ORG.test(org)),
+  };
+}
+
 async function providerForSlug(env, slug) {
   if (!env?.DB) return null;
   const service = await env.DB.prepare('SELECT id FROM frezen_key_services WHERE slug = ?1 AND active = 1 LIMIT 1').bind(String(slug || '').trim().toLowerCase()).first();
@@ -73,8 +107,8 @@ async function providerForFlow(env, flowId) {
   return null;
 }
 
-function blockedResponse(code, message) {
-  return new Response(JSON.stringify({ error: code, message }), {
+function blockedResponse(code, message, details = {}) {
+  return new Response(JSON.stringify({ error: code, message, details }), {
     status: 403,
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   });
@@ -88,23 +122,30 @@ export async function enforceProviderProtection(request, env, provider) {
   const clientBrowser = request.headers.get('x-frezen-client-browser') || '';
   const browser = detectBrowser(ua, clientBrowser);
   const cf = request.cf || {};
+  const verifiedBot = isVerifiedBot(cf);
 
-  if (policy.visitor) {
+  if (policy.visitor && !verifiedBot) {
     const score = Number(cf?.botManagement?.score);
-    if (!ua.trim() || AUTOMATION_UA.test(ua) || (Number.isFinite(score) && score < 30 && !cf?.botManagement?.verifiedBot)) {
+    const jsDetectionPassed = cf?.botManagement?.jsDetection?.passed;
+    const definitelyAutomated = !ua.trim() || AUTOMATION_UA.test(ua);
+    const lowBotScore = Number.isFinite(score) && score > 0 && score < 30;
+    const failedJsDetection = jsDetectionPassed === false;
+    if (definitelyAutomated || lowBotScore || failedJsDetection) {
       return blockedResponse('VISITOR_PROTECTION_BLOCKED', 'Visitor protection blocked this request.');
     }
   }
 
   if (policy.vpn) {
-    const org = String(cf?.asOrganization || '');
-    if (DATACENTER_ORG.test(org)) return blockedResponse('VPN_DATACENTER_BLOCKED', 'VPN, proxy, or datacenter access is blocked for this provider.');
+    const vpn = detectVpnDatacenter(cf, env);
+    if (vpn.corporateProxy || vpn.configuredAsn || vpn.suspiciousOrganization) {
+      return blockedResponse('VPN_DATACENTER_BLOCKED', 'VPN, proxy, or datacenter access is blocked for this provider.');
+    }
   }
 
   const country = String(cf?.country || '').toUpperCase();
   if (country && policy.blockedCountries.includes(country)) return blockedResponse('COUNTRY_BLOCKED', `Access from ${country} is blocked for this provider.`);
 
-  if (policy.blockedBrowsers.includes(browser)) return blockedResponse('BROWSER_BLOCKED', `${browser} is blocked for this provider.`);
+  if (matchesBlockedBrowser(browser, policy.blockedBrowsers)) return blockedResponse('BROWSER_BLOCKED', `${browser} is blocked for this provider.`);
 
   if (policy.adblock && request.headers.get('x-frezen-adblock') === '1') return blockedResponse('ADBLOCK_BLOCKED', 'Ad blockers must be disabled to continue.');
   if (policy.incognito && request.headers.get('x-frezen-incognito') === '1') return blockedResponse('INCOGNITO_BLOCKED', 'Incognito/private browsing is blocked for this provider.');
@@ -124,4 +165,4 @@ export async function enforceProviderProtectionByFlow(request, env, flowId) {
   return enforceProviderProtection(request, env, provider);
 }
 
-export { detectBrowser, getPolicy, COUNTRY_CODES };
+export { detectBrowser, getPolicy, COUNTRY_CODES, detectVpnDatacenter };
