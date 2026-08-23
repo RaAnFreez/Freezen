@@ -1,7 +1,7 @@
 import protectedEntry from './entry-ui-getkey-protected.js';
 import { obfuscateLuaV11, ADVANCED_V11_PROFILE } from './script-obfuscator-v11.js';
 
-const MAX_LUA_BYTES = 512 * 1024;
+const MAX_LUA_BYTES = 3 * 1024 * 1024;
 const VERSION_UPLOAD_RE = /^\/api\/v1\/scripts\/([^/]+)\/versions$/;
 
 function jsonError(code, message, status = 422, requestId = '') {
@@ -29,7 +29,7 @@ async function obfuscateVersionUpload(request) {
     return { response: jsonError('LUA_FILE_REQUIRED', 'A .lua file is required.', 400, requestId) };
   }
   if (file.size <= 0 || file.size > MAX_LUA_BYTES) {
-    return { response: jsonError('LUA_FILE_TOO_LARGE_OR_EMPTY', 'The Lua source must be between 1 byte and 512 KiB.', 413, requestId) };
+    return { response: jsonError('LUA_FILE_TOO_LARGE_OR_EMPTY', 'The Lua source must be between 1 byte and 3 MiB.', 413, requestId) };
   }
 
   let source;
@@ -42,8 +42,6 @@ async function obfuscateVersionUpload(request) {
   let result;
   try {
     result = obfuscateLuaV11(source);
-    // Minification can turn `a - -b` into `a--b`, which Lua reads as a comment.
-    // Restore an explicit binary/unary-minus separator without touching strings.
     result.code = result.code.replace(/([A-Za-z0-9_)\]])--([A-Za-z_(])/g, '$1- -$2');
     result.outputBytes = new TextEncoder().encode(result.code).byteLength;
   } catch (error) {
@@ -53,16 +51,13 @@ async function obfuscateVersionUpload(request) {
   }
 
   if (result.outputBytes <= 0 || result.outputBytes > MAX_LUA_BYTES) {
-    return { response: jsonError('OBFUSCATED_LUA_TOO_LARGE', 'The obfuscated Lua output exceeds the maximum delivery size.', 413, requestId) };
+    return { response: jsonError('OBFUSCATED_LUA_TOO_LARGE', 'The obfuscated Lua output exceeds the maximum 3 MiB delivery size.', 413, requestId) };
   }
 
   const forwardedForm = new FormData();
   for (const [key, value] of form.entries()) {
-    if (key === 'file') {
-      forwardedForm.append('file', new File([result.code], file.name, { type: 'text/x-lua' }));
-    } else {
-      forwardedForm.append(key, value);
-    }
+    if (key === 'file') forwardedForm.append('file', new File([result.code], file.name, { type: 'text/x-lua' }));
+    else forwardedForm.append(key, value);
   }
   forwardedForm.set('obfuscation_version', ADVANCED_V11_PROFILE.version);
   forwardedForm.set('obfuscation_mode', ADVANCED_V11_PROFILE.mode);
@@ -77,13 +72,7 @@ async function obfuscateVersionUpload(request) {
   headers.set('x-frezen-obfuscation-output-bytes', String(result.outputBytes));
   headers.set('x-frezen-obfuscation-request-id', requestId);
 
-  const forwarded = new Request(request.url, {
-    method: request.method,
-    headers,
-    body: forwardedForm,
-  });
-
-  return { request: forwarded };
+  return { request: new Request(request.url, { method: request.method, headers, body: forwardedForm }) };
 }
 
 export default {

@@ -1,4 +1,4 @@
-const MAX_LUA_BYTES = 512 * 1024;
+const MAX_LUA_BYTES = 3 * 1024 * 1024;
 const VERSION_RE = /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const DEFAULT_LOADER_URL = 'https://api.luarmor.net/files/v4/loaders/bf5d23724071469fc466114d4e10f88b.lua';
 const bad = (json, requestId, error, status = 400, details) => json({ error, ...(details ? { details } : {}), request_id: requestId }, status, requestId);
@@ -198,5 +198,3 @@ export async function getScript(request, env, requestId, json, scriptId) {
     return json({ script, versions: versions.results ?? [], request_id: requestId });
   } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
 }
-
-export { DEFAULT_LOADER_URL };

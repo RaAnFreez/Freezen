@@ -1,0 +1,1 @@
+The Advanced Techniques v1.1 Very High 100% Lua obfuscation path now accepts up to 3 MiB source and 3 MiB obfuscated output for new version uploads.
