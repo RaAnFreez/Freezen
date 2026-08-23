@@ -84,6 +84,73 @@ async function renderSlugPageWithDirectCheckpointRedirect(slug) {
   const script = `<script>
 (() => {
   const flowStorageKey = 'frezen:getkey:flow:' + ${JSON.stringify(String(slug || ''))};
+  const KEY_VALIDITY_MS = 24 * 60 * 60 * 1000;
+  let expiryInterval = null;
+  let expiryLoadedFor = null;
+
+  const formatExpiry = (ms) => {
+    if (!Number.isFinite(ms) || ms <= 0) return 'Expired';
+    const total = Math.floor(ms / 1000);
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
+    if (days > 0) return days + 'd ' + hours + 'h';
+    if (hours > 0) return hours + 'h ' + minutes + 'm';
+    return minutes + 'm ' + String(seconds).padStart(2, '0') + 's';
+  };
+
+  const resetExpiredFlow = () => {
+    localStorage.removeItem(flowStorageKey);
+    const next = new URL(location.href);
+    next.searchParams.delete('flow');
+    next.searchParams.delete('verified');
+    next.searchParams.delete('unlocked');
+    next.searchParams.delete('completed');
+    location.replace(next.toString());
+  };
+
+  const updateExpiryUi = async () => {
+    const flowId = new URL(location.href).searchParams.get('flow') || localStorage.getItem(flowStorageKey);
+    if (!flowId) return;
+    const keyCard = document.getElementById('keyCard');
+    const keyValue = document.getElementById('keyValue');
+    if (!keyCard || !keyValue || !keyValue.textContent.trim()) return;
+
+    const labels = document.querySelectorAll('.info-label');
+    const values = document.querySelectorAll('.info-value');
+    const expiryLabel = labels[0];
+    const expiryValue = values[0];
+    if (!expiryLabel || !expiryValue) return;
+
+    if (expiryLoadedFor !== flowId) {
+      try {
+        const response = await fetch('/api/v1/get-key/key/' + encodeURIComponent(flowId), { cache: 'no-store', credentials: 'same-origin' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.key || !data.generated_at) return;
+        const generatedAt = new Date(data.generated_at).getTime();
+        if (!Number.isFinite(generatedAt)) return;
+        expiryLoadedFor = flowId;
+        expiryLabel.textContent = 'Expired Key';
+        if (expiryInterval) clearInterval(expiryInterval);
+        const tick = () => {
+          const remaining = generatedAt + KEY_VALIDITY_MS - Date.now();
+          expiryValue.textContent = formatExpiry(remaining);
+          if (remaining <= 0) {
+            clearInterval(expiryInterval);
+            expiryInterval = null;
+            expiryValue.textContent = 'Expired';
+            setTimeout(resetExpiredFlow, 400);
+          }
+        };
+        tick();
+        expiryInterval = setInterval(tick, 1000);
+      } catch {}
+      return;
+    }
+
+    expiryLabel.textContent = 'Expired Key';
+  };
 
   const autoStartIfNeeded = () => {
     const button = document.getElementById('primary');
@@ -107,7 +174,11 @@ async function renderSlugPageWithDirectCheckpointRedirect(slug) {
 
   const observe = () => {
     autoStartIfNeeded();
-    const observer = new MutationObserver(autoStartIfNeeded);
+    updateExpiryUi();
+    const observer = new MutationObserver(() => {
+      autoStartIfNeeded();
+      updateExpiryUi();
+    });
     observer.observe(document.body, { subtree: true, childList: true, characterData: true });
     setTimeout(() => observer.disconnect(), 20000);
   };
