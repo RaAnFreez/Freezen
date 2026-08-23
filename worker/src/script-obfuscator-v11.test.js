@@ -39,4 +39,13 @@ describe('Advanced Techniques v1.1 Very High obfuscation', () => {
     expect(result.code).toContain('for');
     expect(result.code).toContain('break');
   });
+
+  it('accepts a source payload larger than the former 512 KiB ceiling', () => {
+    const source = `local s = "x"\n${'--padding\n'.repeat(70_000)}print(s)`;
+    const result = obfuscateLuaV11(source);
+    expect(result.sourceBytes).toBeGreaterThan(512 * 1024);
+    expect(result.sourceBytes).toBeLessThanOrEqual(3 * 1024 * 1024);
+    expect(result.outputBytes).toBeLessThanOrEqual(3 * 1024 * 1024);
+    expect(isAdvancedV11Obfuscated(result.code)).toBe(true);
+  });
 });
