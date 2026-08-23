@@ -1,3 +1,5 @@
+import { persistKeySecret } from './key-secret.js';
+
 const MAX_NAME = 100;
 const MAX_FOLDER = 80;
 const MAX_MINUTES = 3650 * 24 * 60;
@@ -238,6 +240,11 @@ export async function createKey(request, env, requestId, auth) {
         .bind(recordId, auth.user_id, licenseId, provider.id, serviceId, folderId, keyName, premium ? 1 : 0, forever ? 1 : 0).run();
       await env.DB.prepare(`INSERT INTO frezen_key_limits (key_id, max_devices) VALUES (?1, ?2)`)
         .bind(recordId, maxDevices).run();
+
+      const secretResult = await persistKeySecret(env, recordId, licenseKey);
+      if (!secretResult?.stored) {
+        throw new Error(`KEY_SECRET_PERSISTENCE_FAILED:${secretResult?.reason || 'UNKNOWN'}`);
+      }
     } catch (error) {
       await env.DB.prepare('DELETE FROM frezen_key_limits WHERE key_id = ?1').bind(recordId).run().catch(() => {});
       await env.DB.prepare('DELETE FROM frezen_key_records WHERE id = ?1').bind(recordId).run().catch(() => {});
@@ -251,6 +258,8 @@ export async function createKey(request, env, requestId, auth) {
       license_key: licenseKey,
     }, 201, requestId);
   } catch (error) {
-    return jsonResponse({ error: String(error?.message || '').includes('LICENSE_SCHEMA') ? 'LICENSE_SCHEMA_INCOMPATIBLE' : 'DATABASE_ERROR', message: String(error?.message || 'Unable to create key') }, 503, requestId);
+    const message = String(error?.message || 'Unable to create key');
+    const errorCode = message.startsWith('KEY_SECRET_PERSISTENCE_FAILED') ? 'KEY_SECRET_PERSISTENCE_REQUIRED' : message.includes('LICENSE_SCHEMA') ? 'LICENSE_SCHEMA_INCOMPATIBLE' : 'DATABASE_ERROR';
+    return jsonResponse({ error: errorCode, message: errorCode === 'KEY_SECRET_PERSISTENCE_REQUIRED' ? 'Secure key recovery could not be stored. No key was created.' : message }, 503, requestId);
   }
 }
