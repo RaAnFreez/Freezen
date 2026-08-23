@@ -139,6 +139,12 @@ function scan() {
   document.querySelectorAll('.provider-config-modal').forEach(enhanceModal);
 }
 
+function safeScan() {
+  try { scan(); } catch (error) { console.error('[Frezen] provider protection UI enhancer failed', error); }
+}
+
 injectStyles();
-scan();
-new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
+safeScan();
+document.addEventListener('DOMContentLoaded', safeScan, { once: true });
+setTimeout(safeScan, 0);
+new MutationObserver(safeScan).observe(document.body, { childList: true, subtree: true });
