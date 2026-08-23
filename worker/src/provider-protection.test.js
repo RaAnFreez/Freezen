@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { enforceProviderProtection, getPolicy, detectBrowser, COUNTRY_CODES } from './provider-protection.js';
+import { enforceProviderProtection, getPolicy, detectBrowser, detectVpnDatacenter, COUNTRY_CODES } from './provider-protection.js';
 
 describe('provider protection', () => {
   it('normalizes protection settings and validates ISO country codes', () => {
@@ -38,5 +38,46 @@ describe('provider protection', () => {
     const response = await enforceProviderProtection(request, {}, provider);
     expect(response?.status).toBe(403);
     expect(await response.json()).toMatchObject({ error: 'ADBLOCK_BLOCKED' });
+  });
+
+  it('blocks a Cloudflare corporate proxy when VPN protection is enabled', async () => {
+    const provider = { settings_json: JSON.stringify({ protection: { vpn: true } }) };
+    const request = new Request('https://frezen.test/get-key/test', { headers: { 'user-agent': 'Mozilla/5.0 Chrome/120.0.0.0' } });
+    Object.defineProperty(request, 'cf', { value: { botManagement: { corporateProxy: true } } });
+    const response = await enforceProviderProtection(request, {}, provider);
+    expect(response?.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'VPN_DATACENTER_BLOCKED' });
+  });
+
+  it('blocks a configured ASN deny-list entry', async () => {
+    const provider = { settings_json: JSON.stringify({ protection: { vpn: true } }) };
+    const request = new Request('https://frezen.test/get-key/test', { headers: { 'user-agent': 'Mozilla/5.0 Chrome/120.0.0.0' } });
+    Object.defineProperty(request, 'cf', { value: { asn: 64500 } });
+    const response = await enforceProviderProtection(request, { FREZEN_BLOCKED_VPN_ASNS: 'AS64500, 64501' }, provider);
+    expect(response?.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'VPN_DATACENTER_BLOCKED' });
+  });
+
+  it('blocks low bot scores when visitor protection is enabled', async () => {
+    const provider = { settings_json: JSON.stringify({ protection: { visitor: true } }) };
+    const request = new Request('https://frezen.test/get-key/test', { headers: { 'user-agent': 'Mozilla/5.0 Chrome/120.0.0.0' } });
+    Object.defineProperty(request, 'cf', { value: { botManagement: { score: 12, verifiedBot: false } } });
+    const response = await enforceProviderProtection(request, {}, provider);
+    expect(response?.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'VISITOR_PROTECTION_BLOCKED' });
+  });
+
+  it('does not block a verified bot because of the bot score alone', async () => {
+    const provider = { settings_json: JSON.stringify({ protection: { visitor: true } }) };
+    const request = new Request('https://frezen.test/get-key/test', { headers: { 'user-agent': 'Mozilla/5.0 Chrome/120.0.0.0' } });
+    Object.defineProperty(request, 'cf', { value: { botManagement: { score: 5, verifiedBot: true } } });
+    const response = await enforceProviderProtection(request, {}, provider);
+    expect(response).toBeNull();
+  });
+
+  it('detects a configured VPN/datacenter organization', () => {
+    const result = detectVpnDatacenter({ asn: 14061, asOrganization: 'DigitalOcean' }, {});
+    expect(result.suspiciousOrganization).toBe(true);
+    expect(result.asn).toBe('14061');
   });
 });
