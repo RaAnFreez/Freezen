@@ -22,8 +22,8 @@
     style();
     const box = document.createElement('div');
     box.id = ID;
-    box.innerHTML = '<strong>Automatic protection enabled</strong><br>Every new Lua upload and version is transformed server-side before it is stored and delivered by the loader. Source Lua is not used for runtime delivery.' +
-      '<div class="meta"><span class="pill">Advanced Techniques v1.1</span><span class="pill">Very High</span><span class="pill">Protection 100%</span><span class="pill">XOR string encoding</span></div>';
+    box.innerHTML = '<strong>Automatic protection enabled</strong><br>Every new Lua upload and version is transformed server-side before it is stored and delivered by the loader. Source Lua is not used for runtime delivery. Maximum accepted source/output size: 3 MiB.' +
+      '<div class="meta"><span class="pill">Advanced Techniques v1.1</span><span class="pill">Very High</span><span class="pill">Protection 100%</span><span class="pill">XOR string encoding</span><span class="pill">Max 3 MiB</span></div>';
     body.prepend(box);
   }
 
