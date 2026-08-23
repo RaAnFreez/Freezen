@@ -1,0 +1,1 @@
+Get-Key expiry UI regression is covered by worker/src/getkey-ui-expiry.test.js.
