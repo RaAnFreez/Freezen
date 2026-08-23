@@ -49,9 +49,7 @@ function tokenize(source) {
   while (i < source.length) {
     const c = source[i];
     const n = source[i + 1];
-
     if (/\s/.test(c)) { i += 1; continue; }
-
     if (c === '-' && n === '-') {
       const long = readLongBracket(source, i + 2);
       if (long) { i = long.end; continue; }
@@ -59,7 +57,6 @@ function tokenize(source) {
       i = nl < 0 ? source.length : nl + 1;
       continue;
     }
-
     if (c === '"' || c === "'") {
       const quote = c;
       let j = i + 1;
@@ -72,7 +69,6 @@ function tokenize(source) {
       i = j;
       continue;
     }
-
     if (c === '[') {
       const long = readLongBracket(source, i);
       if (long) {
@@ -81,7 +77,6 @@ function tokenize(source) {
         continue;
       }
     }
-
     if (/[A-Za-z_]/.test(c)) {
       let j = i + 1;
       while (j < source.length && /[A-Za-z0-9_]/.test(source[j])) j += 1;
@@ -90,7 +85,6 @@ function tokenize(source) {
       i = j;
       continue;
     }
-
     if (/\d/.test(c) || (c === '.' && /\d/.test(n || ''))) {
       let j = i + 1;
       while (j < source.length && /[A-Za-z0-9_.+-]/.test(source[j])) {
@@ -105,7 +99,6 @@ function tokenize(source) {
       i = j;
       continue;
     }
-
     const three = source.slice(i, i + 3);
     const two = source.slice(i, i + 2);
     if (['...', '<<=', '>>='].includes(three)) {
@@ -126,7 +119,6 @@ function tokenize(source) {
 
 function unescapeLuaString(raw) {
   if (raw.startsWith('[')) return raw.slice(1, -1);
-  const quote = raw[0];
   let body = raw.slice(1, -1);
   body = body.replace(/\\([\\\"'nrtbfv])/g, (_, ch) => ({ '\\': '\\', '"': '"', "'": "'", n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v' }[ch] ?? ch));
   body = body.replace(/\\x([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
