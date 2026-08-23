@@ -1,3 +1,5 @@
+import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from './script-obfuscation-contract.js';
+
 const MAX_LUA_BYTES = 3 * 1024 * 1024;
 const VERSION_RE = /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const DEFAULT_LOADER_URL = 'https://api.luarmor.net/files/v4/loaders/bf5d23724071469fc466114d4e10f88b.lua';
@@ -194,7 +196,53 @@ export async function getScript(request, env, requestId, json, scriptId) {
     await ensureScriptSchema(env);
     const script = await env.DB.prepare(`SELECT s.id,s.service_id,s.name,s.description,s.loader_url,s.status,s.created_at,s.updated_at,sv.name AS service_name,sv.slug AS service_slug FROM scripts s LEFT JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 LIMIT 1`).bind(scriptId).first();
     if (!script) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
-    const versions = await env.DB.prepare('SELECT id,version,file_reference,release_notes,status,created_at FROM script_versions WHERE script_id=?1 ORDER BY created_at DESC').bind(scriptId).all();
-    return json({ script, versions: versions.results ?? [], request_id: requestId });
+
+    const url = new URL(request.url);
+    const view = String(url.searchParams.get('view') ?? '').trim().toLowerCase();
+    const requestedVersionId = String(url.searchParams.get('version_id') ?? '').trim();
+
+    if (view === 'obfuscated') {
+      if (!requestedVersionId || requestedVersionId.length > 128) return bad(json, requestId, 'VERSION_ID_REQUIRED');
+      const row = await env.DB.prepare(`SELECT sv.id,sv.version,sv.status,sv.release_notes,sv.created_at,sf.file_name,sf.content,sf.content_type,sf.size_bytes,sf.sha256
+        FROM script_versions sv JOIN script_files sf ON sf.script_version_id=sv.id
+        WHERE sv.id=?1 AND sv.script_id=?2 LIMIT 1`).bind(requestedVersionId, scriptId).first();
+      if (!row) return bad(json, requestId, 'SCRIPT_VERSION_NOT_FOUND', 404);
+      const verified = isFrezenObfuscated(row.content);
+      return json({
+        view: 'obfuscated',
+        script_id: scriptId,
+        version: { id: row.id, version: row.version, status: row.status, release_notes: row.release_notes, created_at: row.created_at },
+        payload: {
+          file_name: row.file_name,
+          content_type: row.content_type,
+          size_bytes: row.size_bytes,
+          sha256: row.sha256,
+          obfuscation_verified: verified,
+          obfuscation_marker: verified ? OBFUSCATION_MARKER : 'marker-missing',
+          profile: verified ? OBFUSCATION_PROFILE : { version: 'legacy', status: 'unverified' },
+          content: row.content,
+        },
+        request_id: requestId,
+      });
+    }
+
+    const versions = await env.DB.prepare(`SELECT sv.id,sv.version,sv.file_reference,sv.release_notes,sv.status,sv.created_at,sf.file_name,sf.size_bytes,sf.sha256,sf.content_type
+      FROM script_versions sv LEFT JOIN script_files sf ON sf.script_version_id=sv.id
+      WHERE sv.script_id=?1 ORDER BY sv.created_at DESC`).bind(scriptId).all();
+    const mappedVersions = (versions.results ?? []).map((row) => ({
+      id: row.id,
+      version: row.version,
+      file_reference: row.file_reference,
+      file_name: row.file_name,
+      release_notes: row.release_notes,
+      status: row.status,
+      created_at: row.created_at,
+      size_bytes: row.size_bytes,
+      sha256: row.sha256,
+      content_type: row.content_type,
+      obfuscation_verified: false,
+      obfuscated_view_url: `/api/v1/scripts/${encodeURIComponent(scriptId)}?view=obfuscated&version_id=${encodeURIComponent(row.id)}`,
+    }));
+    return json({ script, versions: mappedVersions, request_id: requestId });
   } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
 }
