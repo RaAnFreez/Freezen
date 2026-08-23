@@ -66,7 +66,7 @@ function makeProductionDb() {
 describe('Key Control production D1 compatibility', () => {
   it('creates a key without relying on licenses.max_devices or status=unused', async () => {
     const db = makeProductionDb();
-    const response = await createKey(request({ provider_id: 'p1', service_id: 's1', hours: 1, max_devices: 2 }), { DB: db }, 'req-create-production', { user_id: 'owner-1' });
+    const response = await createKey(request({ provider_id: 'p1', service_id: 's1', hours: 1, max_devices: 2 }), { DB: db, FREZEN_MASTER_SECRET: 'ci-test-master-secret' }, 'req-create-production', { user_id: 'owner-1' });
     expect(response.status).toBe(201);
     const body = await response.json();
     expect(body.created).toBe(true);
