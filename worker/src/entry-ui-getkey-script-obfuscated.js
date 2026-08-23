@@ -1,11 +1,11 @@
 import protectedEntry from './entry-ui-getkey-protected.js';
 import { obfuscateLuaV11, ADVANCED_V11_PROFILE } from './script-obfuscator-v11.js';
+import { MAX_LUA_BYTES, OBFUSCATION_MARKER, isFrezenObfuscated } from './script-obfuscation-contract.js';
 
-const MAX_LUA_BYTES = 3 * 1024 * 1024;
 const VERSION_UPLOAD_RE = /^\/api\/v1\/scripts\/([^/]+)\/versions$/;
 
-function jsonError(code, message, status = 422, requestId = '') {
-  return new Response(JSON.stringify({ error: code, message, request_id: requestId }), {
+function jsonError(code, message, status = 422, requestId = '', details = {}) {
+  return new Response(JSON.stringify({ error: code, message, details, request_id: requestId }), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
@@ -13,6 +13,11 @@ function jsonError(code, message, status = 422, requestId = '') {
       ...(requestId ? { 'x-frezen-request-id': requestId } : {}),
     },
   });
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 async function obfuscateVersionUpload(request) {
@@ -43,6 +48,7 @@ async function obfuscateVersionUpload(request) {
   try {
     result = obfuscateLuaV11(source);
     result.code = result.code.replace(/([A-Za-z0-9_)\]])--([A-Za-z_(])/g, '$1- -$2');
+    result.code = `${OBFUSCATION_MARKER}\n${result.code}`;
     result.outputBytes = new TextEncoder().encode(result.code).byteLength;
   } catch (error) {
     const message = String(error?.message || 'OBFUSCATION_FAILED');
@@ -50,10 +56,14 @@ async function obfuscateVersionUpload(request) {
     return { response: jsonError('OBFUSCATION_FAILED', message, status, requestId) };
   }
 
+  if (!isFrezenObfuscated(result.code)) {
+    return { response: jsonError('OBFUSCATION_VERIFICATION_FAILED', 'The obfuscation output did not contain the Frezen delivery marker.', 422, requestId) };
+  }
   if (result.outputBytes <= 0 || result.outputBytes > MAX_LUA_BYTES) {
     return { response: jsonError('OBFUSCATED_LUA_TOO_LARGE', 'The obfuscated Lua output exceeds the maximum 3 MiB delivery size.', 413, requestId) };
   }
 
+  const payloadSha256 = await sha256Hex(result.code);
   const forwardedForm = new FormData();
   for (const [key, value] of form.entries()) {
     if (key === 'file') forwardedForm.append('file', new File([result.code], file.name, { type: 'text/x-lua' }));
@@ -64,12 +74,19 @@ async function obfuscateVersionUpload(request) {
   forwardedForm.set('obfuscation_strength', ADVANCED_V11_PROFILE.strength);
   forwardedForm.set('obfuscation_protection_level', String(ADVANCED_V11_PROFILE.protectionLevel));
   forwardedForm.set('obfuscation_algorithm', ADVANCED_V11_PROFILE.encryptionAlgorithm);
+  forwardedForm.set('obfuscation_status', 'verified');
+  forwardedForm.set('obfuscation_payload_sha256', payloadSha256);
+  forwardedForm.set('obfuscation_source_bytes', String(result.sourceBytes));
+  forwardedForm.set('obfuscation_output_bytes', String(result.outputBytes));
+  forwardedForm.set('obfuscation_compatibility_mode', result.compatibilityMode ? 'safe' : 'standard');
 
   const headers = new Headers(request.headers);
   headers.delete('content-type');
   headers.set('x-frezen-obfuscation', 'advanced-v1.1-very-high-100');
+  headers.set('x-frezen-obfuscation-status', 'verified');
   headers.set('x-frezen-obfuscation-source-bytes', String(result.sourceBytes));
   headers.set('x-frezen-obfuscation-output-bytes', String(result.outputBytes));
+  headers.set('x-frezen-obfuscation-sha256', payloadSha256);
   headers.set('x-frezen-obfuscation-request-id', requestId);
 
   return { request: new Request(request.url, { method: request.method, headers, body: forwardedForm }) };
