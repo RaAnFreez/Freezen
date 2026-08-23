@@ -22,7 +22,7 @@ export const ADVANCED_V11_PROFILE = Object.freeze({
   encryptionAlgorithm: 'xor',
 });
 
-const MAX_SOURCE_BYTES = 512 * 1024;
+const MAX_SOURCE_BYTES = 3 * 1024 * 1024;
 
 function randomInt(min = 1000, max = 9999999) {
   return Math.floor(min + Math.random() * (max - min + 1));
