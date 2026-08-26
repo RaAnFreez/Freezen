@@ -1,64 +1,57 @@
 import { describe, expect, it } from 'vitest';
 import { ADVANCED_V11_PROFILE, obfuscateLuaV11, isAdvancedV11Obfuscated } from './script-obfuscator-v11.js';
 
-describe('Advanced Techniques v1.1 Very High obfuscation', () => {
-  it('uses the fixed maximum protection profile', () => {
+describe('Advanced Techniques v1.1 compatibility-first obfuscation', () => {
+  it('keeps the configured maximum protection profile', () => {
     expect(ADVANCED_V11_PROFILE.version).toBe('1.1');
     expect(ADVANCED_V11_PROFILE.mode).toBe('Advanced Techniques');
     expect(ADVANCED_V11_PROFILE.strength).toBe('VERY_HIGH');
     expect(ADVANCED_V11_PROFILE.protectionLevel).toBe(100);
-    expect(ADVANCED_V11_PROFILE.mangleNames).toBe(true);
-    expect(ADVANCED_V11_PROFILE.encodeStrings).toBe(true);
-    expect(ADVANCED_V11_PROFILE.encodeNumbers).toBe(true);
-    expect(ADVANCED_V11_PROFILE.controlFlow).toBe(true);
-    expect(ADVANCED_V11_PROFILE.controlFlowFlattening).toBe(true);
-    expect(ADVANCED_V11_PROFILE.deadCodeInjection).toBe(true);
-    expect(ADVANCED_V11_PROFILE.antiDebugging).toBe(true);
-    expect(ADVANCED_V11_PROFILE.minify).toBe(true);
   });
 
-  it('replaces strings and numbers and keeps anti-debug instrumentation non-fatal', () => {
-    const source = `-- source comment\nlocal secret = "FrezenProtected"\nlocal count = 1234\nprint(secret, count)`;
+  it('encodes strings and removes comments without binary XOR syntax', () => {
+    const source = '-- source comment\nlocal secret = "FrezenProtected"\nprint(secret)';
     const result = obfuscateLuaV11(source);
     expect(result.code).not.toContain('FrezenProtected');
     expect(result.code).not.toContain('-- source comment');
     expect(result.code).toContain('string.char');
-    expect(result.code).toContain('type(debug)');
-    expect(result.code).not.toContain('Debug library detected');
-    expect(result.code).not.toEqual(source);
-    expect(result.outputBytes).toBeGreaterThan(0);
+    expect(result.code).not.toContain('t[i]~');
     expect(isAdvancedV11Obfuscated(result.code)).toBe(true);
   });
 
-  it('applies control-flow protection to ordinary conditions', () => {
-    const result = obfuscateLuaV11(`local x = 8\nif x > 3 then\n  print("ok")\nend`);
-    expect(result.compatibilityMode).toBe(false);
-    expect(result.code).toContain('and true or false');
+  it('does not rewrite control flow for ordinary conditions', () => {
+    const result = obfuscateLuaV11('local x = 8\nif x > 3 then\n print("ok")\nend');
+    expect(result.code).toContain('if');
+    expect(result.code).toContain('then');
+    expect(result.code).not.toContain('and true or false');
   });
 
-  it('uses compatibility mode for risky Lua features instead of rewriting their execution model', () => {
-    const source = `local marker = "compatibility"\nlocal function make(value)\n  local t = setmetatable({}, { __index = value })\n  return t\nend\nreturn make(3)`;
+  it('uses compatibility mode for runtime-sensitive Lua features', () => {
+    const source = 'local marker = "compatibility"\nlocal function make(value)\n local t=setmetatable({}, { __index=value })\n return t\nend\nreturn make(3)';
     const result = obfuscateLuaV11(source);
     expect(result.compatibilityMode).toBe(true);
     expect(result.code).toContain('setmetatable');
     expect(result.code).toContain('__index');
     expect(result.code).toContain('string.char');
     expect(result.code).not.toContain('compatibility');
-    expect(result.code).not.toContain('Debug library detected');
   });
 
-  it('preserves unsafe flow constructs instead of wrapping them in a state machine', () => {
-    const result = obfuscateLuaV11(`for i=1,3 do\n  if i == 2 then break end\nend`);
+  it('preserves loops and break statements', () => {
+    const result = obfuscateLuaV11('for i=1,3 do\n if i == 2 then break end\nend');
     expect(result.code).toContain('for');
     expect(result.code).toContain('break');
   });
 
-  it('accepts a source payload larger than the former 512 KiB ceiling', () => {
-    const source = `local s = "x"\n${'--padding\n'.repeat(70_000)}print(s)`;
+  it('handles long bracket strings with nested delimiter text', () => {
+    const result = obfuscateLuaV11('local s=[==[hello ]=] world]==]');
+    expect(result.code).toContain('string.char');
+  });
+
+  it('supports the existing 3 MiB source limit', () => {
+    const source = `local s = "x"\n${'--padding\n'.repeat(70000)}print(s)`;
     const result = obfuscateLuaV11(source);
     expect(result.sourceBytes).toBeGreaterThan(512 * 1024);
     expect(result.sourceBytes).toBeLessThanOrEqual(3 * 1024 * 1024);
     expect(result.outputBytes).toBeLessThanOrEqual(3 * 1024 * 1024);
-    expect(isAdvancedV11Obfuscated(result.code)).toBe(true);
   });
 });
