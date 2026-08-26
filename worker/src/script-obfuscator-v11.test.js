@@ -42,8 +42,8 @@ describe('Advanced Techniques v1.1 compatibility-first obfuscation', () => {
     expect(result.code).toContain('break');
   });
 
-  it('handles long bracket strings', () => {
-    const result = obfuscateLuaV11('local s=[=[hello ]=] world]=]');
+  it('handles long bracket strings with nested delimiter text', () => {
+    const result = obfuscateLuaV11('local s=[==[hello ]=] world]==]');
     expect(result.code).toContain('string.char');
   });
 
