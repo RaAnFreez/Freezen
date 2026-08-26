@@ -7,7 +7,7 @@ import { renderScripts } from "./scripts.js";
 import { renderKeys } from "./keys.js";
 
 const items = [
-  ["overview", "Overview"], ["licenses", "Licenses"], ["keys", "Keys"], ["products", "Products"], ["scripts", "Scripts"], ["users", "Users"], ["hwid", "HWID"], ["safelinku", "SafeLinkU"], ["discord", "Discord"], ["analytics", "Analytics"], ["audit", "Audit Logs"], ["invites", "Invites"], ["security", "Security"], ["settings", "Settings"],
+  ["overview", "Overview"], ["licenses", "Licenses"], ["keys", "Keys"], ["products", "Products"], ["scripts", "Scripts"], ["script-delivery", "Script Delivery"], ["users", "Users"], ["hwid", "HWID"], ["safelinku", "SafeLinkU"], ["discord", "Discord"], ["analytics", "Analytics"], ["audit", "Audit Logs"], ["invites", "Invites"], ["security", "Security"], ["settings", "Settings"],
 ];
 
 const app = document.querySelector("#app");
@@ -38,7 +38,7 @@ function renderSection(section) {
   if (section === "licenses") return renderLicenses(content);
   if (section === "keys") return renderKeys(content);
   if (section === "hwid") return renderHwid(content);
-  if (section === "scripts") return renderScripts(content);
+  if (section === "scripts" || section === "script-delivery") return renderScripts(content);
   const isOverview = section === "overview";
   content.innerHTML = isOverview ? `
     <div class="welcome"><div><p class="eyebrow">PRIVATE ADMIN AREA</p><h2>Welcome back, Owner</h2><p>Manage Frezen services from one secure control center.</p></div><span class="protected-badge"><i></i> Protected</span></div>
@@ -46,5 +46,5 @@ function renderSection(section) {
     <div class="panel-grid"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">ACTIVITY</p><h3>Recent activity</h3></div><button class="ghost-button">View logs</button></div><div class="empty"><span>--</span><strong>No activity loaded</strong><p>Connect the dashboard to the authenticated Frezen API to display live activity.</p></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">SYSTEM</p><h3>Service status</h3></div></div><div class="service"><span><i></i> Authentication</span><b>Protected</b></div><div class="service"><span><i></i> Authorization</span><b>Protected</b></div><div class="service"><span><i></i> Database</span><b>Protected</b></div></section></div>` : `<section class="panel section-placeholder"><p class="eyebrow">${section.toUpperCase()}</p><h2>${items.find(([id]) => id === section)?.[1] ?? section}</h2><p>This navigation surface is ready. Feature-specific data and actions will be implemented only in their corresponding roadmap phases.</p></section>`;
 }
 function stat(label, value, note, type) { return `<article class="stat-card"><div class="stat-icon">${icon(type)}</div><p>${label}</p><strong>${value}</strong><small>${note}</small></article>`; }
-function icon(id) { const map = { overview: "OV", licenses: "LC", keys: "KY", products: "PR", scripts: "SC", users: "US", hwid: "HW", safelinku: "SL", discord: "DS", analytics: "AN", audit: "AL", invites: "IN", security: "SE", settings: "ST", key: "KY", check: "OK", expired: "EX", revoked: "RV", script: "SC" }; return map[id] ?? "--"; }
+function icon(id) { const map = { overview: "OV", licenses: "LC", keys: "KY", products: "PR", scripts: "SC", "script-delivery": "LD", users: "US", hwid: "HW", safelinku: "SL", discord: "DS", analytics: "AN", audit: "AL", invites: "IN", security: "SE", settings: "ST", key: "KY", check: "OK", expired: "EX", revoked: "RV", script: "SC" }; return map[id] ?? "--"; }
 renderSection("overview");
