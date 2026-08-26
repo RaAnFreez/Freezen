@@ -12,7 +12,7 @@ const navGroups = [
     label: 'SCRIPTS',
     items: [
       ['scripts','Lua Scripts','{}','Script delivery and authorization'],
-      ['script-delivery','Script Delivery','↗','Key and embedded loader delivery'],
+      ['script-delivery','Script Delivery','↗','Independent free/keyless script delivery'],
     ],
   },
   {
@@ -24,7 +24,6 @@ const navGroups = [
 ];
 
 const sections = navGroups.flatMap((group) => group.items);
-
 const app = document.querySelector('#app');
 const esc = (v) => String(v ?? '—').replace(/[&<>\"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;' }[c]));
 
@@ -35,13 +34,12 @@ const content = document.querySelector('#content');
 const title = document.querySelector('#title');
 const sidebar = document.querySelector('#sidebar');
 const overlay = document.querySelector('#overlay');
-
 nav.innerHTML = navGroups.map((group) => `<section class="nav-group" aria-label="${esc(group.label)}"><div class="nav-group-label">${esc(group.label)}</div>${group.items.map(([id, label, glyph]) => `<button class="nav-item ${id === 'licenses' ? 'active' : ''}" data-section="${id}" title="${esc(label)}"><i>${glyph}</i><span>${esc(label)}</span></button>`).join('')}</section>`).join('');
 
 function loading(message = 'Loading…') { content.innerHTML = `<section class="panel loading"><div class="spinner"></div><b>${esc(message)}</b><span>Reading authenticated production data.</span></section>`; }
 
 function renderSection(id) {
-  const panelName = { licenses: 'licenses', hwid: 'hwid', scripts: 'scripts', 'script-delivery': 'scripts', safelinku: 'safelinku', services: 'services', provider: 'provider' }[id];
+  const panelName = { licenses: 'licenses', hwid: 'hwid', scripts: 'scripts', 'script-delivery': 'script-delivery', safelinku: 'safelinku', services: 'services', provider: 'provider' }[id];
   if (panelName && window.FrezenDashboardPanels?.[panelName]) return window.FrezenDashboardPanels[panelName]();
   loading(`${sections.find((s) => s[0] === id)?.[1] || 'Panel'} is still loading…`);
 }
@@ -76,6 +74,5 @@ function select(id) {
 document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => select(button.dataset.section)));
 document.querySelector('#menu').onclick = () => { sidebar.classList.add('open'); overlay.classList.add('show'); };
 overlay.onclick = () => { sidebar.classList.remove('open'); overlay.classList.remove('show'); };
-
 loadCurrentUser();
 setTimeout(() => select('licenses'), 0);
