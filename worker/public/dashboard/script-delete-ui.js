@@ -1,5 +1,6 @@
 (() => {
   const getRoot = () => document.querySelector('#lua-grid');
+  const isSourceManagerView = () => document.querySelector('#title')?.textContent?.trim() === 'Lua Scripts';
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
   async function deleteScript(id, name) {
@@ -25,9 +26,21 @@
     }
   }
 
+  function removeDeliveryDeleteButtons(root) {
+    root.querySelectorAll('[data-act="delete-script"]').forEach((button) => button.remove());
+  }
+
   function mountDeleteButtons() {
     const root = getRoot();
     if (!root) return;
+
+    // Script Delivery is intentionally a non-destructive delivery view.
+    // Only the Lua Scripts source-management tab may expose Delete.
+    if (!isSourceManagerView()) {
+      removeDeliveryDeleteButtons(root);
+      return;
+    }
+
     root.querySelectorAll('.lua-card').forEach((card) => {
       if (card.querySelector('[data-act="delete-script"]')) return;
       const source = card.querySelector('[data-act="details"]');
@@ -43,6 +56,7 @@
       button.dataset.id = id || '';
       button.textContent = 'Delete';
       button.style.color = '#ff8b9e';
+      button.title = 'Delete the source script and its stored versions';
       button.onclick = () => deleteScript(id, title);
       actions.appendChild(button);
     });
@@ -51,5 +65,6 @@
   const observer = new MutationObserver(mountDeleteButtons);
   observer.observe(document.body, { childList: true, subtree: true });
   window.addEventListener('frezen:scripts-changed', mountDeleteButtons);
+  window.addEventListener('popstate', mountDeleteButtons);
   mountDeleteButtons();
 })();
