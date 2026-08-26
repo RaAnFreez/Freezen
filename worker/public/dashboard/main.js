@@ -12,6 +12,7 @@ const navGroups = [
     label: 'SCRIPTS',
     items: [
       ['scripts','Lua Scripts','{}','Script delivery and authorization'],
+      ['script-delivery','Script Delivery','↗','Key and embedded loader delivery'],
     ],
   },
   {
@@ -35,12 +36,12 @@ const title = document.querySelector('#title');
 const sidebar = document.querySelector('#sidebar');
 const overlay = document.querySelector('#overlay');
 
-nav.innerHTML = navGroups.map((group, groupIndex) => `<section class="nav-group" aria-label="${esc(group.label)}"><div class="nav-group-label">${esc(group.label)}</div>${group.items.map(([id, label, glyph]) => `<button class="nav-item ${id === 'licenses' ? 'active' : ''}" data-section="${id}" title="${esc(label)}"><i>${glyph}</i><span>${esc(label)}</span></button>`).join('')}</section>`).join('');
+nav.innerHTML = navGroups.map((group) => `<section class="nav-group" aria-label="${esc(group.label)}"><div class="nav-group-label">${esc(group.label)}</div>${group.items.map(([id, label, glyph]) => `<button class="nav-item ${id === 'licenses' ? 'active' : ''}" data-section="${id}" title="${esc(label)}"><i>${glyph}</i><span>${esc(label)}</span></button>`).join('')}</section>`).join('');
 
 function loading(message = 'Loading…') { content.innerHTML = `<section class="panel loading"><div class="spinner"></div><b>${esc(message)}</b><span>Reading authenticated production data.</span></section>`; }
 
 function renderSection(id) {
-  const panelName = { licenses: 'licenses', hwid: 'hwid', scripts: 'scripts', safelinku: 'safelinku', services: 'services', provider: 'provider' }[id];
+  const panelName = { licenses: 'licenses', hwid: 'hwid', scripts: 'scripts', 'script-delivery': 'scripts', safelinku: 'safelinku', services: 'services', provider: 'provider' }[id];
   if (panelName && window.FrezenDashboardPanels?.[panelName]) return window.FrezenDashboardPanels[panelName]();
   loading(`${sections.find((s) => s[0] === id)?.[1] || 'Panel'} is still loading…`);
 }
