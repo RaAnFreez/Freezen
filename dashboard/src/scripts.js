@@ -1,4 +1,5 @@
 import "./scripts.css";
+import { installLoaderControls, injectLoaderButtons } from "./script-loaders.js";
 
 const API = "/api/v1";
 
@@ -17,6 +18,10 @@ export function renderScripts(root) {
   root.innerHTML = `
     <section class="panel scripts-page">
       <div class="panel-heading"><div><p class="eyebrow">LUA SCRIPT MANAGER</p><h2>Scripts</h2></div><button class="primary-button" id="script-refresh">Refresh</button></div>
+      <div class="loader-mode-banner">
+        <div><strong>Script Delivery</strong><span>Two loader modes are available independently.</span></div>
+        <div class="loader-mode-chips"><span class="loader-mode-chip"><i></i> Key Loader</span><span class="loader-mode-chip embedded"><i></i> Embedded Loader</span></div>
+      </div>
       <p class="muted">Upload Lua files as data only. Frezen never executes uploaded Lua on the server.</p>
       <div class="script-form">
         <label>Service<select id="script-service"><option value="">Loading services…</option></select></label>
@@ -28,6 +33,8 @@ export function renderScripts(root) {
       <div id="script-message" class="inline-message" hidden></div>
       <div id="script-list" class="script-list"><div class="empty"><span>◌</span><strong>Loading scripts…</strong></div></div>
     </section>`;
+
+  installLoaderControls(root, api);
 
   const list = root.querySelector("#script-list");
   const message = root.querySelector("#script-message");
@@ -71,13 +78,15 @@ export function renderScripts(root) {
       const data = await api(`/scripts?${params}`);
       if (!data.scripts?.length) { list.innerHTML = `<div class="empty"><span>◌</span><strong>No scripts found</strong><p>Create a script record before uploading a Lua version.</p></div>`; return; }
       list.innerHTML = data.scripts.map((script) => `
-        <article class="script-row">
+        <article class="script-row" data-service-id="${esc(script.service_id)}">
           <div><strong>${esc(script.name)}</strong><small>${esc(script.service_name || script.service_id)} · ${script.version_count} version(s)</small></div>
           <span class="product-status">${esc(script.status)}</span>
           <span class="product-version">${esc(script.active_version || "No active version")}</span>
           <div class="script-actions"><button class="ghost-button small" data-key="${esc(script.id)}">Generate Key</button><button class="ghost-button small" data-upload="${esc(script.id)}">Upload Lua</button><button class="ghost-button small" data-disable="${esc(script.id)}">${script.status === "ACTIVE" ? "Disable" : "Enable"}</button><button class="danger-button small" data-delete="${esc(script.id)}">Delete</button></div>
           <div class="script-upload" data-panel="${esc(script.id)}" hidden><input type="file" accept=".lua,text/x-lua" data-file="${esc(script.id)}" /><input placeholder="Version e.g. 1.0.0" data-version="${esc(script.id)}" maxlength="80" /><input placeholder="Release notes (optional)" data-notes="${esc(script.id)}" maxlength="2000" /><button class="primary-button small" data-submit-upload="${esc(script.id)}">Upload</button></div>
         </article>`).join("");
+
+      injectLoaderButtons(root);
 
       const detailById = new Map(data.scripts.map((script) => [String(script.id), script]));
       list.querySelectorAll("[data-key]").forEach((button) => button.addEventListener("click", async () => {
@@ -113,7 +122,7 @@ export function renderScripts(root) {
 
   root.addEventListener("click", async (event) => {
     const button = event.target.closest("button");
-    if (!button || button.dataset.key) return;
+    if (!button || button.dataset.key || button.dataset.embeddedLoader || button.dataset.keyLoader) return;
     try {
       if (button.dataset.upload) { const panel = root.querySelector(`[data-panel="${CSS.escape(button.dataset.upload)}"]`); panel.hidden = !panel.hidden; return; }
       if (button.dataset.disable) {
