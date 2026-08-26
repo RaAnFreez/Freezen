@@ -13,6 +13,60 @@ function esc(value) {
   return String(value ?? "").replace(/[&<>\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[char]));
 }
 
+async function fetchLoaderText(scriptId, key) {
+  const url = `/loader/${encodeURIComponent(scriptId)}?bootstrap=1&key=${encodeURIComponent(key)}`;
+  const response = await fetch(url, { credentials: "include", cache: "no-store" });
+  const text = await response.text();
+  if (!response.ok) throw new Error(text || `Loader request failed (${response.status})`);
+  return text;
+}
+
+function downloadLua(filename, source) {
+  const blob = new Blob([source], { type: "text/x-lua;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function showLoaderModal(root, { title, type, source, note }) {
+  let modal = root.querySelector("#loader-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "loader-modal";
+    modal.className = "loader-modal";
+    root.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div class="loader-modal-backdrop" data-close-loader></div>
+    <section class="loader-modal-card" role="dialog" aria-modal="true" aria-labelledby="loader-modal-title">
+      <div class="loader-modal-head">
+        <div><p class="eyebrow">SCRIPT DELIVERY</p><h3 id="loader-modal-title">${esc(title)}</h3></div>
+        <button class="ghost-button small" type="button" data-close-loader>Close</button>
+      </div>
+      <div class="loader-modal-meta"><span class="loader-mode-pill">${esc(type)}</span><span class="muted">Ready to copy into your Lua/Luau script</span></div>
+      <textarea class="loader-modal-source" readonly spellcheck="false">${source}</textarea>
+      <p class="loader-modal-note">${esc(note || "The generated loader keeps server-side authorization active.")}</p>
+      <div class="loader-modal-actions">
+        <button class="primary-button" type="button" data-copy-loader>Copy Loader</button>
+        <button class="ghost-button" type="button" data-download-loader>Download .lua</button>
+      </div>
+    </section>`;
+  modal.hidden = false;
+  const close = () => { modal.hidden = true; };
+  modal.querySelectorAll("[data-close-loader]").forEach((el) => el.addEventListener("click", close));
+  modal.querySelector("[data-copy-loader]").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    try { await navigator.clipboard.writeText(source); button.textContent = "Copied"; setTimeout(() => { button.textContent = "Copy Loader"; }, 1200); }
+    catch { button.textContent = "Copy failed"; setTimeout(() => { button.textContent = "Copy Loader"; }, 1200); }
+  });
+  modal.querySelector("[data-download-loader]").addEventListener("click", () => downloadLua(`${type.toLowerCase().replace(/\s+/g, "-")}-loader.lua`, source));
+}
+
 export function renderScripts(root) {
   root.innerHTML = `
     <section class="panel scripts-page">
@@ -47,18 +101,20 @@ export function renderScripts(root) {
     const data = await api("/key-control/keys", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        provider_id: provider.id,
-        service_id: script.service_id,
-        key_name: `${script.name} key`,
-        days: 30,
-        hours: 0,
-        minutes: 0,
-        max_devices: 1,
-        forever: false,
-      }),
+      body: JSON.stringify({ provider_id: provider.id, service_id: script.service_id, key_name: `${script.name} key`, days: 30, hours: 0, minutes: 0, max_devices: 1, forever: false }),
     });
     return { key: data.license_key, provider };
+  };
+
+  const openKeyLoader = async (script) => {
+    const result = await generateKeyForScript(script);
+    const source = await fetchLoaderText(script.id, result.key);
+    showLoaderModal(root, { title: `${script.name} — Key Loader`, type: "Key Loader", source, note: "This mode uses the normal Frezen license-key delivery flow." });
+  };
+
+  const openEmbeddedLoader = async (script) => {
+    const data = await api(`/scripts/${encodeURIComponent(script.id)}/embedded-loader`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+    showLoaderModal(root, { title: `${script.name} — Embedded Loader`, type: "Embedded Loader", source: data.source || "", note: data.note || "This mode embeds a signed delivery credential instead of a plaintext license key. Server-side authorization remains enabled." });
   };
 
   const load = async () => {
@@ -75,23 +131,28 @@ export function renderScripts(root) {
           <div><strong>${esc(script.name)}</strong><small>${esc(script.service_name || script.service_id)} · ${script.version_count} version(s)</small></div>
           <span class="product-status">${esc(script.status)}</span>
           <span class="product-version">${esc(script.active_version || "No active version")}</span>
-          <div class="script-actions"><button class="ghost-button small" data-key="${esc(script.id)}">Generate Key</button><button class="ghost-button small" data-upload="${esc(script.id)}">Upload Lua</button><button class="ghost-button small" data-disable="${esc(script.id)}">${script.status === "ACTIVE" ? "Disable" : "Enable"}</button><button class="danger-button small" data-delete="${esc(script.id)}">Delete</button></div>
+          <div class="script-actions">
+            <button class="ghost-button small" data-key-loader="${esc(script.id)}">Key Loader</button>
+            <button class="ghost-button small" data-embedded-loader="${esc(script.id)}">Embedded Loader</button>
+            <button class="ghost-button small" data-upload="${esc(script.id)}">Upload Lua</button>
+            <button class="ghost-button small" data-disable="${esc(script.id)}">${script.status === "ACTIVE" ? "Disable" : "Enable"}</button>
+            <button class="danger-button small" data-delete="${esc(script.id)}">Delete</button>
+          </div>
           <div class="script-upload" data-panel="${esc(script.id)}" hidden><input type="file" accept=".lua,text/x-lua" data-file="${esc(script.id)}" /><input placeholder="Version e.g. 1.0.0" data-version="${esc(script.id)}" maxlength="80" /><input placeholder="Release notes (optional)" data-notes="${esc(script.id)}" maxlength="2000" /><button class="primary-button small" data-submit-upload="${esc(script.id)}">Upload</button></div>
         </article>`).join("");
 
       const detailById = new Map(data.scripts.map((script) => [String(script.id), script]));
-      list.querySelectorAll("[data-key]").forEach((button) => button.addEventListener("click", async () => {
+      list.querySelectorAll("[data-key-loader]").forEach((button) => button.addEventListener("click", async () => {
         button.disabled = true;
-        try {
-          const script = detailById.get(String(button.dataset.key));
-          if (!script) throw new Error("Script not found in current list.");
-          const result = await generateKeyForScript(script);
-          showMessage(`Key created for ${script.name}: ${result.key}`);
-        } catch (error) {
-          showMessage(error.message, true);
-        } finally {
-          button.disabled = false;
-        }
+        try { const script = detailById.get(String(button.dataset.keyLoader)); if (!script) throw new Error("Script not found in current list."); await openKeyLoader(script); }
+        catch (error) { showMessage(error.message, true); }
+        finally { button.disabled = false; }
+      }));
+      list.querySelectorAll("[data-embedded-loader]").forEach((button) => button.addEventListener("click", async () => {
+        button.disabled = true;
+        try { const script = detailById.get(String(button.dataset.embeddedLoader)); if (!script) throw new Error("Script not found in current list."); await openEmbeddedLoader(script); }
+        catch (error) { showMessage(error.message, true); }
+        finally { button.disabled = false; }
       }));
     } catch (error) { list.innerHTML = `<div class="empty"><strong>Unable to load scripts</strong><p>${esc(error.message)}</p></div>`; }
   };
@@ -113,7 +174,7 @@ export function renderScripts(root) {
 
   root.addEventListener("click", async (event) => {
     const button = event.target.closest("button");
-    if (!button || button.dataset.key) return;
+    if (!button || button.dataset.keyLoader || button.dataset.embeddedLoader) return;
     try {
       if (button.dataset.upload) { const panel = root.querySelector(`[data-panel="${CSS.escape(button.dataset.upload)}"]`); panel.hidden = !panel.hidden; return; }
       if (button.dataset.disable) {
