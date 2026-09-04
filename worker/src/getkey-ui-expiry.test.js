@@ -7,7 +7,8 @@ const read = (file) => fs.readFileSync(path.resolve(process.cwd(), file), 'utf8'
 describe('Get-Key custom slug expiry UI', () => {
   it('does not start a countdown while checkpoints are pending', () => {
     const source = read('src/getkey-slug-ui.js');
-    expect(source).toContain("renderCheckpointTimer(s.expires_at)");
+    expect(source).toContain('function renderCheckpointTimer()');
+    expect(source).toContain("renderCheckpointTimer()")
     expect(source).toContain("$('timeLeft').textContent='—'");
     expect(source).toContain("function startExpiryTimer(generatedAt)");
     expect(source).toContain("startExpiryTimer(d.generated_at)");
@@ -16,7 +17,7 @@ describe('Get-Key custom slug expiry UI', () => {
   it('uses a 24-hour window beginning at key generation and resets after expiry', () => {
     const source = read('src/getkey-slug-ui.js');
     expect(source).toContain("start+86400000-Date.now()");
-    expect(source).toContain("$('timeLeft').textContent='Expired'");
+    expect(source).toContain("return'Expired'");
     expect(source).toContain("localStorage.removeItem(storageKey)");
     expect(source).toContain("u.searchParams.delete('flow')");
   });
