@@ -1,0 +1,1 @@
+Temporary note for clipboard regression coverage.
