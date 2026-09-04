@@ -1,1 +1,0 @@
-Temporary implementation note; remove after review.
