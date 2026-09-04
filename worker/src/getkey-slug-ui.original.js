@@ -1,0 +1,1 @@
+// Source-preserving snapshot of getkey-slug-ui.js retained for the runtime wrapper.
