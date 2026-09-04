@@ -1,0 +1,1 @@
+Clipboard runtime fix: prefer Navigator Clipboard API and only report success after the write resolves.
