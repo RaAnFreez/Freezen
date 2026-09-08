@@ -6,7 +6,7 @@ export function buildCompactLoaderSource(request, scriptId) {
   const bootstrapUrl = `${origin}/loader/${id}?bootstrap=1&key=`;
   return [
     'script_key="PASTE YOUR KEY HERE";',
-    `local _frezen_http=game:GetService("HttpService");local _frezen_bootstrap=\"${bootstrapUrl}\".._frezen_http:UrlEncode(script_key);local _frezen_ok,_frezen_src=pcall(function() return game:HttpGet(_frezen_bootstrap) end);if not _frezen_ok then error("FREZEN_BOOTSTRAP_HTTP_FAILED:"..tostring(_frezen_src)) end;if type(_frezen_src)~="string" or _frezen_src=="" then error("FREZEN_BOOTSTRAP_EMPTY") end;local _frezen_load=loadstring or load;if type(_frezen_load)~="function" then error("FREZEN_LOADSTRING_UNAVAILABLE") end;local _frezen_chunk,_frezen_compile_error=_frezen_load(_frezen_src);if type(_frezen_chunk)~="function" then error("FREZEN_BOOTSTRAP_COMPILE_FAILED:"..tostring(_frezen_compile_error)) end;local _frezen_run_ok,_frezen_run_error=pcall(_frezen_chunk);if not _frezen_run_ok then error("FREZEN_BOOTSTRAP_RUNTIME_FAILED:"..tostring(_frezen_run_error)) end`,
+    `local _frezen_http=game:GetService("HttpService");local _frezen_bootstrap="${bootstrapUrl}".._frezen_http:UrlEncode(script_key);local _frezen_last;local _frezen_ok,_frezen_src=false,nil;for _frezen_attempt=1,4 do _frezen_ok,_frezen_src=pcall(function() return game:HttpGet(_frezen_bootstrap) end);if _frezen_ok and type(_frezen_src)=="string" and _frezen_src~="" then break end;_frezen_last=_frezen_src;local _frezen_wait=(task and task.wait) or wait;if _frezen_attempt<4 and type(_frezen_wait)=="function" then pcall(_frezen_wait,0.5*_frezen_attempt) end end;if not _frezen_ok then error("FREZEN_BOOTSTRAP_HTTP_FAILED:"..tostring(_frezen_last)) end;if type(_frezen_src)~="string" or _frezen_src=="" then error("FREZEN_BOOTSTRAP_EMPTY") end;local _frezen_load=loadstring or load;if type(_frezen_load)~="function" then error("FREZEN_LOADSTRING_UNAVAILABLE") end;local _frezen_chunk,_frezen_compile_error=_frezen_load(_frezen_src);if type(_frezen_chunk)~="function" then error("FREZEN_BOOTSTRAP_COMPILE_FAILED:"..tostring(_frezen_compile_error)) end;local _frezen_run_ok,_frezen_run_error=pcall(_frezen_chunk);if not _frezen_run_ok then error("FREZEN_BOOTSTRAP_RUNTIME_FAILED:"..tostring(_frezen_run_error)) end`,
   ].join("\n");
 }
 
@@ -77,12 +77,20 @@ export function buildRuntimeLoaderSource(request, scriptId, key = "PASTE YOUR KE
     'end;',
     'if hwid=="" then error("FREZEN_HWID_UNAVAILABLE") end;',
     `local _frezen_url="${endpoint}?key="..HttpService:UrlEncode(script_key).."&hwid="..HttpService:UrlEncode(hwid).."&game_username="..HttpService:UrlEncode(game_username).."&game_user_id="..HttpService:UrlEncode(game_user_id);`,
-    'local _frezen_http_ok,source=pcall(function() return game:HttpGet(_frezen_url) end);',
-    'if not _frezen_http_ok then error("FREZEN_PAYLOAD_HTTP_FAILED:"..tostring(source)) end;',
-    'if type(source)~="string" or source=="" then error("FREZEN_PAYLOAD_EMPTY") end;',
+    'local _frezen_http_ok,_frezen_source=false,nil;',
+    'local _frezen_last_error=nil;',
+    'for _frezen_attempt=1,4 do',
+    '  _frezen_http_ok,_frezen_source=pcall(function() return game:HttpGet(_frezen_url) end);',
+    '  if _frezen_http_ok and type(_frezen_source)=="string" and _frezen_source~="" then break end;',
+    '  _frezen_last_error=_frezen_source;',
+    '  local _frezen_wait=(task and task.wait) or wait;',
+    '  if _frezen_attempt<4 and type(_frezen_wait)=="function" then pcall(_frezen_wait,0.5*_frezen_attempt) end;',
+    'end;',
+    'if not _frezen_http_ok then error("FREZEN_PAYLOAD_HTTP_FAILED:"..tostring(_frezen_last_error)) end;',
+    'if type(_frezen_source)~="string" or _frezen_source=="" then error("FREZEN_PAYLOAD_EMPTY") end;',
     'local _frezen_load=loadstring or load;',
     'if type(_frezen_load)~="function" then error("FREZEN_LOADSTRING_UNAVAILABLE") end;',
-    'local _frezen_chunk,_frezen_compile_error=_frezen_load(source);',
+    'local _frezen_chunk,_frezen_compile_error=_frezen_load(_frezen_source);',
     'if type(_frezen_chunk)~="function" then error("FREZEN_PAYLOAD_COMPILE_FAILED:"..tostring(_frezen_compile_error)) end;',
     'local _frezen_run_ok,_frezen_run_error=pcall(_frezen_chunk);',
     'if not _frezen_run_ok then error("FREZEN_PAYLOAD_RUNTIME_FAILED:"..tostring(_frezen_run_error)) end;',
