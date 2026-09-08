@@ -1,5 +1,5 @@
 name = "frezen"
-main = "src/entry-ui-getkey-script-embedded.js"
+main = "src/canonical-loader-entry.js"
 compatibility_date = "2026-08-09"
 workers_dev = true
 
@@ -20,7 +20,7 @@ vars = { FREZEN_ENV = "staging", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBE
 [env.production]
 name = "frezen"
 workers_dev = true
-vars = { FREZEN_ENV = "production", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true" }
+vars = { FREZEN_ENV = "production", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_PUBLIC_ORIGIN = "https://frezen.frezenapp.workers.dev" }
 
 [[env.production.d1_databases]]
 binding = "DB"
