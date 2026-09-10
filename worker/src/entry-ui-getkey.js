@@ -34,6 +34,43 @@ function readCookie(request, name) {
   return null;
 }
 
+async function redirectToActiveKey(request, env, slug) {
+  if (!env?.DB || !slug) return null;
+  const flowId = readCookie(request, 'frezen_getkey_session');
+  if (!flowId) return null;
+
+  try {
+    const row = await env.DB.prepare(`SELECT s.id, s.service_id, s.expires_at AS session_expires_at,
+        k.license_id, l.status AS license_status, l.expires_at AS license_expires_at
+      FROM getkey_public_sessions s
+      JOIN getkey_public_keys k ON k.session_id = s.id
+      JOIN licenses l ON l.id = k.license_id
+      WHERE s.id = ?1 LIMIT 1`).bind(flowId).first();
+
+    if (!row?.id || !row?.service_id || !row?.license_id) return null;
+    if (new Date(row.session_expires_at || 0).getTime() <= Date.now()) return null;
+    if (String(row.license_status || '').toLowerCase() !== 'active') return null;
+    if (row.license_expires_at && new Date(row.license_expires_at).getTime() <= Date.now()) return null;
+
+    const target = new URL(request.url);
+    target.searchParams.set('flow', flowId);
+    target.searchParams.set('verified', '1');
+    target.searchParams.set('unlocked', '1');
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: target.pathname + target.search,
+        'cache-control': 'no-store, no-cache, must-revalidate',
+      },
+    });
+  } catch (error) {
+    console.error('Active Get-Key resume lookup failed', {
+      message: String(error?.message || error),
+    });
+    return null;
+  }
+}
+
 async function recoverCompletedCallback(request, env, response) {
   if (response.status !== 404 || !env?.DB) return response;
   const body = await response.clone().json().catch(() => null);
@@ -288,6 +325,10 @@ export default {
 
     const slug = getSlugFromPath(url.pathname);
     if (request.method === 'GET' && slug) {
+      if (!url.searchParams.has('flow')) {
+        const resumed = await redirectToActiveKey(request, env, slug);
+        if (resumed) return resumed;
+      }
       return renderSlugPageWithDirectCheckpointRedirect(slug);
     }
 
