@@ -1,5 +1,5 @@
 name = "frezen"
-main = "src/canonical-loader-entry.js"
+main = "src/getkey-session-guard-entry.js"
 compatibility_date = "2026-08-09"
 workers_dev = true
 
