@@ -1,6 +1,6 @@
 import entry from './entry-ui-getkey-script-embedded.js';
 
-const DEFAULT_PRODUCTION_ORIGIN = 'https://frezen.frezenapp.workers.dev';
+const DEFAULT_PRODUCTION_ORIGIN = 'https://frezen.my.id';
 const LOADER_PATHS = [
   /^\/api\/v1\/scripts\/[^/]+\/embedded-loader\/?$/i,
   /^\/files\/[^/]+\.lua\/?$/i,

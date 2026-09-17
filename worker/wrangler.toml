@@ -20,7 +20,7 @@ vars = { FREZEN_ENV = "staging", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBE
 [env.production]
 name = "frezen"
 workers_dev = true
-vars = { FREZEN_ENV = "production", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_PUBLIC_ORIGIN = "https://frezen.frezenapp.workers.dev" }
+vars = { FREZEN_ENV = "production", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_PUBLIC_ORIGIN = "https://frezen.my.id" }
 
 [[env.production.d1_databases]]
 binding = "DB"
