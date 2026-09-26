@@ -2,6 +2,12 @@ import { obfuscateLuaV11 } from '../script-obfuscator-v11.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from '../script-obfuscation-contract.js';
 
 const encoder = new TextEncoder();
+
+async function sha256Hex(value) {
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 const TOKEN_TTL_SECONDS = 60;
 const MAX_TOKEN_BYTES = 4096;
 
