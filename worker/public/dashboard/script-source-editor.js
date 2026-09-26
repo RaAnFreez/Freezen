@@ -175,7 +175,7 @@
           const endpoint = type === 'scripts'
             ? `/api/v1/scripts/${encodeURIComponent(scriptId)}/versions/${encodeURIComponent(versionId)}`
             : `/api/v1/script-delivery/${encodeURIComponent(scriptId)}/versions/${encodeURIComponent(versionId)}`;
-          await api(endpoint, { method: 'PATCH', body: JSON.stringify({ source }) });
+          await api(endpoint, { method: 'PATCH', body: JSON.stringify({ source: source.value }) });
           close();
           refreshPanel(type);
         } catch (error) {
