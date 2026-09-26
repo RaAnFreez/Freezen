@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { issueDeliveryToken, deliverScript } from "../src/security/secure-delivery.js";
+import { isFrezenObfuscated } from "../src/script-obfuscation-contract.js";
 
 const SECRET = "test-secret-abcdefghijklmnopqrstuvwxyz-0123456789";
 const json = (data, status = 200, requestId = "test-request") => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json", "x-request-id": requestId } });
@@ -58,10 +59,15 @@ describe("Phase 20 Secure Delivery", () => {
       content_type: "text/x-lua",
       size_bytes: 15,
       sha256: "abc",
+      source_content: "print('frezen')",
+      source_size_bytes: 15,
+      source_sha256: "source-hash",
     });
     const response = await deliverScript(new Request("https://frezen.test/api/v1/scripts/s1/deliver", { method: "POST", headers: { authorization: `Bearer ${token}` } }), env, "r2", json);
     expect(response.status).toBe(200);
-    expect(await response.text()).toBe("print('frezen')");
+    const body = await response.text();
+    expect(isFrezenObfuscated(body)).toBe(true);
+    expect(body).not.toBe("print('frezen')");
     expect(response.headers.get("cache-control")).toContain("no-store");
   });
 

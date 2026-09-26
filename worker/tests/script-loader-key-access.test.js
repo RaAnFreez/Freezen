@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deliverScriptByKey } from "../src/script-loader.js";
+import { isFrezenObfuscated } from "../src/script-obfuscation-contract.js";
 
 const db = {
   prepare(sql) {
@@ -54,6 +55,8 @@ describe("Script loader key access", () => {
       "s1",
     );
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("print('ok')");
+    const body = await response.text();
+    expect(isFrezenObfuscated(body)).toBe(true);
+    expect(body).not.toContain("print('ok')");
   });
 });

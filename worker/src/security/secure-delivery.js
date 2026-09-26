@@ -1,6 +1,13 @@
+import { obfuscateLuaV11 } from '../script-obfuscator-v11.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from '../script-obfuscation-contract.js';
 
 const encoder = new TextEncoder();
+
+async function sha256Hex(value) {
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 const TOKEN_TTL_SECONDS = 60;
 const MAX_TOKEN_BYTES = 4096;
 
@@ -70,7 +77,7 @@ export async function deliverScript(request, env, requestId, json) {
   if (parsed.error) { await audit(env, null, "SCRIPT_DELIVERY_DENIED", null, "DENIED", requestId, { reason: parsed.error }); return deny(json, requestId, parsed.error, parsed.error === "DELIVERY_TOKEN_EXPIRED" ? 401 : 403); }
   const claims = parsed.payload;
   try {
-    const row = await env.DB.prepare(`SELECT u.status AS user_status,l.user_id,l.product_id,l.status AS license_status,l.expires_at,s.id AS script_id,s.status AS script_status,s.product_id AS script_product_id,p.status AS product_status,d.id AS device_id,d.status AS device_status,sv.id AS version_id,sv.version,sv.status AS version_status,sf.file_name,sf.content,sf.content_type,sf.size_bytes,sf.sha256
+    const row = await env.DB.prepare(`SELECT u.status AS user_status,l.user_id,l.product_id,l.status AS license_status,l.expires_at,s.id AS script_id,s.status AS script_status,s.product_id AS script_product_id,p.status AS product_status,d.id AS device_id,d.status AS device_status,sv.id AS version_id,sv.version,sv.status AS version_status,sf.file_name,sf.content,sf.content_type,sf.size_bytes,sf.sha256,sf.source_content,sf.source_size_bytes,sf.source_sha256
       FROM licenses l
       JOIN users u ON u.id=l.user_id
       JOIN scripts s ON s.id=?1
@@ -87,11 +94,27 @@ export async function deliverScript(request, env, requestId, json) {
     if (String(row.device_status).toUpperCase() !== "ACTIVE") return deny(json, requestId, "HWID_BLOCKED");
     if (String(row.version_status).toUpperCase() !== "ACTIVE") return deny(json, requestId, "SCRIPT_VERSION_NOT_ACTIVE");
 
-    const obfuscationVerified = isFrezenObfuscated(row.content);
+    let payload = row.content;
+    let payloadSha256 = row.sha256;
+    let payloadBytes = Number(row.size_bytes ?? new TextEncoder().encode(payload).byteLength);
+    let obfuscationVerified = isFrezenObfuscated(payload);
+    if (!obfuscationVerified) {
+      try {
+        const source = row.source_content ?? payload;
+        const rebuilt = obfuscateLuaV11(source);
+        payload = rebuilt.code;
+        payloadSha256 = await sha256Hex(payload);
+        payloadBytes = new TextEncoder().encode(payload).byteLength;
+        await env.DB.prepare("UPDATE script_files SET content=?1,size_bytes=?2,sha256=?3,source_size_bytes=COALESCE(source_size_bytes,?4),source_content=COALESCE(source_content,?5),source_sha256=COALESCE(source_sha256,?6) WHERE id=?7").bind(payload,payloadBytes,payloadSha256,Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength),source,row.source_sha256 ?? await sha256Hex(source),row.file_id).run();
+        obfuscationVerified = isFrezenObfuscated(payload);
+      } catch (error) {
+        console.error("legacy secure-delivery obfuscation rebuild failed", { requestId, scriptId: claims.script_id, message: String(error?.message ?? error) });
+      }
+    }
     await audit(env, claims.user_id, "SCRIPT_REQUESTED", row.script_id, "SUCCESS", requestId, { license_id: row.user_id === claims.user_id ? claims.license_id : null, version_id: row.version_id, obfuscation_verified: obfuscationVerified });
-    await audit(env, claims.user_id, "SCRIPT_DELIVERED", row.script_id, "SUCCESS", requestId, { version_id: row.version_id, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: obfuscationVerified });
+    await audit(env, claims.user_id, "SCRIPT_DELIVERED", row.script_id, "SUCCESS", requestId, { version_id: row.version_id, size_bytes: payloadBytes, sha256: payloadSha256, obfuscation_verified: obfuscationVerified });
 
-    return new Response(row.content, {
+    return new Response(payload, {
       status: 200,
       headers: {
         "content-type": row.content_type || "text/x-lua; charset=utf-8",
@@ -101,7 +124,7 @@ export async function deliverScript(request, env, requestId, json) {
         "content-disposition": `attachment; filename="${row.file_name.replace(/[\"\\\r\n]/g, "_")}"`,
         "x-frezen-version": row.version,
         "x-frezen-request-id": requestId,
-        "x-frezen-payload-sha256": row.sha256,
+        "x-frezen-payload-sha256": payloadSha256,
         "x-frezen-obfuscation-status": obfuscationVerified ? "verified" : "legacy-or-unverified",
         "x-frezen-obfuscation-profile": obfuscationVerified ? `${OBFUSCATION_PROFILE.mode};${OBFUSCATION_PROFILE.version};${OBFUSCATION_PROFILE.strength};${OBFUSCATION_PROFILE.protectionLevel};${OBFUSCATION_PROFILE.algorithm}` : `legacy;marker-missing`,
         "x-frezen-obfuscation-marker": obfuscationVerified ? OBFUSCATION_MARKER : "marker-missing",

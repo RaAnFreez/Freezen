@@ -1,5 +1,6 @@
 import { bindRuntimeHwid } from "./security/runtime-hwid.js";
 import { isBrowserNavigation, blockedBrowserPage } from "./browser-link-guard.js";
+import { obfuscateLuaV11 } from "./script-obfuscator-v11.js";
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from "./script-obfuscation-contract.js";
 
 const deny = (code = "ACCESS_DENIED", status = 403, requestId = "") => new Response(code, {
@@ -53,6 +54,9 @@ async function findScriptFile(env, keyHash, scriptId) {
       f.content_type,
       f.size_bytes,
       f.sha256,
+      f.source_content,
+      f.source_size_bytes,
+      f.source_sha256,
       l.id AS license_id,
       l.user_id AS license_user_id,
       l.status AS license_status,
@@ -144,14 +148,29 @@ async function deliverResolvedFile(request, env, requestId, scriptId, responseMo
     if (row.license_expires_at != null && row.license_expires_at && new Date(row.license_expires_at).getTime() <= Date.now()) return deny("LICENSE_EXPIRED", 403, requestId);
     if (!row.content) return deny("SCRIPT_CONTENT_MISSING", 404, requestId);
 
-    const obfuscationVerified = isFrezenObfuscated(row.content);
-    const payloadSha256 = row.sha256 || await sha256Hex(row.content);
-    const payloadBytes = Number(row.size_bytes ?? new TextEncoder().encode(row.content).byteLength);
+    let payload = row.content;
+    let obfuscationVerified = isFrezenObfuscated(payload);
+    let payloadSha256 = row.sha256 || await sha256Hex(payload);
+    let payloadBytes = Number(row.size_bytes ?? new TextEncoder().encode(payload).byteLength);
+
+    if (!obfuscationVerified) {
+      try {
+        const source = row.source_content ?? payload;
+        const rebuilt = obfuscateLuaV11(source);
+        payload = rebuilt.code;
+        payloadSha256 = await sha256Hex(payload);
+        payloadBytes = new TextEncoder().encode(payload).byteLength;
+        await env.DB.prepare('UPDATE script_files SET content=?1,size_bytes=?2,sha256=?3,source_size_bytes=COALESCE(source_size_bytes,?4),source_content=COALESCE(source_content,?5),source_sha256=COALESCE(source_sha256,?6) WHERE id=?7').bind(payload,payloadBytes,payloadSha256,Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength),source,row.source_sha256 ?? await sha256Hex(source),row.file_id).run();
+        obfuscationVerified = isFrezenObfuscated(payload);
+      } catch (error) {
+        console.error("legacy script obfuscation rebuild failed", { requestId, scriptId, message: String(error?.message ?? error) });
+      }
+    }
 
     const bound = await bindRuntimeHwid(env, row.license_id, row.license_user_id, hwid, gameUsername, gameUserId);
     if (!bound.ok) return deny(bindFailureMessage(bound.reason), 403, requestId);
 
-    return new Response(row.content, {
+    return new Response(payload, {
       status: 200,
       headers: {
         "content-type": row.content_type || "text/x-lua; charset=utf-8",
