@@ -89,7 +89,7 @@ export async function getDeliveryScript(request, env, requestId, json, deliveryI
         FROM delivery_script_versions v JOIN delivery_script_files f ON f.delivery_script_version_id=v.id
         WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1`).bind(requestedVersionId, deliveryId).first();
       if (!row) return bad(json, requestId, 'DELIVERY_VERSION_NOT_FOUND', 404);
-      const verified = isFrezenObfuscated(row.content) || String(row.obfuscation_version || '') === OBFUSCATION_PROFILE.version;
+      const verified = isFrezenObfuscated(row.content);
       const source = row.source_content ?? (isFrezenObfuscated(row.content) ? '' : row.content);
       return json({
         view: view === 'editor' ? 'editor' : 'obfuscated',
