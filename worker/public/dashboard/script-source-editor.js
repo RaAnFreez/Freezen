@@ -84,11 +84,10 @@
     if (state.scanning) return;
     state.scanning = true;
     try {
-      document.querySelectorAll('.lua-card').forEach((card) => {
+      document.querySelectorAll('.lua-modal .lua-card').forEach((card) => {
         const versionNode = card.querySelector('.lua-card-head b');
-        const detailButton = card.querySelector('[data-act="details"]');
-        if (!versionNode || !detailButton) return;
-        const scriptId = String(detailButton.dataset.id || '');
+        const scriptId = String(card.closest('.lua-modal')?.dataset.frezenScriptId || '');
+        if (!versionNode || !scriptId) return;
         const version = versionNode.textContent.trim();
         const meta = state.scripts.get(scriptId)?.versions?.find((item) => String(item.version) === version);
         if (!meta?.id) return;
