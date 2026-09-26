@@ -80,39 +80,50 @@
     actions.appendChild(button);
   }
 
+  function findVersionContext(type, version, container) {
+    const entries = type === 'scripts' ? state.scripts.entries() : state.deliveries.entries();
+    const modal = container?.closest('.lua-modal, .delivery-modal');
+    const title = modal?.querySelector('.lua-modal-head h3, .delivery-modal-head h3')?.textContent?.trim() || '';
+    let fallback = null;
+    for (const [id, data] of entries) {
+      const meta = data?.versions?.find((item) => String(item.version) === String(version));
+      if (!meta?.id) continue;
+      const candidate = { id: String(id), meta };
+      if (!fallback) fallback = candidate;
+      if (!title || String(data?.script?.name || '').trim() === title) return candidate;
+    }
+    return fallback;
+  }
+
   function scan() {
     if (state.scanning) return;
     state.scanning = true;
     try {
-      document.querySelectorAll('.lua-card').forEach((card) => {
+      document.querySelectorAll('.lua-modal .lua-card').forEach((card) => {
         const versionNode = card.querySelector('.lua-card-head b');
-        const detailButton = card.querySelector('[data-act="details"]');
-        if (!versionNode || !detailButton) return;
-        const scriptId = String(detailButton.dataset.id || '');
+        if (!versionNode) return;
         const version = versionNode.textContent.trim();
-        const meta = state.scripts.get(scriptId)?.versions?.find((item) => String(item.version) === version);
-        if (!meta?.id) return;
+        const context = findVersionContext('scripts', version, card);
+        if (!context) return;
         const actions = card.querySelector('.lua-actions');
-        addButton(actions, 'lua-btn', 'Edit Source', () => openEditor('scripts', scriptId, meta.id), `lua-edit-${meta.id}`);
-        addButton(actions, 'lua-btn', 'Delete Version', () => deleteVersion('scripts', scriptId, meta.id, version), `lua-delete-${meta.id}`);
+        addButton(actions, 'lua-btn', 'Edit Source', () => openEditor('scripts', context.id, context.meta.id), `lua-edit-${context.meta.id}`);
+        addButton(actions, 'lua-btn', 'Delete Version', () => deleteVersion('scripts', context.id, context.meta.id, version), `lua-delete-${context.meta.id}`);
       });
 
-      const deliveryId = state.lastDeliveryId;
-      if (deliveryId) document.querySelectorAll('.delivery-version').forEach((row) => {
+      document.querySelectorAll('.delivery-modal .delivery-version').forEach((row) => {
         const versionNode = row.querySelector('b');
         if (!versionNode) return;
         const version = versionNode.textContent.trim();
-        const meta = state.deliveries.get(deliveryId)?.versions?.find((item) => String(item.version) === version);
-        if (!meta?.id) return;
-        const actions = row.lastElementChild;
-        addButton(actions, 'delivery-btn', 'Edit Source', () => openEditor('delivery', deliveryId, meta.id), `delivery-edit-${meta.id}`);
-        addButton(actions, 'delivery-btn', 'Delete', () => deleteVersion('delivery', deliveryId, meta.id, version), `delivery-delete-${meta.id}`);
+        const context = findVersionContext('delivery', version, row);
+        if (!context) return;
+        const actions = row.querySelector(':scope > span:last-child') || row;
+        addButton(actions, 'delivery-btn', 'Edit Source', () => openEditor('delivery', context.id, context.meta.id), `delivery-edit-${context.meta.id}`);
+        addButton(actions, 'delivery-btn', 'Delete Version', () => deleteVersion('delivery', context.id, context.meta.id, version), `delivery-delete-${context.meta.id}`);
       });
     } finally {
       state.scanning = false;
     }
   }
-
   function mountObserver() {
     const target = document.querySelector('#content') || document.body;
     const observer = new MutationObserver(() => setTimeout(scan, 0));
