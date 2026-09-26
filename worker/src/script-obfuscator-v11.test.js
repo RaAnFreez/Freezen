@@ -16,6 +16,8 @@ describe('Advanced Techniques v1.1 compatibility-first obfuscation', () => {
     expect(result.code).not.toContain('-- source comment');
     expect(result.code).toContain('string.char');
     expect(result.code).not.toContain('t[i]~');
+    expect(result.code).toContain('-- This file obfuscation with Frezen Obfuscation');
+    expect(result.code.startsWith('-- This file obfuscation with Frezen Obfuscation\n')).toBe(true);
     expect(isAdvancedV11Obfuscated(result.code)).toBe(true);
   });
 
