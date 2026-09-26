@@ -84,11 +84,10 @@
     if (state.scanning) return;
     state.scanning = true;
     try {
-      document.querySelectorAll('.lua-card').forEach((card) => {
+      document.querySelectorAll('.lua-modal .lua-card').forEach((card) => {
         const versionNode = card.querySelector('.lua-card-head b');
-        const detailButton = card.querySelector('[data-act="details"]');
-        if (!versionNode || !detailButton) return;
-        const scriptId = String(detailButton.dataset.id || '');
+        const scriptId = String(card.closest('.lua-modal')?.dataset.frezenScriptId || '');
+        if (!versionNode || !scriptId) return;
         const version = versionNode.textContent.trim();
         const meta = state.scripts.get(scriptId)?.versions?.find((item) => String(item.version) === version);
         if (!meta?.id) return;
@@ -127,11 +126,11 @@
     bg.className = 'frezen-source-editor-backdrop';
     bg.innerHTML = `<section class="frezen-source-editor">
       <header class="frezen-source-head"><div><h3>${esc(title)}</h3><p>${esc(subtitle)}</p></div><button type="button" data-close>×</button></header>
-      <div class="frezen-source-tabs"><button type="button" class="frezen-source-tab active" data-tab="source">Original Source</button><button type="button" class="frezen-source-tab" data-tab="obfuscated">Obfuscated Result</button></div>
+      <div class="frezen-source-tabs"><button type="button" class="frezen-source-tab active" data-tab="source">Source Code</button><button type="button" class="frezen-source-tab" data-tab="obfuscated">Obfuscated Result</button></div>
       <div class="frezen-source-meta" data-meta></div>
       <textarea data-source spellcheck="false"></textarea>
       <textarea data-obfuscated spellcheck="false" readonly hidden></textarea>
-      <div class="frezen-source-note">Save always regenerates the obfuscated payload from the Original Source and keeps the same version number. The generated obfuscated result is read-only in this editor.</div>
+      <div class="frezen-source-note">Save always regenerates the obfuscated payload from the Source Code and keeps the same version number. The generated obfuscated result is read-only in this editor.</div>
       <footer class="frezen-source-foot"><button type="button" data-close>Cancel</button><button type="button" class="danger" data-delete>Delete Version</button><button type="button" class="primary" data-save>Save & Re-obfuscate</button></footer>
     </section>`;
     document.body.appendChild(bg);

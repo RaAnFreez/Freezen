@@ -1,4 +1,4 @@
-import { OBFUSCATION_MARKER } from './script-obfuscation-contract.js';
+import { OBFUSCATION_MARKER, OBFUSCATION_WATERMARK } from './script-obfuscation-contract.js';
 
 const KEYWORDS = new Set([
   'and','break','do','else','elseif','end','false','for','function','goto','if','in','local','nil','not','or','repeat','return','then','true','until','while','continue',
@@ -299,7 +299,7 @@ export function obfuscateLuaV11(source, options = {}) {
   });
 
   const rendered = renderTokens(tokens, { minify, keepComments }).trim();
-  const code = `${OBFUSCATION_MARKER}\n${rendered}`;
+  const code = `${OBFUSCATION_WATERMARK}\n${OBFUSCATION_MARKER}\n${rendered}`;
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 

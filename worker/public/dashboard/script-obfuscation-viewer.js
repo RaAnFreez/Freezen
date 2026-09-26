@@ -48,22 +48,23 @@
       document.querySelectorAll('.lua-modal .lua-card').forEach(card => {
         if (card.querySelector('.frezen-obf-view')) return;
         const versionNode = card.querySelector('.lua-card-head b');
-        if (!versionNode) return;
+        const scriptId = String(card.closest('.lua-modal')?.dataset.frezenScriptId || state.currentScriptId || '');
+        if (!versionNode || !scriptId) return;
         const version = versionNode.textContent.trim();
         const meta = state.versions.get(version);
-        if (!meta?.id || !state.currentScriptId) return;
+        if (!meta?.id) return;
         const actions = card.querySelector('.lua-actions');
         if (!actions) return;
         const button = document.createElement('button');
         button.className = 'lua-btn frezen-obf-view';
         button.textContent = 'View obfuscated';
-        button.onclick = () => openViewer(state.currentScriptId, meta.id, version);
+        button.onclick = () => openViewer(scriptId, meta.id, version);
         actions.appendChild(button);
         const badge = document.createElement('div');
         badge.className = 'frezen-obf-status';
         badge.textContent = 'Checking obfuscation…';
         card.appendChild(badge);
-        verifyVersion(state.currentScriptId, meta.id, badge);
+        verifyVersion(scriptId, meta.id, badge);
       });
     } finally { state.scanning = false; }
   }
