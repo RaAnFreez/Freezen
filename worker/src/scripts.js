@@ -118,6 +118,7 @@ async function parseUpload(request) {
   if (!fileName) return { error: 'INVALID_LUA_FILENAME' };
   if (file.size <= 0 || file.size > MAX_LUA_BYTES) return { error: 'LUA_FILE_TOO_LARGE_OR_EMPTY' };
   const content = await file.text();
+  if (isFrezenObfuscated(content)) return { error: 'SOURCE_MUST_BE_PLAIN_LUA' };
   if (new TextEncoder().encode(content).byteLength > MAX_LUA_BYTES) return { error: 'LUA_FILE_TOO_LARGE' };
   return { fileName, content, sizeBytes: file.size, version: cleanVersion(form.get('version')), releaseNotes: cleanText(form.get('release_notes'), 2000) ?? null };
 }
