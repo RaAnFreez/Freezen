@@ -38,6 +38,7 @@ async function parseUpload(request) {
   if (!v) return { error: 'INVALID_VERSION' };
   const releaseNotes = text(form.get('release_notes'), 2000);
   const source = await file.text();
+  if (isFrezenObfuscated(source)) return { error: 'SOURCE_MUST_BE_PLAIN_LUA' };
   const sourceBytes = new TextEncoder().encode(source).byteLength;
   if (sourceBytes > MAX_LUA_BYTES) return { error: 'LUA_FILE_TOO_LARGE' };
   if (!source.trim()) return { error: 'LUA_FILE_EMPTY' };

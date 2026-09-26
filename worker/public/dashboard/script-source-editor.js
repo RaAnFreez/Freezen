@@ -25,7 +25,7 @@
     .frezen-source-note{padding:10px 18px;color:#8c96a5;font-size:11px;border-top:1px solid rgba(255,255,255,.05)}
     .frezen-source-foot{display:flex;gap:8px;padding:12px 18px;border-top:1px solid rgba(255,255,255,.06)}
     .frezen-source-foot button{flex:1;min-height:44px;border:0;border-radius:10px;background:#211927;color:#e1e7ef;font:inherit;font-weight:700}
-    .frezen-source-foot .primary{background:#a85cff;color:#fff}.frezen-source-foot .danger{color:#ff9aaa}
+    .frezen-source-foot .primary{background:#a85cff;color:#fff}.frezen-source-foot .danger{color:#ff9aaa}.frezen-source-import{display:flex;gap:8px;align-items:center;padding:10px 18px;border-top:1px solid rgba(255,255,255,.05)}.frezen-source-import button{border:0;border-radius:10px;padding:8px 11px;background:#211927;color:#e1e7ef;font:inherit;font-size:11px;font-weight:700}.frezen-source-import span{color:#8c96a5;font-size:11px}
     @media(min-width:700px){.frezen-source-editor-backdrop{align-items:center}.frezen-source-editor{border-radius:18px}}
   `;
   document.head.appendChild(css);
@@ -128,6 +128,7 @@
       <header class="frezen-source-head"><div><h3>${esc(title)}</h3><p>${esc(subtitle)}</p></div><button type="button" data-close>×</button></header>
       <div class="frezen-source-tabs"><button type="button" class="frezen-source-tab active" data-tab="source">Source Code</button><button type="button" class="frezen-source-tab" data-tab="obfuscated">Obfuscated Result</button></div>
       <div class="frezen-source-meta" data-meta></div>
+      <div class="frezen-source-import" data-source-import hidden><button type="button" data-import-source>Import Source .lua</button><input type="file" data-source-file accept=".lua,text/plain" hidden><span data-source-import-status>Choose the original/plain Lua source.</span></div>
       <textarea data-source spellcheck="false"></textarea>
       <textarea data-obfuscated spellcheck="false" readonly hidden></textarea>
       <div class="frezen-source-note">Save always regenerates the obfuscated payload from the Source Code and keeps the same version number. The generated obfuscated result is read-only in this editor.</div>
@@ -156,8 +157,25 @@
       if (!data.source?.available) {
         source.value = '';
         source.placeholder = data.source?.reason === 'SOURCE_CONTENT_IS_OBFUSCATED'
-          ? 'Source Code is unavailable for this old version because the stored source was already obfuscated. Provide the original Lua source or upload a new version.'
-          : 'Original source is unavailable for this version. Saving will not proceed until source is provided.';
+          ? 'Source Code is unavailable for this old version because the stored source was already obfuscated. Import or paste the original Lua source to repair this version.'
+          : 'Original source is unavailable for this version. Import or paste the original Lua source to repair this version.';
+        const importBox = bg.querySelector('[data-source-import]');
+        const importButton = bg.querySelector('[data-import-source]');
+        const importFile = bg.querySelector('[data-source-file]');
+        const importStatus = bg.querySelector('[data-source-import-status]');
+        importBox.hidden = false;
+        importButton.onclick = () => importFile.click();
+        importFile.onchange = async () => {
+          const file = importFile.files?.[0];
+          if (!file) return;
+          const text = await file.text();
+          if (text.includes('-- This file obfuscation with Frezen Obfuscation') || text.includes('-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR')) {
+            importStatus.textContent = 'Rejected: this file is already obfuscated. Choose the original Lua source.';
+            return;
+          }
+          source.value = text;
+          importStatus.textContent = `${file.name} loaded as Source Code.`;
+        };
       }
 
       const tabs = bg.querySelectorAll('[data-tab]');
