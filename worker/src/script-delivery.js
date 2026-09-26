@@ -90,12 +90,17 @@ export async function getDeliveryScript(request, env, requestId, json, deliveryI
         WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1`).bind(requestedVersionId, deliveryId).first();
       if (!row) return bad(json, requestId, 'DELIVERY_VERSION_NOT_FOUND', 404);
       const verified = isFrezenObfuscated(row.content);
-      const source = row.source_content ?? (isFrezenObfuscated(row.content) ? '' : row.content);
+      const storedSource = row.source_content ?? '';
+      const sourceWasObfuscated = Boolean(storedSource && isFrezenObfuscated(storedSource));
+      const source = sourceWasObfuscated ? '' : (storedSource || (!verified ? row.content : ''));
+      const sourceUnavailableReason = sourceWasObfuscated
+        ? 'SOURCE_CONTENT_IS_OBFUSCATED'
+        : (!source && verified ? 'LEGACY_SOURCE_UNAVAILABLE' : null);
       return json({
         view: view === 'editor' ? 'editor' : 'obfuscated',
         script_id: deliveryId,
         version: { id: row.id, version: row.version, status: row.status, release_notes: row.release_notes, created_at: row.created_at },
-        source: { available: Boolean(source), content: source, size_bytes: Number(row.source_size_bytes ?? (source ? new TextEncoder().encode(source).byteLength : 0)), sha256: row.source_sha256 ?? (source ? await sha256Hex(source) : null) },
+        source: { available: Boolean(source), content: source, size_bytes: source ? Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength) : 0, sha256: row.source_sha256 ?? (source ? await sha256Hex(source) : null), ...(sourceUnavailableReason ? { reason: sourceUnavailableReason } : {}) },
         payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? OBFUSCATION_PROFILE : { version: 'legacy', status: 'unverified' }, content: row.content },
         request_id: requestId,
       });
@@ -129,6 +134,7 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
   let body; try { body = await request.json(); } catch { return bad(json, requestId, 'INVALID_JSON'); }
   const source = String(body?.source ?? '');
   if (!source.trim()) return bad(json, requestId, 'SOURCE_REQUIRED');
+  if (isFrezenObfuscated(source)) return bad(json, requestId, 'SOURCE_MUST_BE_PLAIN_LUA');
   const sourceBytes = new TextEncoder().encode(source).byteLength;
   if (sourceBytes > MAX_LUA_BYTES) return bad(json, requestId, 'LUA_FILE_TOO_LARGE', 413);
   try {
