@@ -4,7 +4,7 @@ import { decryptKeySecret } from './key-secret.js';
 import { bindRuntimeHwid } from './security/runtime-hwid.js';
 import { deliverScriptFileByKey } from './script-loader.js';
 import { buildEmbeddedLoaderSource, createEmbeddedDeliveryToken, verifyEmbeddedDeliveryToken } from './embedded-loader.js';
-import { listDeliveryScripts, createDeliveryScript, getDeliveryScript, uploadDeliveryVersion, activateDeliveryVersion, updateDeliveryScript, deleteDeliveryScript, deliverPublicScript } from './script-delivery.js';
+import { listDeliveryScripts, createDeliveryScript, getDeliveryScript, uploadDeliveryVersion, activateDeliveryVersion, updateDeliveryVersionSource, deleteDeliveryVersion, updateDeliveryScript, deleteDeliveryScript, deliverPublicScript } from './script-delivery.js';
 
 const noStore = { 'cache-control': 'no-store, no-cache, must-revalidate', pragma: 'no-cache' };
 const json = (data, status = 200, requestId = '') => new Response(JSON.stringify(data), {
@@ -91,6 +91,15 @@ export default {
       const access = await requireDeliveryAdmin(request, env, requestId); if (access instanceof Response) return access;
       if (request.method !== 'POST') return json({ error: 'METHOD_NOT_ALLOWED', request_id: requestId },405,requestId);
       return uploadDeliveryVersion(request, env, requestId, json, access, decodeURIComponent(deliveryVersions[1]));
+    }
+    const deliveryVersionSource = url.pathname.match(/^\/api\/v1\/script-delivery\/([^/]+)\/versions\/([^/]+)$/);
+    if (deliveryVersionSource) {
+      const access = await requireDeliveryAdmin(request, env, requestId); if (access instanceof Response) return access;
+      const deliveryId = decodeURIComponent(deliveryVersionSource[1]);
+      const versionId = decodeURIComponent(deliveryVersionSource[2]);
+      if (request.method === 'PATCH') return updateDeliveryVersionSource(request, env, requestId, json, access, deliveryId, versionId);
+      if (request.method === 'DELETE') return deleteDeliveryVersion(request, env, requestId, json, access, deliveryId, versionId);
+      return json({ error: 'METHOD_NOT_ALLOWED', request_id: requestId },405,requestId);
     }
     const deliveryVersionActive = url.pathname.match(/^\/api\/v1\/script-delivery\/([^/]+)\/versions\/([^/]+)\/active$/);
     if (deliveryVersionActive) {
