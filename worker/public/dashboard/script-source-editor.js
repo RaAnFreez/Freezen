@@ -155,7 +155,9 @@
       meta.innerHTML = `<span class="frezen-source-pill">${esc(version.version || 'unknown version')}</span><span class="frezen-source-pill">${esc(data.source?.size_bytes || 0)} B source</span><span class="frezen-source-pill">${esc(data.payload?.size_bytes || 0)} B output</span><span class="frezen-source-pill ok">${data.payload?.obfuscation_verified ? 'Advanced v1.1 · Very High · 100%' : 'Legacy payload · save to regenerate'}</span>`;
       if (!data.source?.available) {
         source.value = '';
-        source.placeholder = 'Original source is unavailable for this version. Saving will not proceed until source is provided.';
+        source.placeholder = data.source?.reason === 'SOURCE_CONTENT_IS_OBFUSCATED'
+          ? 'Source Code is unavailable for this old version because the stored source was already obfuscated. Provide the original Lua source or upload a new version.'
+          : 'Original source is unavailable for this version. Saving will not proceed until source is provided.';
       }
 
       const tabs = bg.querySelectorAll('[data-tab]');

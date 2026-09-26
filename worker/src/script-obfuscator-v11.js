@@ -299,7 +299,9 @@ export function obfuscateLuaV11(source, options = {}) {
   });
 
   const rendered = renderTokens(tokens, { minify, keepComments }).trim();
-  const code = `${OBFUSCATION_WATERMARK}\n${OBFUSCATION_MARKER}\n${rendered}`;
+  // The requested human-readable watermark is the only header emitted for new payloads.
+  // OBFUSCATION_MARKER now aliases this watermark; legacy marker detection remains in the contract.
+  const code = `${OBFUSCATION_WATERMARK}\n${rendered}`;
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
