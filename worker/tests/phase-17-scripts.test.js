@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createScript, listScripts, uploadScriptVersion, setScriptVersionActive } from "../src/scripts.js";
+import { isFrezenObfuscated } from "../src/script-obfuscation-contract.js";
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status });
 const auth = { user_id: "owner-1", role: "OWNER" };
@@ -22,7 +23,7 @@ function dbMock({ services = [], scripts = [], versions = [], files = [] } = {})
     run: async () => {
       if (sql.includes("INSERT INTO scripts")) state.scripts.push({ id: values[0], service_id: values[1], name: values[2], description: values[3], loader_url: values[4], status: "ACTIVE" });
       if (sql.includes("INSERT INTO script_versions")) state.versions.push({ id: values[0], script_id: values[1], version: values[2], file_reference: values[3], release_notes: values[4], status: "ARCHIVED" });
-      if (sql.includes("INSERT INTO script_files")) state.files.push({ id: values[0], script_version_id: values[1], file_name: values[2], content: values[4], sha256: values[5] });
+      if (sql.includes("INSERT INTO script_files")) state.files.push({ id: values[0], script_version_id: values[1], file_name: values[2], content: values[4], sha256: values[5], source_size_bytes: values[6], source_content: values[7], source_sha256: values[8] });
       if (sql.includes("UPDATE script_versions SET status='ARCHIVED'")) state.versions.filter((v) => v.script_id === values[0] && v.status === "ACTIVE").forEach((v) => { v.status = "ARCHIVED"; });
       if (sql.includes("UPDATE script_versions SET status='ACTIVE'")) { const row = state.versions.find((v) => v.id === values[0] && v.script_id === values[1]); if (row) row.status = "ACTIVE"; }
       return { meta: { changes: 1 } };
@@ -63,7 +64,9 @@ describe("Phase 17 Lua Script Manager", () => {
     form.append("release_notes", "Initial release");
     const response = await uploadScriptVersion(new Request("https://frezen.test", { method: "POST", body: form }), { DB: db }, "phase17-upload", json, auth, "s1");
     expect(response.status).toBe(201);
-    expect(db.state.files[0].content).toContain("PASTE YOUR KEY HERE");
+    expect(isFrezenObfuscated(db.state.files[0].content)).toBe(true);
+    expect(db.state.files[0].content).not.toContain("PASTE YOUR KEY HERE");
+    expect(db.state.files[0].source_content).toContain("PASTE YOUR KEY HERE");
     expect(db.state.versions[0].status).toBe("ARCHIVED");
   });
 
