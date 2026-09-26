@@ -114,9 +114,11 @@
   }
 
   function mountObserver() {
-    const target = document.querySelector('#content') || document.body;
+    // Details modals are mounted directly under <body>, not inside #content.
+    // Observe the full document so version action buttons are injected reliably
+    // after the dashboard panel creates its modal.
     const observer = new MutationObserver(() => setTimeout(scan, 0));
-    observer.observe(target, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true });
     scan();
   }
 
