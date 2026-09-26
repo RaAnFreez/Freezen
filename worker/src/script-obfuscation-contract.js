@@ -1,6 +1,7 @@
 export const MAX_LUA_BYTES = 3 * 1024 * 1024;
 
 export const OBFUSCATION_MARKER = '-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR';
+export const OBFUSCATION_WATERMARK = '-- This file obfuscation with Frezen Obfuscation';
 
 export const OBFUSCATION_PROFILE = Object.freeze({
   version: '1.1',
