@@ -105,13 +105,10 @@ async function obfuscateVersionUpload(request) {
 
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const match = url.pathname.match(VERSION_UPLOAD_RE);
-    if (request.method === 'POST' && match) {
-      const result = await obfuscateVersionUpload(request);
-      if (result.response) return result.response;
-      return protectedEntry.fetch(result.request, env, ctx);
-    }
+    // Version uploads are handled by scripts.js, which must receive the plain Lua
+    // source so it can persist source_content and generate exactly one obfuscated payload.
+    // Do not pre-obfuscate here: that would send an already-obfuscated file into
+    // scripts.js and correctly trigger SOURCE_MUST_BE_PLAIN_LUA.
     return protectedEntry.fetch(request, env, ctx);
   },
 
