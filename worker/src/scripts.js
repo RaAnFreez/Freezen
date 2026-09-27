@@ -132,7 +132,8 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
     await ensureScriptSchema(env);
     const script = await env.DB.prepare('SELECT id,service_id,status FROM scripts WHERE id=?1 LIMIT 1').bind(scriptId).first();
     if (!script) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
-    if (statusOk(script.status) !== 'ACTIVE') return bad(json, requestId, 'SCRIPT_DISABLED', 409);
+    // A disabled script should block delivery, not owner-side version management.
+    // Owners can upload/prepare a new version while the script remains disabled.
     const service = await env.DB.prepare('SELECT id FROM frezen_key_services WHERE id=?1 AND owner_id=?2 LIMIT 1').bind(script.service_id, auth?.user_id).first();
     if (!service) return bad(json, requestId, 'SERVICE_NOT_FOUND', 404);
     const versionId = id();
