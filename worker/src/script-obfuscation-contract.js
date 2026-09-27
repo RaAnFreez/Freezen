@@ -13,6 +13,6 @@ export const OBFUSCATION_PROFILE = Object.freeze({
 });
 
 export function isFrezenObfuscated(value) {
-  const text = String(value ?? '');
-  return text.includes(OBFUSCATION_MARKER) || text.includes(LEGACY_OBFUSCATION_MARKER);
+  const text = String(value ?? '').replace(/^\uFEFF/, '').trimStart();
+  return text.startsWith(OBFUSCATION_MARKER) || text.startsWith(LEGACY_OBFUSCATION_MARKER);
 }
