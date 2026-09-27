@@ -169,7 +169,8 @@
           const file = importFile.files?.[0];
           if (!file) return;
           const text = await file.text();
-          if (text.includes('-- This file obfuscation with Frezen Obfuscation') || text.includes('-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR')) {
+          const normalizedText = text.replace(/^\uFEFF/, '').trimStart();
+          if (normalizedText.startsWith('-- This file obfuscation with Frezen Obfuscation') || normalizedText.startsWith('-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR')) {
             importStatus.textContent = 'Rejected: this file is already obfuscated. Choose the original Lua source.';
             return;
           }
