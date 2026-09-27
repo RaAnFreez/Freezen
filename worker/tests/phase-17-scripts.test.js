@@ -70,6 +70,27 @@ describe("Phase 17 Lua Script Manager", () => {
     expect(db.state.versions[0].status).toBe("ARCHIVED");
   });
 
+
+  it("allows owners to upload a version while a script is disabled", async () => {
+    const db = dbMock({
+      scripts: [{ id: "s-disabled", service_id: "svc", status: "DISABLED" }],
+      services: [{ id: "svc", owner_id: "owner-1", name: "Frezen", slug: "frezen", active: 1 }],
+    });
+    const form = new FormData();
+    form.append("file", new File(["print('disabled-script-version')"], "version.lua", { type: "text/x-lua" }));
+    form.append("version", "2.0.0");
+    const response = await uploadScriptVersion(
+      new Request("https://frezen.test", { method: "POST", body: form }),
+      { DB: db },
+      "phase17-upload-disabled",
+      json,
+      auth,
+      "s-disabled",
+    );
+    expect(response.status).toBe(201);
+    expect(db.state.versions[0].status).toBe("ARCHIVED");
+  });
+
   it("activates exactly the requested version", async () => {
     const db = dbMock({ scripts: [{ id: "s1", service_id: "svc", status: "ACTIVE" }], services: [{ id: "svc", owner_id: "owner-1", name: "Frezen", slug: "frezen", active: 1 }], versions: [{ id: "v1", script_id: "s1", version: "v1.0.0", status: "ACTIVE" }, { id: "v2", script_id: "s1", version: "v1.1.0", status: "ARCHIVED" }] });
     const response = await setScriptVersionActive(new Request("https://frezen.test", { method: "PATCH" }), { DB: db }, "phase17-active", json, auth, "s1", "v2");
