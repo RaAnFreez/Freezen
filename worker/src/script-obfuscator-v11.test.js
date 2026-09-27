@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ADVANCED_V11_PROFILE, obfuscateLuaV11, isAdvancedV11Obfuscated } from './script-obfuscator-v11.js';
+import { isFrezenObfuscated } from './script-obfuscation-contract.js';
 
 describe('Advanced Techniques v1.1 compatibility-first obfuscation', () => {
   it('keeps the configured maximum protection profile', () => {
@@ -57,5 +58,15 @@ describe('Advanced Techniques v1.1 compatibility-first obfuscation', () => {
     expect(result.sourceBytes).toBeGreaterThan(512 * 1024);
     expect(result.sourceBytes).toBeLessThanOrEqual(3 * 1024 * 1024);
     expect(result.outputBytes).toBeLessThanOrEqual(3 * 1024 * 1024);
+  });
+});
+
+
+describe('Frezen obfuscation marker detection', () => {
+  it('only treats an actual payload header as obfuscated', () => {
+    const plain = "local text = '-- This file obfuscation with Frezen Obfuscation'\nprint(text)";
+    expect(isFrezenObfuscated(plain)).toBe(false);
+    expect(isFrezenObfuscated("  \n-- This file obfuscation with Frezen Obfuscation\nlocal x=1")).toBe(true);
+    expect(isFrezenObfuscated("\uFEFF-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR\nlocal x=1")).toBe(true);
   });
 });
