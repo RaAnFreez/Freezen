@@ -20,11 +20,12 @@ describe('Maximum multi-layer compatibility-first obfuscation', () => {
     expect(result.code).toContain('string.char');
     expect(result.code).not.toContain('t[i]~');
     expect(result.code).toContain('205');
-    expect(result.code).toContain('Frezen profile: MAXIMUM_MULTI_LAYER|1.2|3');
     expect(result.code).toContain('-- This file obfuscation with Frezen Obfuscation');
     expect((result.code.match(/-- This file obfuscation with Frezen Obfuscation/g) || []).length).toBe(1);
     expect(result.code).not.toContain('-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR');
-    expect(result.code.startsWith('-- This file obfuscation with Frezen Obfuscation\n-- Frezen profile: MAXIMUM_MULTI_LAYER|1.2|3\n')).toBe(true);
+    expect(result.code.startsWith('-- This file obfuscation with Frezen Obfuscation\n')).toBe(true);
+    expect(result.code).not.toContain('MAXIMUM_MULTI_LAYER|1.2|3');
+    expect(result.code).toMatch(/\\\\\d{3}/);
     expect(isAdvancedV11Obfuscated(result.code)).toBe(true);
   });
 
