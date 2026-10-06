@@ -156,6 +156,10 @@ function bytesFor(text) {
   return [...new TextEncoder().encode(text)];
 }
 
+function escapeDecimalBytes(bytes) {
+  return bytes.map((byte) => `\\${String(byte).padStart(3, '0')}`).join('');
+}
+
 function encodeString(text) {
   const bytes = bytesFor(text);
   if (!bytes.length) return '""';
@@ -164,7 +168,7 @@ function encodeString(text) {
   // 1) rolling additive mask
   // 2) odd-modulus arithmetic substitution
   // 3) reverse-order permutation
-  // The generated decoder uses only Lua 5.1-compatible arithmetic and string.char.
+  // The encoded bytes are rendered as Lua decimal escapes (\\ddd).
   const key1 = randomInt(17, 251);
   const key2 = randomInt(17, 251);
   const encoded = bytes.map((byte, index) => {
@@ -174,9 +178,9 @@ function encodeString(text) {
     return layer2;
   }).reverse();
 
-  return `(function(t,k1,k2)local s="";for i=1,#t do local j=#t-i+1;local z=(i-1)%256;local a=(t[j]-k2-z)%256;local b=(a*205)%256;local c=(b-k1-((z*7)%256))%256;s=s..string.char(c)end;return s end)({${encoded.join(',')}},${key1},${key2})`;
+  const escaped = escapeDecimalBytes(encoded);
+  return '(function(t,k1,k2)local s="";for i=1,#t do local j=#t-i+1;local z=(i-1)%256;local a=(string.byte(t,j)-k2-z)%256;local b=(a*205)%256;local c=(b-k1-((z*7)%256))%256;s=s..string.char(c)end;return s end)("' + escaped + '",' + key1 + ',' + key2 + ')';
 }
-
 function parseInteger(value) {
   const normalized = value.replace(/_/g, '');
   if (/^0[xX][0-9a-fA-F]+$/.test(normalized)) return parseInt(normalized.slice(2), 16);
@@ -317,7 +321,7 @@ export function obfuscateLuaV11(source, options = {}) {
   const rendered = renderTokens(tokens, { minify, keepComments }).trim();
   // The requested human-readable watermark is the only header emitted for new payloads.
   // OBFUSCATION_MARKER now aliases this watermark; legacy marker detection remains in the contract.
-  const code = `${OBFUSCATION_WATERMARK}\n-- Frezen profile: MAXIMUM_MULTI_LAYER|1.2|3\n${rendered}`;
+  const code = `${OBFUSCATION_WATERMARK}\n${rendered}`;
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
