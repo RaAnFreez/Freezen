@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { ADVANCED_V11_PROFILE, obfuscateLuaV11, isAdvancedV11Obfuscated } from './script-obfuscator-v11.js';
 import { isFrezenObfuscated } from './script-obfuscation-contract.js';
 
-describe('Advanced Techniques v1.1 compatibility-first obfuscation', () => {
+describe('Maximum multi-layer compatibility-first obfuscation', () => {
   it('keeps the configured maximum protection profile', () => {
-    expect(ADVANCED_V11_PROFILE.version).toBe('1.1');
-    expect(ADVANCED_V11_PROFILE.mode).toBe('Advanced Techniques');
+    expect(ADVANCED_V11_PROFILE.version).toBe('1.2');
+    expect(ADVANCED_V11_PROFILE.mode).toBe('Maximum Multi-Layer');
     expect(ADVANCED_V11_PROFILE.strength).toBe('VERY_HIGH');
     expect(ADVANCED_V11_PROFILE.protectionLevel).toBe(100);
+    expect(ADVANCED_V11_PROFILE.encryptionAlgorithm).toBe('multi-layer-additive-permutation');
+    expect(ADVANCED_V11_PROFILE.stringLayers).toBe(3);
   });
 
   it('encodes strings and removes comments without binary XOR syntax', () => {
@@ -17,10 +19,12 @@ describe('Advanced Techniques v1.1 compatibility-first obfuscation', () => {
     expect(result.code).not.toContain('-- source comment');
     expect(result.code).toContain('string.char');
     expect(result.code).not.toContain('t[i]~');
+    expect(result.code).toContain('205');
+    expect(result.code).toContain('Frezen profile: MAXIMUM_MULTI_LAYER|1.2|3');
     expect(result.code).toContain('-- This file obfuscation with Frezen Obfuscation');
     expect((result.code.match(/-- This file obfuscation with Frezen Obfuscation/g) || []).length).toBe(1);
     expect(result.code).not.toContain('-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR');
-    expect(result.code.startsWith('-- This file obfuscation with Frezen Obfuscation\n')).toBe(true);
+    expect(result.code.startsWith('-- This file obfuscation with Frezen Obfuscation\n-- Frezen profile: MAXIMUM_MULTI_LAYER|1.2|3\n')).toBe(true);
     expect(isAdvancedV11Obfuscated(result.code)).toBe(true);
   });
 
@@ -68,5 +72,17 @@ describe('Frezen obfuscation marker detection', () => {
     expect(isFrezenObfuscated(plain)).toBe(false);
     expect(isFrezenObfuscated("  \n-- This file obfuscation with Frezen Obfuscation\nlocal x=1")).toBe(true);
     expect(isFrezenObfuscated("\uFEFF-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR\nlocal x=1")).toBe(true);
+  });
+});
+
+
+describe('Lua 5.1 generated-output compatibility', () => {
+  it('uses only Lua 5.1-compatible constructs for its generated protection layers', () => {
+    const result = obfuscateLuaV11('local message = "Hello"\nlocal amount = 42\nprint(message, amount)');
+    expect(result.code).toContain('string.char');
+    expect(result.code).toContain('%');
+    expect(result.code).not.toContain('t[i]~');
+    expect(result.code).not.toContain('<<');
+    expect(result.code).not.toContain('>>');
   });
 });
