@@ -174,7 +174,7 @@ function encodeString(text) {
     return layer2;
   }).reverse();
 
-  return `(function(t,k1,k2)local s="";for i=1,#t do local j=#t-i+1;local z=(j-1)%256;local a=(t[j]-k2-z)%256;local b=(a*205)%256;local c=(b-k1-((z*7)%256))%256;s=s..string.char(c)end;return s end)({${encoded.join(',')}},${key1},${key2})`;
+  return `(function(t,k1,k2)local s="";for i=1,#t do local j=#t-i+1;local z=(i-1)%256;local a=(t[j]-k2-z)%256;local b=(a*205)%256;local c=(b-k1-((z*7)%256))%256;s=s..string.char(c)end;return s end)({${encoded.join(',')}},${key1},${key2})`;
 }
 
 function parseInteger(value) {
