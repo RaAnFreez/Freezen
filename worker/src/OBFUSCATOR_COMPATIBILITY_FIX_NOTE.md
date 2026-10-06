@@ -1,5 +1,13 @@
-# Obfuscator v1.1 compatibility-first fix
+# Obfuscator v1.2 maximum multi-layer compatibility fix
 
-The v1.1 Worker obfuscator now avoids whole-chunk control-flow rewriting, control-flow flattening, runtime anti-debug blocks, and broad textual identifier renaming. Those operations can silently alter Lua/Luau semantics even when the runtime console does not report a useful error.
+The Frezen Worker now replaces the previous XOR-only string layer with a three-stage reversible string transform:
 
-The fixed pipeline keeps source delivery protected with token-safe string encoding, conservative integer encoding, deterministic token-aware formatting, and a 3 MiB limit. Runtime-sensitive constructs are detected and routed through compatibility mode so they are not aggressively rewritten.
+1. rolling additive mask
+2. odd-modulus arithmetic substitution
+3. reverse-order byte permutation
+
+The rest of the compatibility-first pipeline remains conservative: identifier mangling, integer masking, token-safe formatting/minification, and comment removal.
+
+The generator intentionally does not inject whole-chunk control-flow flattening, runtime anti-debug blocks, a custom VM, or Lua bytecode. Those transforms can silently alter Lua/Luau semantics or require a runtime/compiler that is not available inside the Worker.
+
+Generated protection helpers are limited to Lua 5.1-compatible syntax and standard library primitives such as string.char and arithmetic operators.

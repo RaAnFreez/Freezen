@@ -5,11 +5,14 @@ export const OBFUSCATION_MARKER = OBFUSCATION_WATERMARK;
 export const LEGACY_OBFUSCATION_MARKER = '-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR';
 
 export const OBFUSCATION_PROFILE = Object.freeze({
-  version: '1.1',
-  mode: 'Advanced Techniques',
+  version: '1.2',
+  mode: 'Maximum Multi-Layer',
   strength: 'VERY_HIGH',
   protectionLevel: 100,
-  algorithm: 'xor',
+  algorithm: 'multi-layer-additive-permutation',
+  stringLayers: 3,
+  bytecode: false,
+  runtimeVm: false,
 });
 
 export function isFrezenObfuscated(value) {

@@ -9,19 +9,20 @@ const SAFE_GLOBALS = new Set([
 ]);
 
 export const ADVANCED_V11_PROFILE = Object.freeze({
-  version: '1.1',
-  mode: 'Advanced Techniques',
+  version: '1.2',
+  mode: 'Maximum Multi-Layer',
   strength: 'VERY_HIGH',
   protectionLevel: 100,
   mangleNames: true,
   encodeStrings: true,
   encodeNumbers: true,
-  controlFlow: true,
-  controlFlowFlattening: true,
-  deadCodeInjection: true,
-  antiDebugging: true,
+  stringLayers: 3,
+  controlFlow: false,
+  controlFlowFlattening: false,
+  deadCodeInjection: false,
+  antiDebugging: false,
   minify: true,
-  encryptionAlgorithm: 'xor',
+  encryptionAlgorithm: 'multi-layer-additive-permutation',
 });
 
 export const MAX_SOURCE_BYTES = 3 * 1024 * 1024;
@@ -158,10 +159,22 @@ function bytesFor(text) {
 function encodeString(text) {
   const bytes = bytesFor(text);
   if (!bytes.length) return '""';
-  const key = randomInt(17, 251);
-  const encoded = bytes.map((byte, index) => byte ^ (((key + index) % 255) + 1));
-  // Pure arithmetic decoder: compatible with Lua/Luau runtimes without a binary XOR operator.
-  return `(function(t,k)local s="";for i=1,#t do local a=t[i];local b=((k+i-1)%255)+1;local r,p=0,1;while a>0 or b>0 do local x=a%2;local y=b%2;if x~=y then r=r+p end;a=(a-x)/2;b=(b-y)/2;p=p*2 end;s=s..string.char(r)end;return s end)({${encoded.join(',')}},${key})`;
+
+  // Three reversible layers:
+  // 1) rolling additive mask
+  // 2) odd-modulus arithmetic substitution
+  // 3) reverse-order permutation
+  // The generated decoder uses only Lua 5.1-compatible arithmetic and string.char.
+  const key1 = randomInt(17, 251);
+  const key2 = randomInt(17, 251);
+  const encoded = bytes.map((byte, index) => {
+    const idx = index % 256;
+    const layer1 = (byte + key1 + ((idx * 7) % 256)) % 256;
+    const layer2 = ((layer1 * 5) + key2 + idx) % 256;
+    return layer2;
+  }).reverse();
+
+  return `(function(t,k1,k2)local s="";for i=1,#t do local j=#t-i+1;local z=(j-1)%256;local a=(t[j]-k2-z)%256;local b=(a*205)%256;local c=(b-k1-((z*7)%256))%256;s=s..string.char(c)end;return s end)({${encoded.join(',')}},${key1},${key2})`;
 }
 
 function parseInteger(value) {
@@ -280,6 +293,9 @@ export function obfuscateLuaV11(source, options = {}) {
 
   // Compatibility-first: do not rewrite or wrap control-flow structures.
   // The former implementation could alter return/yield/loop semantics without a visible console error.
+  // The maximum tier is intentionally source-level: token-safe multi-layer string protection,
+  // constant masking, conservative identifier mangling, and minification. No bytecode or
+  // runtime anti-debug/VM layer is injected by the Worker.
   if (!compatibilityMode && options.mangleNames !== false) tokens = conservativeMangle(tokens);
 
   tokens = tokens.map((token) => {
@@ -301,7 +317,7 @@ export function obfuscateLuaV11(source, options = {}) {
   const rendered = renderTokens(tokens, { minify, keepComments }).trim();
   // The requested human-readable watermark is the only header emitted for new payloads.
   // OBFUSCATION_MARKER now aliases this watermark; legacy marker detection remains in the contract.
-  const code = `${OBFUSCATION_WATERMARK}\n${rendered}`;
+  const code = `${OBFUSCATION_WATERMARK}\n-- Frezen profile: MAXIMUM_MULTI_LAYER|1.2|3\n${rendered}`;
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
@@ -313,6 +329,7 @@ export function obfuscateLuaV11(source, options = {}) {
     compatibilityMode,
     transforms: {
       strings: true,
+      stringLayers: 3,
       numbers: !compatibilityMode,
       mangleNames: !compatibilityMode,
       controlFlow: false,
@@ -320,6 +337,8 @@ export function obfuscateLuaV11(source, options = {}) {
       deadCodeInjection: false,
       antiDebugging: false,
       minify,
+      bytecode: false,
+      runtimeVm: false,
     },
   };
 }
