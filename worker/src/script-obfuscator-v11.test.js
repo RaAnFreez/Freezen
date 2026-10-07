@@ -102,6 +102,19 @@ describe('renderer lexical boundaries', () => {
   });
 });
 
+describe('renderer keyword-to-number boundaries', () => {
+  it('keeps compatibility-mode keyword + number expressions separated', () => {
+    const source = 'local fn = loadstring("return 1")\nlocal value = fn and 6 or 0\nif value then return 5 end';
+    const result = obfuscateLuaV11(source);
+    expect(result.compatibilityMode).toBe(true);
+    expect(result.code).not.toContain('and6');
+    expect(result.code).not.toContain('or0');
+    expect(result.code).not.toContain('return5');
+    expect(result.code).toContain('and 6 or 0');
+    expect(result.code).toContain('return 5');
+  });
+});
+
 describe('pooled string expressions in shorthand calls', () => {
   it('keeps function-call shorthand syntax valid', () => {
     const source = 'local a = require "ModuleName"\nprint "Hello"\nlocal b = game:GetService "Players"';
