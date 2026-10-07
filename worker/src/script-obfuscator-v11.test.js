@@ -11,7 +11,7 @@ describe('Maximum multi-layer compatibility-first obfuscation', () => {
     expect(ADVANCED_V11_PROFILE.encryptionAlgorithm).toBe('multi-layer-pool-permutation');
     expect(ADVANCED_V11_PROFILE.stringPool).toBe(true);
     expect(ADVANCED_V11_PROFILE.numericVariations).toBe(true);
-    expect(ADVANCED_V11_PROFILE.stringLayers).toBe(3);
+    expect(ADVANCED_V11_PROFILE.stringLayers).toBe(5);
   });
 
   it('encodes strings and removes comments without binary XOR syntax', () => {
