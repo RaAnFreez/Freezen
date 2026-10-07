@@ -98,7 +98,7 @@ describe('renderer lexical boundaries', () => {
     const source = 'local ready = true\nif ready and "Frezen" then print("Frezen") end';
     const result = obfuscateLuaV11(source);
     expect(result.code).not.toContain('and__frezen_sd');
-    expect(result.code).toContain('and __frezen_sd');
+    expect(result.code).toContain('and(__frezen_sd');
   });
 });
 
