@@ -330,15 +330,19 @@ function renderTokens(tokens, { minify = true, keepComments = false } = {}) {
   const parts = [];
   let previous = null;
   const word = (value) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
+  const startsWord = (value) => /^[A-Za-z_]/.test(value);
+  const endsWord = (value) => /[A-Za-z0-9_]$/.test(value);
   for (const token of tokens) {
     if (token.type === 'comment' && !keepComments) continue;
     const current = token.raw ?? token.value;
     if (!current) continue;
     let separator = '';
     if (previous !== null) {
-      const needWordBoundary = (word(previous) && word(current)) ||
-        (/[0-9]$/.test(previous) && /^[A-Za-z_]/.test(current)) ||
-        (/^[A-Za-z_]/.test(previous) && /^[0-9]/.test(current));
+      // Raw generated expressions (such as pooled decoder calls) may start
+      // with an identifier even though they are emitted as a single raw token.
+      // Preserve Lua lexical boundaries during minification.
+      const needWordBoundary = (endsWord(previous) && startsWord(current)) ||
+        (word(previous) && word(current));
       const needMinusGuard = previous.endsWith('-') && current.startsWith('-');
       const needDotGuard = previous.endsWith('.') && current.startsWith('.');
       const needCommentGuard = previous.endsWith('/') && current.startsWith('*');
