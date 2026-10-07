@@ -33,6 +33,13 @@ describe('Maximum multi-layer compatibility-first obfuscation', () => {
     expect(isAdvancedV11Obfuscated(result.code)).toBe(true);
   });
 
+  it('preserves lexical boundaries before pooled string expressions', () => {
+    const source = 'local ready = true\nif ready and "Frezen" then print("Frezen") end';
+    const result = obfuscateLuaV11(source);
+    expect(result.code).not.toMatch(/\band__frezen_sd\d+\(/);
+    expect(result.code).toMatch(/\band\s+__frezen_sd\d+\(/);
+  });
+
   it('does not rewrite control flow for ordinary conditions', () => {
     const result = obfuscateLuaV11('local x = 8\nif x > 3 then\n print("ok")\nend');
     expect(result.code).toContain('if');
