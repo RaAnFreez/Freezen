@@ -4,12 +4,14 @@ import { isFrezenObfuscated } from './script-obfuscation-contract.js';
 
 describe('Maximum multi-layer compatibility-first obfuscation', () => {
   it('keeps the configured maximum protection profile', () => {
-    expect(ADVANCED_V11_PROFILE.version).toBe('1.2');
-    expect(ADVANCED_V11_PROFILE.mode).toBe('Maximum Multi-Layer');
+    expect(ADVANCED_V11_PROFILE.version).toBe('1.3');
+    expect(ADVANCED_V11_PROFILE.mode).toBe('Maximum Multi-Layer String Pool');
     expect(ADVANCED_V11_PROFILE.strength).toBe('VERY_HIGH');
     expect(ADVANCED_V11_PROFILE.protectionLevel).toBe(100);
-    expect(ADVANCED_V11_PROFILE.encryptionAlgorithm).toBe('multi-layer-additive-permutation');
-    expect(ADVANCED_V11_PROFILE.stringLayers).toBe(3);
+    expect(ADVANCED_V11_PROFILE.encryptionAlgorithm).toBe('multi-layer-pool-permutation');
+    expect(ADVANCED_V11_PROFILE.stringPool).toBe(true);
+    expect(ADVANCED_V11_PROFILE.numericVariations).toBe(true);
+    expect(ADVANCED_V11_PROFILE.stringLayers).toBe(5);
   });
 
   it('encodes strings and removes comments without binary XOR syntax', () => {
@@ -19,7 +21,9 @@ describe('Maximum multi-layer compatibility-first obfuscation', () => {
     expect(result.code).not.toContain('-- source comment');
     expect(result.code).toContain('string.char');
     expect(result.code).not.toContain('t[i]~');
-    expect(result.code).toContain('205');
+    expect(result.code).toContain('string.byte');
+    expect(result.code).toContain('local __frezen_sp');
+    expect(result.code).toContain('local __frezen_sd');
     expect(result.code).toContain('-- This file obfuscation with Frezen Obfuscation');
     expect((result.code.match(/-- This file obfuscation with Frezen Obfuscation/g) || []).length).toBe(1);
     expect(result.code).not.toContain('-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR');
@@ -85,5 +89,19 @@ describe('Lua 5.1 generated-output compatibility', () => {
     expect(result.code).not.toContain('t[i]~');
     expect(result.code).not.toContain('<<');
     expect(result.code).not.toContain('>>');
+  });
+});
+
+
+describe('randomized string pool', () => {
+  it('deduplicates repeated strings while hiding plaintext and varying the pool', () => {
+    const source = 'local first = "https://example.com"\nlocal second = "https://example.com"\nprint(first, second)';
+    const result = obfuscateLuaV11(source);
+    expect(result.code).not.toContain('https://example.com');
+    expect(result.code).toContain('local __frezen_sp');
+    expect(result.code).toContain('local __frezen_sd');
+    expect(result.code).toContain('string.byte');
+    expect(result.code).toMatch(/\\\d{3}/);
+    expect(result.code).toMatch(/\[[0-9()\-+ ]+\]=\{/);
   });
 });

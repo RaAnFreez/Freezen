@@ -1,6 +1,6 @@
 Automatic Lua upload profile:
 
-- Maximum Multi-Layer source protection
+- Maximum Multi-Layer String Pool source protection
 - Very High public strength (100 protection level) retained for API/UI compatibility
 - Profile version 1.2
 - Four string-protection stages: rolling additive mask, modular arithmetic substitution, reverse-order permutation, Lua decimal-escape rendering
@@ -18,3 +18,6 @@ Automatic Lua upload profile:
 The upload wrapper transforms the file before the existing script-version persistence endpoint sees it. The existing keyed loader then returns the persisted transformed payload.
 
 No D1 migration is required. Existing stored versions are not rewritten by this change.
+
+
+The current maximum profile also deduplicates repeated strings into a randomized local string pool and varies the numeric table keys/expressions per build. The generated runtime decoder is intentionally compact and compatibility-first; no custom VM or control-flow virtualization is injected.
