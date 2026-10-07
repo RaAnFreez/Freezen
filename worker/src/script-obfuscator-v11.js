@@ -330,15 +330,20 @@ function renderTokens(tokens, { minify = true, keepComments = false } = {}) {
   const parts = [];
   let previous = null;
   const word = (value) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
+  const startsWord = (value) => /^[A-Za-z_]/.test(value);
+  const endsWord = (value) => /[A-Za-z0-9_]$/.test(value);
   for (const token of tokens) {
     if (token.type === 'comment' && !keepComments) continue;
     const current = token.raw ?? token.value;
     if (!current) continue;
     let separator = '';
     if (previous !== null) {
-      const needWordBoundary = (word(previous) && word(current)) ||
-        (/[0-9]$/.test(previous) && /^[A-Za-z_]/.test(current)) ||
-        (/^[A-Za-z_]/.test(previous) && /^[0-9]/.test(current));
+      // Raw generated expressions (for example __frezen_sd123(...)) are
+      // still lexical words at their start. Keep them separated from Lua
+      // keywords/identifiers such as "and" so the output cannot become
+      // "and__frezen_sd123(...)".
+      const needWordBoundary = (endsWord(previous) && startsWord(current)) ||
+        (word(previous) && word(current));
       const needMinusGuard = previous.endsWith('-') && current.startsWith('-');
       const needDotGuard = previous.endsWith('.') && current.startsWith('.');
       const needCommentGuard = previous.endsWith('/') && current.startsWith('*');
