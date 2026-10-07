@@ -98,7 +98,20 @@ describe('renderer lexical boundaries', () => {
     const source = 'local ready = true\nif ready and "Frezen" then print("Frezen") end';
     const result = obfuscateLuaV11(source);
     expect(result.code).not.toContain('and__frezen_sd');
-    expect(result.code).toContain('and __frezen_sd');
+    expect(result.code).toContain('and(__frezen_sd');
+  });
+});
+
+describe('pooled string expressions in shorthand calls', () => {
+  it('keeps function-call shorthand syntax valid', () => {
+    const source = 'local a = require "ModuleName"\nprint "Hello"\nlocal b = game:GetService "Players"';
+    const result = obfuscateLuaV11(source);
+    expect(result.code).not.toContain('require __frezen_sd');
+    expect(result.code).not.toContain('print __frezen_sd');
+    expect(result.code).not.toContain(':GetService __frezen_sd');
+    expect(result.code).toContain('require(__frezen_sd');
+    expect(result.code).toContain('print(__frezen_sd');
+    expect(result.code).toContain(':GetService(__frezen_sd');
   });
 });
 

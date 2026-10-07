@@ -231,7 +231,9 @@ function buildStringPool(tokens) {
       entries.push(entry);
     }
 
-    const ref = `${decodeName}(${entry.keyExpr})`;
+    // Parenthesize every generated string expression so valid Lua/Luau
+    // shorthand calls such as: require "Module" remain valid after pooling.
+    const ref = `(${decodeName}(${entry.keyExpr}))`;
     return { type: 'raw', value: ref, raw: ref };
   });
 
