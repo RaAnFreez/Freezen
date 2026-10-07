@@ -332,7 +332,9 @@ function renderTokens(tokens, { minify = true, keepComments = false } = {}) {
   const parts = [];
   let previous = null;
   const word = (value) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
-  const startsWord = (value) => /^[A-Za-z_]/.test(value);
+  // A token boundary is also required when a keyword is followed by a numeric literal.
+  // Without this, minification can turn `and 6` into `and6` (an identifier) and break parsing.
+  const startsWord = (value) => /^[A-Za-z0-9_]/.test(value);
   const endsWord = (value) => /[A-Za-z0-9_]$/.test(value);
   for (const token of tokens) {
     if (token.type === 'comment' && !keepComments) continue;
