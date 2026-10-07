@@ -9,20 +9,22 @@ const SAFE_GLOBALS = new Set([
 ]);
 
 export const ADVANCED_V11_PROFILE = Object.freeze({
-  version: '1.2',
-  mode: 'Maximum Multi-Layer',
+  version: '1.3',
+  mode: 'Maximum Multi-Layer String Pool',
   strength: 'VERY_HIGH',
   protectionLevel: 100,
   mangleNames: true,
   encodeStrings: true,
   encodeNumbers: true,
-  stringLayers: 3,
+  stringLayers: 5,
+  stringPool: true,
+  numericVariations: true,
   controlFlow: false,
   controlFlowFlattening: false,
   deadCodeInjection: false,
   antiDebugging: false,
   minify: true,
-  encryptionAlgorithm: 'multi-layer-additive-permutation',
+  encryptionAlgorithm: 'multi-layer-pool-permutation',
 });
 
 export const MAX_SOURCE_BYTES = 3 * 1024 * 1024;
@@ -160,28 +162,97 @@ function escapeDecimalBytes(bytes) {
   return bytes.map((byte) => `\\${String(byte).padStart(3, '0')}`).join('');
 }
 
-function encodeString(text) {
-  const bytes = bytesFor(text);
-  if (!bytes.length) return '""';
-
-  // Three reversible layers:
-  // 1) rolling additive mask
-  // 2) odd-modulus arithmetic substitution
-  // 3) reverse-order permutation
-  // The encoded bytes are rendered as Lua decimal escapes (\\ddd).
-  const key1 = randomInt(17, 251);
-  const key2 = randomInt(17, 251);
-  const encoded = bytes.map((byte, index) => {
-    const idx = index % 256;
-    const layer1 = (byte + key1 + ((idx * 7) % 256)) % 256;
-    const layer2 = ((layer1 * 5) + key2 + idx) % 256;
-    return layer2;
-  }).reverse();
-
-  const escaped = escapeDecimalBytes(encoded);
-  return '(function(t,k1,k2)local s="";for i=1,#t do local j=#t-i+1;local z=(i-1)%256;local a=(string.byte(t,j)-k2-z)%256;local b=(a*205)%256;local c=(b-k1-((z*7)%256))%256;s=s..string.char(c)end;return s end)("' + escaped + '",' + key1 + ',' + key2 + ')';
+function modularInverse256(value) {
+  const normalized = ((value % 256) + 256) % 256;
+  for (let candidate = 1; candidate < 256; candidate += 2) {
+    if ((normalized * candidate) % 256 === 1) return candidate;
+  }
+  throw new Error('MODULAR_INVERSE_UNAVAILABLE');
 }
-function parseInteger(value) {
+
+function variedNumber(value) {
+  const a = randomInt(1000, 900000);
+  const b = randomInt(1000, 900000);
+  switch (randomInt(0, 5)) {
+    case 0: return `(${value}+${a}-${a})`;
+    case 1: return `(${a}+${value}-${a})`;
+    case 2: return `(${value}-${a}+${a})`;
+    case 3: return `((${value}+${a})-(${a}+${b}-${b}))`;
+    case 4: return `((${value}-${a})+(${a}+${b}-${b}))`;
+    default: return `(${value}+(${b}-${b}))`;
+  }
+}
+
+function buildStringPool(tokens) {
+  const poolName = randomName('__frezen_sp');
+  const decodeName = randomName('__frezen_sd');
+  const entries = [];
+  const byText = new Map();
+
+  const transformed = tokens.map((token) => {
+    if (token.type !== 'string' && token.type !== 'long_string') return token;
+    const text = token.type === 'string'
+      ? decodeQuotedLuaString(token.raw)
+      : decodeLongLuaString(token.raw);
+    if (!text.length) return { type: 'raw', value: '""', raw: '""' };
+
+    let entry = byText.get(text);
+    if (!entry) {
+      const bytes = bytesFor(text);
+      const key = randomInt(100000, 9999999);
+      const key1 = randomInt(17, 251);
+      const key2 = randomInt(17, 251);
+      let multiplier = randomInt(3, 255) | 1;
+      if (multiplier === 1) multiplier = 3;
+      const inverse = modularInverse256(multiplier);
+      const rotation = bytes.length > 1 ? randomInt(0, bytes.length - 1) : 0;
+
+      const encoded = bytes.map((byte, index) => {
+        const idx = index % 256;
+        const layer1 = (byte + key1 + ((idx * 7) % 256)) % 256;
+        return ((layer1 * multiplier) + key2 + idx) % 256;
+      });
+
+      const rotated = rotation
+        ? encoded.slice(rotation).concat(encoded.slice(0, rotation))
+        : encoded;
+      const finalBytes = rotated.reverse();
+
+      entry = {
+        key,
+        keyExpr: variedNumber(key),
+        escaped: escapeDecimalBytes(finalBytes),
+        key1,
+        key2,
+        inverse,
+        rotation,
+      };
+      byText.set(text, entry);
+      entries.push(entry);
+    }
+
+    const ref = `${decodeName}(${entry.keyExpr})`;
+    return { type: 'raw', value: ref, raw: ref };
+  });
+
+  if (!entries.length) return { tokens: transformed, prefix: '' };
+
+  const tableEntries = entries.map((entry) =>
+    `[${entry.keyExpr}]={"${entry.escaped}",${entry.key1},${entry.key2},${entry.inverse},${entry.rotation}}`
+  ).join(',');
+
+  const prefix = [
+    `local ${poolName}={${tableEntries}}`,
+    `local ${decodeName}=function(k)local v=${poolName}[k]if not v then return nil end local t=v[1]local k1=v[2]local k2=v[3]local inv=v[4]local rot=v[5]local n=#t local s=""for z=0,n-1 do local p=((z-rot)%n)+1 local j=n-p+1 local idx=z%256 local a=(string.byte(t,j)-k2-idx)%256 local b=(a*inv)%256 local c=(b-k1-((idx*7)%256))%256 s=s..string.char(c)end return s end`,
+  ].join('\n');
+
+  return { tokens: transformed, prefix };
+}
+
+function encodeString(text) {
+  const built = buildStringPool([{ type: 'string', raw: JSON.stringify(text) }]);
+  return built.tokens[0]?.raw ?? '""';
+}function parseInteger(value) {
   const normalized = value.replace(/_/g, '');
   if (/^0[xX][0-9a-fA-F]+$/.test(normalized)) return parseInt(normalized.slice(2), 16);
   if (/^[0-9]+$/.test(normalized)) return Number(normalized);
@@ -284,6 +355,10 @@ function containsCompatibilitySensitiveCode(source) {
   return /\b(coroutine|loadstring|load)\s*\(|\b(getfenv|setfenv)\b|\b_ENV\b|\bsetmetatable\b|\bgetmetatable\b|\bdebug\b|\b__index\b|\b__newindex\b/i.test(source);
 }
 
+function applyStringPoolToSource(tokens) {
+  return buildStringPool(tokens);
+}
+
 export function obfuscateLuaV11(source, options = {}) {
   const text = String(source ?? '');
   const sourceBytes = new TextEncoder().encode(text).byteLength;
@@ -294,6 +369,8 @@ export function obfuscateLuaV11(source, options = {}) {
   const minify = options.minify !== false;
   const keepComments = options.keepComments === true;
   let tokens = tokenize(text, { keepComments });
+  const pooled = applyStringPoolToSource(tokens);
+  tokens = pooled.tokens;
 
   // Compatibility-first: do not rewrite or wrap control-flow structures.
   // The former implementation could alter return/yield/loop semantics without a visible console error.
@@ -303,14 +380,6 @@ export function obfuscateLuaV11(source, options = {}) {
   if (!compatibilityMode && options.mangleNames !== false) tokens = conservativeMangle(tokens);
 
   tokens = tokens.map((token) => {
-    if (token.type === 'string') {
-      const encoded = encodeString(decodeQuotedLuaString(token.raw));
-      return { type: 'raw', value: encoded, raw: encoded };
-    }
-    if (token.type === 'long_string') {
-      const encoded = encodeString(decodeLongLuaString(token.raw));
-      return { type: 'raw', value: encoded, raw: encoded };
-    }
     if (token.type === 'number' && !compatibilityMode) {
       const encoded = encodeNumber(token.value);
       return { type: 'raw', value: encoded, raw: encoded };
@@ -319,9 +388,9 @@ export function obfuscateLuaV11(source, options = {}) {
   });
 
   const rendered = renderTokens(tokens, { minify, keepComments }).trim();
-  // The requested human-readable watermark is the only header emitted for new payloads.
-  // OBFUSCATION_MARKER now aliases this watermark; legacy marker detection remains in the contract.
-  const code = `${OBFUSCATION_WATERMARK}\n${rendered}`;
+  // Keep the watermark for legacy detection; detailed profile metadata stays outside the payload.
+  const body = pooled.prefix ? `${pooled.prefix}\n${rendered}` : rendered;
+  const code = `${OBFUSCATION_WATERMARK}\n${body}`;
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
@@ -333,7 +402,9 @@ export function obfuscateLuaV11(source, options = {}) {
     compatibilityMode,
     transforms: {
       strings: true,
-      stringLayers: 3,
+      stringLayers: 5,
+      stringPool: true,
+      numericVariations: true,
       numbers: !compatibilityMode,
       mangleNames: !compatibilityMode,
       controlFlow: false,
