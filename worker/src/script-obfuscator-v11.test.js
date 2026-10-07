@@ -109,9 +109,9 @@ describe('pooled string expressions in shorthand calls', () => {
     expect(result.code).not.toContain('require __frezen_sd');
     expect(result.code).not.toContain('print __frezen_sd');
     expect(result.code).not.toContain(':GetService __frezen_sd');
-    expect(result.code).toContain('require (__frezen_sd');
-    expect(result.code).toContain('print (__frezen_sd');
-    expect(result.code).toContain(':GetService (__frezen_sd');
+    expect(result.code).toContain('require(__frezen_sd');
+    expect(result.code).toContain('print(__frezen_sd');
+    expect(result.code).toContain(':GetService(__frezen_sd');
   });
 });
 
