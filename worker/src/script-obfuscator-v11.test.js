@@ -93,6 +93,15 @@ describe('Lua 5.1 generated-output compatibility', () => {
 });
 
 
+describe('renderer lexical boundaries', () => {
+  it('separates Lua keywords from generated pooled string calls', () => {
+    const source = 'local ready = true\nif ready and "Frezen" then print("Frezen") end';
+    const result = obfuscateLuaV11(source);
+    expect(result.code).not.toContain('and__frezen_sd');
+    expect(result.code).toContain('and __frezen_sd');
+  });
+});
+
 describe('randomized string pool', () => {
   it('deduplicates repeated strings while hiding plaintext and varying the pool', () => {
     const source = 'local first = "https://example.com"\nlocal second = "https://example.com"\nprint(first, second)';
