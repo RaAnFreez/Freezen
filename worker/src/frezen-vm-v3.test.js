@@ -72,6 +72,12 @@ describe('Frezen VM v3', () => {
     expect(() => compileFrezenVmV3('goto nope\n::nope::')).toThrow(/VM_V3_PARSE_FAILED:/);
   });
 
+  it('emits callable-friendly runtime dispatch', () => {
+    const result = compileFrezenVmV3('print(type(print))');
+    expect(result.code).toContain('FREZEN_VM_V3_CALL_NONFUNCTION:nil');
+    expect(result.code).toContain('getfenv');
+  });
+
   it('executes core Lua semantics in the Luau integration runtime', () => {
     const runtime = process.env.FREZEN_LUA_RUNTIME;
     if (!runtime) return;
