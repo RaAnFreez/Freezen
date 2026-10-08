@@ -63,7 +63,7 @@ describe('Frezen VM v2', () => {
   it('allocates unique chunk keys for large payloads', () => {
     const source = 'local x=1\\n' + 'return x\\n'.repeat(5000);
     const result = compileFrezenVmV2(source, { chunkSize: 24 });
-    const keys = [...result.code.matchAll(/\\[(\\d+)\\]=\\{/g)].map((match) => match[1]);
+    const keys = [...result.code.matchAll(/\[(\d+)\]=\{/g)].map((match) => match[1]);
     expect(keys.length).toBe(result.chunkCount);
     expect(new Set(keys).size).toBe(result.chunkCount);
   });
