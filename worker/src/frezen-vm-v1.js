@@ -13,11 +13,13 @@ export const FREZEN_VM_PROFILE = Object.freeze({
 });
 
 export const MAX_VM_SOURCE_BYTES = 3 * 1024 * 1024;
-const CHECKSUM_MOD = 4294967291;
+const CHECKSUM_MOD = 65521;
+const CHECKSUM_SEED = 17;
+const CHECKSUM_MULTIPLIER = 131;
 
 function sourceChecksum(bytes) {
-  let hash = 2166136261;
-  for (const byte of bytes) hash = (hash * 16777619 + byte) % CHECKSUM_MOD;
+  let hash = CHECKSUM_SEED;
+  for (const byte of bytes) hash = (hash * CHECKSUM_MULTIPLIER + byte) % CHECKSUM_MOD;
   return hash;
 }
 
@@ -122,8 +124,17 @@ export function compileFrezenVm(source, options = {}) {
 
   const expectedLength = sourceBytes.byteLength;
   const expectedChecksum = sourceChecksum(Array.from(sourceBytes));
-  const integrity = `local ${randomName('__frezen_len')}=${expectedLength} local ${randomName('__frezen_sum')}=${expectedChecksum}`;
-  const code = `${OBFUSCATION_WATERMARK}\n${prefix}`;
+  const expectedLengthName = randomName('__frezen_len');
+  const expectedChecksumName = randomName('__frezen_sum');
+  const checksumName = randomName('__frezen_chk');
+  const scanIndexName = randomName('__frezen_scan');
+  const integrity = `local ${expectedLengthName}=${expectedLength} local ${expectedChecksumName}=${expectedChecksum}`;
+  const execution = prefix[prefix.length - 1];
+  prefix[prefix.length - 1] = execution.replace(
+    `local ${loaderName}=loadstring or load`,
+    `if #${sourceName}~=${expectedLengthName} then error("FREZEN_VM_PAYLOAD_CORRUPTED_LEN") end local ${checksumName}=${CHECKSUM_SEED} for ${scanIndexName}=1,#${sourceName} do ${checksumName}=(${checksumName}*${CHECKSUM_MULTIPLIER}+string.byte(${sourceName},${scanIndexName}))%${CHECKSUM_MOD} end if ${checksumName}~=${expectedChecksumName} then error("FREZEN_VM_PAYLOAD_CORRUPTED_SUM") end local ${loaderName}=loadstring or load`
+  );
+  const code = `${OBFUSCATION_WATERMARK}\n${integrity}\n${prefix.join('\n')}`;
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_VM_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
