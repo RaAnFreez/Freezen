@@ -267,7 +267,8 @@ class Compiler {
   compile(source) {
     let ast;
     try {
-      const parserSource = normalizeLuauCompoundAssignments(source);\n      ast = luaparse.parse(parserSource, { luaVersion: FREZEN_VM_V3_LUA_VERSION, comments: false, scope: false, locations: false, ranges: false, wait: false });
+      const parserSource = normalizeLuauCompoundAssignments(source);
+ast = luaparse.parse(parserSource, { luaVersion: FREZEN_VM_V3_LUA_VERSION, comments: false, scope: false, locations: false, ranges: false, wait: false });
     } catch (error) {
       const message = String(error?.message ?? error);
       throw new Error('VM_V3_PARSE_FAILED:' + message.slice(0, 240));
