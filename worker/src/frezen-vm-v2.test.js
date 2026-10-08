@@ -15,10 +15,11 @@ describe('Frezen VM v2', () => {
     const result = compileFrezenVmV2('local url = "https://example.com/test"\nprint(url)');
     expect(result.code.startsWith(OBFUSCATION_WATERMARK + '\n')).toBe(true);
     expect(result.code).not.toContain('https://example.com/test');
-    expect(result.code).toContain('string.find');
+    expect(result.code).not.toContain('string.find');
     expect(result.code).toContain('string.char');
     expect(result.code).toContain('loadstring or load');
     expect(result.code).not.toContain('string.byte');
+    expect(result.code).not.toContain('math.floor');
     expect(result.code).not.toContain('FREZEN_VM_PAYLOAD_CORRUPTED_SUM');
     expect(result.code).not.toContain('FREZEN_VM_PAYLOAD_CORRUPTED_LEN');
     expect(result.code).not.toContain('#{');
