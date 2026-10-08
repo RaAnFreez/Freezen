@@ -187,9 +187,9 @@ function variedNumber(value) {
 }
 
 const READABLE_STRING_PATTERNS = [
-  /^https?:\\/\\//i,
-  /^rbxasset(?:id)?:\\/\\//i,
-  /^rbxgameasset:\\/\\//i,
+  /^https?:\/\//i,
+  /^rbxasset(?:id)?:\/\//i,
+  /^rbxgameasset:\/\//i,
 ];
 
 function shouldPreserveReadableString(text, options = {}) {
