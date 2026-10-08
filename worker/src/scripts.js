@@ -185,7 +185,8 @@ export async function updateScriptVersionSource(request, env, requestId, json, a
   let body;
   try { body = await request.json(); } catch { return bad(json, requestId, 'INVALID_JSON'); }
   const source = String(body?.source ?? '');
-  const protectionMode = normalizeProtectionMode(body?.protection_mode);
+  const requestedProtectionMode = body?.protection_mode;
+  let protectionMode = normalizeProtectionMode(requestedProtectionMode);
   if (!source.trim()) return bad(json, requestId, 'SOURCE_REQUIRED');
   if (isFrezenObfuscated(source)) return bad(json, requestId, 'SOURCE_MUST_BE_PLAIN_LUA');
   const sourceBytes = new TextEncoder().encode(source).byteLength;
@@ -195,8 +196,9 @@ export async function updateScriptVersionSource(request, env, requestId, json, a
     if (protectionMode === 'vm-v1' && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V1_DISABLED', 409);
     const access = await env.DB.prepare('SELECT s.id FROM scripts s JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 AND sv.owner_id=?2 LIMIT 1').bind(scriptId, auth?.user_id).first();
     if (!access) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
-    const row = await env.DB.prepare('SELECT sv.id,sv.version,sv.release_notes,sf.id AS file_id FROM script_versions sv JOIN script_files sf ON sf.script_version_id=sv.id WHERE sv.id=?1 AND sv.script_id=?2 LIMIT 1').bind(versionId, scriptId).first();
+    const row = await env.DB.prepare('SELECT sv.id,sv.version,sv.release_notes,sf.id AS file_id,sf.content AS existing_content FROM script_versions sv JOIN script_files sf ON sf.script_version_id=sv.id WHERE sv.id=?1 AND sv.script_id=?2 LIMIT 1').bind(versionId, scriptId).first();
     if (!row) return bad(json, requestId, 'SCRIPT_VERSION_NOT_FOUND', 404);
+    if (requestedProtectionMode === undefined) protectionMode = isFrezenVm(row.existing_content) ? 'vm-v1' : 'source-v11';
     let obfuscated;
     try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) {
       const reason = String(error?.message ?? error);
@@ -330,7 +332,7 @@ export async function getScript(request, env, requestId, json, scriptId) {
           sha256: row.sha256,
           obfuscation_verified: verified,
           obfuscation_marker: verified ? OBFUSCATION_MARKER : 'marker-missing',
-          profile: verified ? OBFUSCATION_PROFILE : { version: 'legacy', status: 'unverified' },
+          profile: verified ? (isFrezenVm(row.content) ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE) : { version: 'legacy', status: 'unverified' },
           content: row.content,
         },
         request_id: requestId,
