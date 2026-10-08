@@ -273,7 +273,7 @@ export function compileFrezenVmV3(source) {
 
   const names = runtimeNames();
   const code = OBFUSCATION_WATERMARK + '\n' + [
-    `local ${names.P}={${constants.map((v) => v.t === 'b' ? `{2,${v.v}}` : v.t === 'z' ? '{3}' : `{1,"${v.value}",${v.add},${v.step},${v.length}}`).join(',')}}`,
+    `local ${names.P}={${constants.map((v) => v.t === 'b' ? `{2,${v.v}}` : v.t === 'z' ? '{3}' : `{${v.t === 'n' ? 4 : 1},"${v.value}",${v.add},${v.step},${v.length}}`).join(',')}}`,
     `local ${names.K}=${luaLiteral(program)}`,
     `local ${names.E}={p=nil,v={},h={},a={n=0}}`,
     `local ${names.G}={}`,
@@ -286,7 +286,7 @@ export function compileFrezenVmV3(source) {
     `for j=1,n do local c=string.byte(a,(j-1)*2+1); local d=string.byte(a,(j-1)*2+2); local x=0`,
     `local function dg(z) for q=1,#${JSON.stringify(ALPHABET)} do if string.byte(${JSON.stringify(ALPHABET)},q)==z then return q-1 end end error("FREZEN_VM_V3_CONST") end`,
     `x=dg(c)*16+dg(d); x=(x-add-(((j-1)*step)%256))%256; out[#out+1]=string.char(x) end`,
-    `return table.concat(out)`,
+    `local text=table.concat(out); if e[1]==4 then return tonumber(text) end return text`,
     `end`,
     `local function ${names.X}(e,n)`,
     `local q=e; while q do if q.h[n] then return q end q=q.p end return nil`,
