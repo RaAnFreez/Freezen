@@ -48,7 +48,7 @@ describe('Frezen VM v3', () => {
       'end',
       'local x = use { value = 7 }',
       'print(x)',
-    ].join('\\n'));
+    ].join('\n'));
     expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
     expect(result.code).not.toContain('VM_V3_COMPILE_FAILED:(node.arguments || []).map is not a function');
   });
