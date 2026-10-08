@@ -15,6 +15,7 @@ export const FREZEN_VM_V3_PROFILE = Object.freeze({
 });
 
 export const MAX_VM_V3_SOURCE_BYTES = 2 * 1024 * 1024;
+export const FREZEN_VM_V3_LUA_VERSION = '5.1';
 
 const ALPHABET = '0123456789ABCDEFGHJKLMNPQRTUVWXYZ';
 const OPS = Object.freeze({
@@ -97,7 +98,7 @@ class Compiler {
   compile(source) {
     let ast;
     try {
-      ast = luaparse.parse(source, { luaVersion: '5.3', comments: false, scope: false, locations: false, ranges: false, wait: false });
+      ast = luaparse.parse(source, { luaVersion: FREZEN_VM_V3_LUA_VERSION, comments: false, scope: false, locations: false, ranges: false, wait: false });
     } catch (error) {
       const message = String(error?.message ?? error);
       throw new Error('VM_V3_PARSE_FAILED:' + message.slice(0, 240));
