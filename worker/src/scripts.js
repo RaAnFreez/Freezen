@@ -158,7 +158,8 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
       obfuscated = compileProtectedLua(parsed.content, parsed.protectionMode);
     } catch (error) {
       const reason = String(error?.message ?? error);
-      return bad(json, requestId, reason === 'OBFUSCATED_LUA_TOO_LARGE' ? 'OBFUSCATED_LUA_TOO_LARGE' : 'OBFUSCATION_FAILED', reason === 'OBFUSCATED_LUA_TOO_LARGE' ? 413 : 422);
+      const compileError = reason.startsWith('VM_V3_') ? reason : 'OBFUSCATION_FAILED';
+      return bad(json, requestId, compileError, reason === 'OBFUSCATED_LUA_TOO_LARGE' ? 413 : 422, compileError === 'OBFUSCATION_FAILED' ? undefined : { protection_mode: parsed.protectionMode });
     }
     const sourceSha256 = await sha256Hex(parsed.content);
     const payloadSha256 = await sha256Hex(obfuscated.code);
