@@ -26,11 +26,10 @@ const OPS = Object.freeze({
 
 const BIN_OPS = Object.freeze({
   '+': 1, '-': 2, '*': 3, '/': 4, '%': 5, '^': 6, '..': 7,
-  '==': 8, '~=': 9, '<': 10, '<=': 11, '>': 12, '>=': 13,
-  '//': 14, '&': 15, '|': 16, '~': 17, '<<': 18, '>>': 19,
+  '==': 8, '~=': 9, '<': 10, '<=': 11, '>': 12, '>=': 13, '//': 14,
 });
 const LOGIC_OPS = Object.freeze({ and: 1, or: 2 });
-const UNARY_OPS = Object.freeze({ '-': 1, '#': 2, not: 3, '~': 4 });
+const UNARY_OPS = Object.freeze({ '-': 1, '#': 2, not: 3 });
 
 const rint = (min = 1000, max = 999999999) =>
   Math.floor(min + Math.random() * (max - min + 1));
@@ -257,27 +256,14 @@ export function compileFrezenVmV3(source) {
     throw new Error(reason.startsWith('VM_V3_') ? reason : 'VM_V3_COMPILE_FAILED:' + reason);
   }
 
-  // Shuffle constant indices without exposing the original source in the payload.
-  const original = compiled.constants;
-  const order = original.map((_, i) => i).sort(() => Math.random() - 0.5);
-  const remap = new Map(order.map((old, next) => [old, next]));
-  const rewrite = (node) => {
-    if (!Array.isArray(node)) return node;
-    if (typeof node[0] !== 'number') return node.map(rewrite);
-    const op = node[0];
-    if ((op === OPS.CONST || op === OPS.VAR || op === OPS.LOCAL || op === OPS.NUMFOR || op === OPS.GENFOR) && typeof node[1] === 'number') {
-      return [op, remap.get(node[1]), ...node.slice(2).map(rewrite)];
-    }
-    return node.map(rewrite);
-  };
-  const program = rewrite(compiled.program);
-  const constants = order.map((old) => original[old]);
+  const program = compiled.program;
+  const constants = compiled.constants;
 
   const names = runtimeNames();
   const code = OBFUSCATION_WATERMARK + '\n' + [
     `local ${names.P}={${constants.map((v) => v.t === 'b' ? `{2,${v.v}}` : v.t === 'z' ? '{3}' : `{1,"${v.value}",${v.add},${v.step},${v.length}}`).join(',')}}`,
     `local ${names.K}=${JSON.stringify(program)}`,
-    `local ${names.E}={p=nil,v={},h={},a={}}`,
+    `local ${names.E}={p=nil,v={},h={},a={n=0}}`,
     `local ${names.N}=${JSON.stringify({ ...OPS, BC: BIN_OPS, LG: LOGIC_OPS, UN: UNARY_OPS })}`,
     `local ${names.G}={}`,
     `local function ${names.D}(i)`,
@@ -295,40 +281,40 @@ export function compileFrezenVmV3(source) {
     `end`,
     `local function ${names.Y}(e,n)`,
     `local q=e; while q do if q.h[n] then return q.v[n] end q=q.p end`,
-    `local g=rawget(_ENV,n); if g~=nil then return g end local z=rawget(_G,n); if z~=nil then return z end return nil`,
+    `local ge=rawget(_G,"_ENV"); local g=type(ge)=="table" and rawget(ge,n) or nil; if g~=nil then return g end local z=rawget(_G,n); if z~=nil then return z end return nil`,
     `end`,
-    `local function ${names.Z}(e,n,v) local q=${names.X}(e,n); if q then q.v[n]=v; return end rawset(_ENV,n,v) end`,
+    `local function ${names.Z}(e,n,v) local q=${names.X}(e,n); if q then q.v[n]=v; return end local ge=rawget(_G,"_ENV"); if type(ge)=="table" then rawset(ge,n,v) else rawset(_G,n,v) end end`,
     `local function ${names.R}(...)`,
     `local t={n=select("#",...)}; for i=1,t.n do t[i]=select(i,...) end return t`,
     `end`,
     `local function ${names.Q}(t,i) return t[i] end`,
     `local function ${names.F}(f,args)`,
     `if type(f)=="table" and f.__frezen_v3 then`,
-    `local e={p=f.e,v={},h={},a={}}`,
+    `local e={p=f.e,v={},h={},a={n=0}}`,
     `for i=1,#f.p do e.h[f.p[i]]=true; e.v[f.p[i]]=args[i] end`,
     `if f.va then local a={n=math.max(0,#args-#f.p)}; for i=#f.p+1,#args do a[i-#f.p]=args[i] end e.a=a end`,
     `local r=${names.O}(f.b,e); if r and r.k==1 then return r.v end return {}`,
     `end`,
     `if type(f)~="function" then error("FREZEN_VM_V3_CALL_NONFUNCTION") end`,
-    `local ok,a,b,c,d,e2,f2,g2,h2,i2,j2=pcall(function() return f(table.unpack(args,1,#args)) end)`,
+    `local unpacker=table.unpack or unpack; local ok,a,b,c,d,e2,f2,g2,h2,i2,j2=pcall(function() return f(unpacker(args,1,#args)) end)`,
     `if not ok then error(a) end return {n=10,[1]=a,[2]=b,[3]=c,[4]=d,[5]=e2,[6]=f2,[7]=g2,[8]=h2,[9]=i2,[10]=j2}`,
     `end`,
-    `local function ${names.T}(e,x)`,
+    `local function ${names.T}(e,x,multi)`,
     `if x[1]==${OPS.CONST} then return ${names.D}(x[2]) end`,
     `if x[1]==${OPS.VAR} then return ${names.Y}(e,${names.D}(x[2])) end`,
-    `if x[1]==${OPS.VARARG} then return setmetatable(${names.R}(table.unpack(e.a,1,e.a.n)),{__frezen_multi=true}) end`,
-    `if x[1]==${OPS.INDEX} then local b=${names.T}(e,x[2]); return b[${names.T}(e,x[3])] end`,
-    `if x[1]==${OPS.UNARY} then local a=${names.T}(e,x[3]); if x[2]==1 then return -a elseif x[2]==2 then return #a elseif x[2]==3 then return not a elseif x[2]==4 then return ~a end end`,
-    `if x[1]==${OPS.BIN} then local a=${names.T}(e,x[3]); local b=${names.T}(e,x[4]); local o=x[2]; if o==1 then return a+b elseif o==2 then return a-b elseif o==3 then return a*b elseif o==4 then return a/b elseif o==5 then return a%b elseif o==6 then return a^b elseif o==7 then return a..b elseif o==8 then return a==b elseif o==9 then return a~=b elseif o==10 then return a<b elseif o==11 then return a<=b elseif o==12 then return a>b elseif o==13 then return a>=b elseif o==14 then return math.floor(a/b) elseif o==15 then return a&b elseif o==16 then return a|b elseif o==17 then return ~a&b elseif o==18 then return a<<b elseif o==19 then return a>>b end end`,
-    `if x[1]==${OPS.LOGIC} then local a=${names.T}(e,x[3]); if x[2]==1 then return a and ${names.T}(e,x[4]) or a end return a or ${names.T}(e,x[4]) end`,
-    `if x[1]==${OPS.CALL} then local f=${names.T}(e,x[2]); local a={}; for i=1,#x[3] do a[i]=${names.T}(e,x[3][i]) end; local r=${names.F}(f,a); return setmetatable(r,{__frezen_multi=true}) end`,
-    `if x[1]==${OPS.MCALL} then local b=${names.T}(e,x[2]); local k=${names.T}(e,x[3]); local f=b[k]; local a={b}; for i=1,#x[4] do a[i+1]=${names.T}(e,x[4][i]) end; local r=${names.F}(f,a); return setmetatable(r,{__frezen_multi=true}) end`,
+    `if x[1]==${OPS.VARARG} then local unpacker=table.unpack or unpack; local r=${names.R}(unpacker(e.a,1,e.a.n or 0)); return setmetatable(r,{__frezen_multi=true}) end`,
+    `if x[1]==${OPS.INDEX} then local b=${names.T}(e,x[2],false); local k=${names.T}(e,x[3],false); return b[k] end`,
+    `if x[1]==${OPS.UNARY} then local a=${names.T}(e,x[3],false); if x[2]==1 then return -a elseif x[2]==2 then return #a elseif x[2]==3 then return not a elseif x[2]==4 then return ~a end end`,
+    `if x[1]==${OPS.BIN} then local a=${names.T}(e,x[3],false); local b=${names.T}(e,x[4],false); local o=x[2]; if o==1 then return a+b elseif o==2 then return a-b elseif o==3 then return a*b elseif o==4 then return a/b elseif o==5 then return a%b elseif o==6 then return a^b elseif o==7 then return a..b elseif o==8 then return a==b elseif o==9 then return a~=b elseif o==10 then return a<b elseif o==11 then return a<=b elseif o==12 then return a>b elseif o==13 then return a>=b elseif o==14 then return math.floor(a/b) end end`,
+    `if x[1]==${OPS.LOGIC} then local a=${names.T}(e,x[3],false); if x[2]==1 then return a and ${names.T}(e,x[4],false) or a end return a or ${names.T}(e,x[4],false) end`,
+    `if x[1]==${OPS.CALL} then local f=${names.T}(e,x[2],false); local a={}; for i=1,#x[3] do local r=${names.T}(e,x[3][i],i==#x[3]); if i==#x[3] and type(r)==\"table\" and r.__frezen_multi then for j=1,r.n do a[#a+1]=r[j] end else a[i]=r end end; local r=${names.F}(f,a); return setmetatable(r,{__frezen_multi=true}) end`,
+    `if x[1]==${OPS.MCALL} then local b=${names.T}(e,x[2],false); local k=${names.T}(e,x[3],false); local f=b[k]; local a={b}; for i=1,#x[4] do local r=${names.T}(e,x[4][i],i==#x[4]); if i==#x[4] and type(r)==\"table\" and r.__frezen_multi then for j=1,r.n do a[#a+1]=r[j] end else a[i+1]=r end end; local r=${names.F}(f,a); return setmetatable(r,{__frezen_multi=true}) end`,
     `if x[1]==${OPS.FUNC} then return {__frezen_v3=true,p=x[2],va=x[3],b=x[4],e=e} end`,
     `if x[1]==${OPS.TABLE} then local t={}; for i=1,#x[2] do local f=x[2][i]; if f[1]==1 then t[${names.D}(f[2])]=${names.T}(e,f[3]) elseif f[1]==2 then t[${names.T}(e,f[2])]=${names.T}(e,f[3]) else t[#t+1]=${names.T}(e,f[2]) end end return t end`,
     `error("FREZEN_VM_V3_BAD_EXPR")`,
     `end`,
     `local function ${names.V}(e,l,expand)`,
-    `local out={}; local n=#l; for i=1,n do local r=${names.T}(e,l[i]); if i==n and expand and type(r)=="table" and r.__frezen_multi then for j=1,r.n do out[#out+1]=r[j] end else out[#out+1]=r end end; return out`,
+    `local out={}; local n=#l; for i=1,n do local r=${names.T}(e,l[i],i==n and expand); if i==n and expand and type(r)=="table" and r.__frezen_multi then for j=1,r.n do out[#out+1]=r[j] end else out[#out+1]=r end end; return out`,
     `end`,
     `local function ${names.U}(e,t)`,
     `if t[1]==1 then return {k=1,e=e,n=${names.D}(t[2])} end local b=${names.T}(e,t[2]); local k=${names.T}(e,t[3]); return {k=2,b=b,n=k}`,
@@ -340,11 +326,11 @@ export function compileFrezenVmV3(source) {
     `elseif op==${OPS.CALL_STMT} then ${names.T}(e,s[2])`,
     `elseif op==${OPS.RETURN} then return {k=1,v=${names.V}(e,s[2],true)}`,
     `elseif op==${OPS.BREAK} then return {k=2}`,
-    `elseif op==${OPS.DO} then local r=${names.O}(s[2],{p=e,v={},h={},a={}}); if r then if r.k==1 or r.k==2 then return r end end`,
+    `elseif op==${OPS.DO} then local r=${names.O}(s[2],{p=e,v={},h={},a={n=0}}); if r then if r.k==1 or r.k==2 then return r end end`,
     `elseif op==${OPS.IF} then local done=false; for i=1,#s[2] do if ${names.T}(e,s[2][i][1]) then local r=${names.O}(s[2][i][2],{p=e,v={},h={},a={}}); if r then return r end; done=true; break end end; if not done and #s[3]>0 then local r=${names.O}(s[3],{p=e,v={},h={},a={}}); if r then return r end end`,
     `elseif op==${OPS.WHILE} then while ${names.T}(e,s[2]) do local r=${names.O}(s[3],{p=e,v={},h={},a={}}); if r and r.k==1 then return r elseif r and r.k==2 then break end end`,
     `elseif op==${OPS.REPEAT} then repeat local r=${names.O}(s[2],{p=e,v={},h={},a={}}); if r and r.k==1 then return r elseif r and r.k==2 then break end until ${names.T}(e,s[3])`,
-    `elseif op==${OPS.NUMFOR} then local a=${names.T}(e,s[3]); local z=${names.T}(e,s[4]); local st=${names.T}(e,s[5]); local q=a; while (st>=0 and q<=z) or (st<0 and q>=z) do local le={p=e,v={},h={},a={}}; local n=${names.D}(s[2]); le.h[n]=true; le.v[n]=q; local r=${names.O}(s[6],le); if r and r.k==1 then return r elseif r and r.k==2 then break end; q=q+st end`,
+    `elseif op==${OPS.NUMFOR} then local a=${names.T}(e,s[3]); local z=${names.T}(e,s[4]); local st=${names.T}(e,s[5]); local q=a; while (st>=0 and q<=z) or (st<0 and q>=z) do local le={p=e,v={},h={},a={n=0}}; local n=${names.D}(s[2]); le.h[n]=true; le.v[n]=q; local r=${names.O}(s[6],le); if r and r.k==1 then return r elseif r and r.k==2 then break end; q=q+st end`,
     `elseif op==${OPS.GENFOR} then local it=${names.V}(e,s[3],true); local f=it[1]; local state=it[2]; local ctrl=it[3]; while true do local args={state,ctrl}; local rr=${names.F}(f,args); if rr[1]==nil then break end; ctrl=rr[1]; local le={p=e,v={},h={},a={}}; for i=1,#s[2] do local n=${names.D}(s[2][i]); le.h[n]=true; le.v[n]=rr[i] end; local r=${names.O}(s[4],le); if r and r.k==1 then return r elseif r and r.k==2 then break end end`,
     `elseif op==${OPS.FUNCDECL} then local f={__frezen_v3=true,p=s[4],va=s[5],b=s[6],e=e}; local target=s[3]; if target[1]==1 then local n=${names.D}(target[2]); if s[2] then e.h[n]=true end; ${names.Z}(e,n,f) else local b=${names.T}(e,target[2]); local k=${names.T}(e,target[3]); b[k]=f end`,
     `end end return nil`,
