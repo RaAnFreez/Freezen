@@ -22,6 +22,7 @@ describe('Frezen VM v1', () => {
     expect(result.code).toContain('loadstring or load');
     expect(result.code).toContain('FREZEN_VM_PAYLOAD_CORRUPTED_LEN');
     expect(result.code).toContain('%65521');
+    expect(result.code).toContain('if __frezen_b<0 then __frezen_b=__frezen_b+256 end');
     expect(result.code).not.toContain(']=["');
     expect(result.code).toMatch(/\]\=\{\d+,\d+,\d+/);
     expect(isFrezenVm(result.code)).toBe(true);
