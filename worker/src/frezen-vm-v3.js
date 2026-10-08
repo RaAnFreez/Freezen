@@ -123,15 +123,18 @@ function rewriteCompoundTarget(lhs, operator, rhs, source, counter) {
       const base = memberMatch[1].trim();
       if (!base) return null;
       const temp = nextCompoundTemp(source, counter);
-      const op = operator === "//=" ? null : COMPOUND_OPERATOR_MAP[operator];
-      if (!op) return null;
+      const key = JSON.stringify(memberMatch[2]);
+      const left = temp.name + "[" + key + "]";
+      const value = operator === "//="
+        ? "math.floor(" + left + " / " + rhs + ")"
+        : left + " " + COMPOUND_OPERATOR_MAP[operator] + " " + rhs;
+      if (operator !== "//=" && !COMPOUND_OPERATOR_MAP[operator]) return null;
       return {
         counter: temp.counter,
         text: [
           "do",
           "local " + temp.name + " = " + base,
-          temp.name + "[" + JSON.stringify(memberMatch[2]) + "] = " +
-            temp.name + "[" + JSON.stringify(memberMatch[2]) + "] " + op + " " + rhs,
+          left + " = " + value,
           "end",
         ].join("; "),
       };
@@ -146,16 +149,18 @@ function rewriteCompoundTarget(lhs, operator, rhs, source, counter) {
 
       const tempBase = nextCompoundTemp(source, counter);
       const tempKey = nextCompoundTemp(source, tempBase.counter);
-      const op = operator === "//=" ? null : COMPOUND_OPERATOR_MAP[operator];
-      if (!op) return null;
+      const left = tempBase.name + "[" + tempKey.name + "]";
+      const value = operator === "//="
+        ? "math.floor(" + left + " / " + rhs + ")"
+        : left + " " + COMPOUND_OPERATOR_MAP[operator] + " " + rhs;
+      if (operator !== "//=" && !COMPOUND_OPERATOR_MAP[operator]) return null;
       return {
         counter: tempKey.counter,
         text: [
           "do",
           "local " + tempBase.name + " = " + base,
           "local " + tempKey.name + " = " + key,
-          tempBase.name + "[" + tempKey.name + "] = " +
-            tempBase.name + "[" + tempKey.name + "] " + op + " " + rhs,
+          left + " = " + value,
           "end",
         ].join("; "),
       };
