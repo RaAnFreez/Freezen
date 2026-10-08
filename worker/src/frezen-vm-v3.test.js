@@ -31,7 +31,8 @@ describe('Frezen VM v3', () => {
   });
 
   it('rejects syntax that the virtual runtime deliberately does not emulate', () => {
-    expect(() => compileFrezenVmV3('goto nope\n::nope::')).toThrow(/VM_V3_UNSUPPORTED/);
+    expect(() => compileFrezenVmV3('local x = 1 & 2')).toThrow(/VM_V3_UNSUPPORTED/);
+    expect(() => compileFrezenVmV3('goto nope\n::nope::')).toThrow(/VM_V3_PARSE_FAILED/);
     expect(() => compileFrezenVmV3('local x = 1 & 2')).toThrow(/VM_V3_UNSUPPORTED/);
   });
 
@@ -56,7 +57,9 @@ describe('Frezen VM v3', () => {
 
     const run = spawnSync(runtime, [file], { encoding: 'utf8', timeout: 15000 });
     try {
-      expect(run.status).toBe(0);
+      if (run.status !== 0) {
+        throw new Error([`status=${run.status}`, `stdout=${run.stdout}`, `stderr=${run.stderr}`].join('\\n'));
+      }
       expect(run.stdout.trim().split(/\r?\n/).at(-1)).toBe('12');
       expect(run.stdout).not.toContain('FREZEN_SECRET_RUNTIME_ONLY');
     } finally {
