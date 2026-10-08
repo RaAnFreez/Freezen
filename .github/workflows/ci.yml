@@ -47,3 +47,11 @@ jobs:
 
       - name: Build workspace packages
         run: npm run build:all
+
+      - name: Verify dashboard bundle is deployable
+        run: |
+          rm -rf worker/public
+          mkdir -p worker/public
+          cp -R dashboard/dist/. worker/public/
+          test -f worker/public/index.html
+          grep -R -q 'vm-v3' worker/public
