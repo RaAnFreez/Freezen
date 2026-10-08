@@ -31,7 +31,7 @@ function modularInverse256(value) {
 }
 
 function escapeDecimalBytes(bytes) {
-  return bytes.map((byte) => '\\\\' + String(byte).padStart(3, '0')).join('');
+  return bytes.map((byte) => '\\' + String(byte).padStart(3, '0')).join('');
 }
 
 function encodeChunk(bytes) {
