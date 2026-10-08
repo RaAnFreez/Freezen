@@ -17,7 +17,8 @@ describe('Frezen VM v1', () => {
     expect(result.code.split(OBFUSCATION_WATERMARK).length - 1).toBe(1);
     expect(result.code).not.toContain('https://example.com/test');
     expect(result.code).toContain('while true do');
-    expect(result.code).toContain('string.byte');
+    expect(result.code).toContain('string.char');
+    expect(result.code).not.toContain('string.byte');
     expect(result.code).toContain('loadstring or load');
     expect(result.code).not.toContain(']=["');
     expect(result.code).toMatch(/\]\=\{\d+,\d+,\d+/);
