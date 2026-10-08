@@ -157,7 +157,7 @@ export function compileFrezenVmV2(source, options = {}) {
     `while true do local ${instructionName}=${programName}[${pcName}]if not ${instructionName}then break end local ${opName}=${instructionName}[1]if ${opName}==${opcodeDecode} then ${bufferName}[#${bufferName}+1]=${decodeName}(${instructionName}[2])elseif ${opName}==${opcodeExecute} then local ${sourceName}=table.concat(${bufferName})local ${loaderName}=loadstring or load if type(${loaderName})~="function"then error("FREZEN_VM_V2_LOAD_UNAVAILABLE")end local ${functionName},${errorName}=${loaderName}(${sourceName})if type(${functionName})~="function"then error("FREZEN_VM_V2_COMPILE_FAILED:"..tostring(${errorName}))end local ${okName},${resultName}=pcall(${functionName})if not ${okName}then error("FREZEN_VM_V2_RUNTIME_FAILED:"..tostring(${resultName}))end return ${resultName}elseif ${opName}==${opcodeNop} then end ${pcName}=${pcName}+1 end`,
   ].join('\n');
 
-  const code = OBFUSCATION_WATERMARK + '\n' + prefix.join('\n');
+  const code = OBFUSCATION_WATERMARK + '\n' + prefix;
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_VM_V2_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
