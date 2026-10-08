@@ -63,6 +63,13 @@ function constKey(type, value) {
   return type === 's' ? 's:' + value : type === 'n' ? 'n:' + String(value) : type + ':' + String(value);
 }
 
+function memberName(node) {
+  const value = node?.identifier ?? node?.index;
+  return typeof value === 'object' && value !== null
+    ? String(value.name ?? value.value ?? '')
+    : String(value ?? '');
+}
+
 class Compiler {
   constructor() {
     this.constants = [];
@@ -109,7 +116,7 @@ class Compiler {
       case 'NilLiteral': return [OPS.CONST, this.nil()];
       case 'VarargLiteral': return [OPS.VARARG];
       case 'IndexExpression': return [OPS.INDEX, this.expr(node.base), this.expr(node.index)];
-      case 'MemberExpression': return [OPS.INDEX, this.expr(node.base), [OPS.CONST, this.string(node.identifier || node.index)]];
+      case 'MemberExpression': return [OPS.INDEX, this.expr(node.base), [OPS.CONST, this.string(memberName(node))]];
       case 'UnaryExpression':
         if (UNARY_OPS[node.operator] === undefined) throw new Error('VM_V3_UNSUPPORTED_UNARY:' + node.operator);
         return [OPS.UNARY, UNARY_OPS[node.operator], this.expr(node.argument)];
@@ -123,7 +130,7 @@ class Compiler {
         if (node.isMethod) {
           const base = node.base?.type === 'MemberExpression' ? node.base.base : node.base;
           const key = node.base?.type === 'MemberExpression'
-            ? this.expr(node.base.identifier ? { type: 'StringLiteral', value: node.base.identifier } : node.base.index)
+            ? [OPS.CONST, this.string(memberName(node.base))]
             : [OPS.CONST, this.nil()];
           return [OPS.MCALL, this.expr(base), key, (node.arguments || []).map((arg) => this.expr(arg))];
         }
@@ -149,7 +156,7 @@ class Compiler {
   target(node) {
     if (node.type === 'Identifier') return [1, this.string(node.name)];
     if (node.type === 'IndexExpression') return [2, this.expr(node.base), this.expr(node.index)];
-    if (node.type === 'MemberExpression') return [2, this.expr(node.base), [OPS.CONST, this.string(node.identifier || node.index)]];
+    if (node.type === 'MemberExpression') return [2, this.expr(node.base), [OPS.CONST, this.string(memberName(node))]];
     throw new Error('VM_V3_UNSUPPORTED_TARGET:' + node.type);
   }
 
@@ -210,7 +217,7 @@ class Compiler {
   targetFunction(node) {
     if (node?.type === 'Identifier') return [1, this.string(node.name)];
     if (node?.type === 'MemberExpression') {
-      return [2, this.expr(node.base), [OPS.CONST, this.string(node.identifier || node.index)]];
+      return [2, this.expr(node.base), [OPS.CONST, this.string(memberName(node))]];
     }
     throw new Error('VM_V3_UNSUPPORTED_FUNCTION_TARGET:' + node?.type);
   }
