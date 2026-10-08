@@ -17,10 +17,11 @@ describe('Frezen VM v2', () => {
     expect(result.code.split(OBFUSCATION_WATERMARK).length - 1).toBe(1);
     expect(result.code).not.toContain('https://example.com/test');
     expect(result.code).not.toContain('string.find');
+    expect(result.code).not.toContain('string.sub');
+    expect(result.code).toContain('string.byte');
     expect(result.code).toContain('string.char');
     expect(result.code).toContain('loadstring or load');
-    expect(result.code).not.toContain('string.byte');
-    expect(result.code).not.toContain('math.floor');
+        expect(result.code).not.toContain('math.floor');
     expect(result.code).not.toContain('FREZEN_VM_PAYLOAD_CORRUPTED_SUM');
     expect(result.code).not.toContain('FREZEN_VM_PAYLOAD_CORRUPTED_LEN');
     expect(result.code).toContain('out[#out+1]');
@@ -54,7 +55,7 @@ describe('Frezen VM v2', () => {
     expect(wrapper).not.toContain(')then ');
     expect(wrapper).not.toContain('}if ');
     expect(wrapper).not.toContain('}then ');
-    expect(wrapper).toContain('local i=1');
+    expect(wrapper).toMatch(/local [A-Za-z_][A-Za-z0-9_]*=1\n/);
     expect(wrapper).toContain('if not ');
     expect(wrapper).toContain('elseif ');
   });

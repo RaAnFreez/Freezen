@@ -42,7 +42,7 @@ function shuffle(values) {
 }
 
 function createAlphabet() {
-  return shuffle([...SAFE_ALPHABET_POOL]).slice(0, 64).join('');
+  return shuffle([...SAFE_ALPHABET_POOL]).slice(0, 16).join('');
 }
 
 function modularInverse256(value) {
@@ -111,7 +111,6 @@ export function compileFrezenVmV2(source, options = {}) {
   const poolName = randomName('__frezen_v2p');
   const programName = randomName('__frezen_v2i');
   const decodeName = randomName('__frezen_v2d');
-  const digitName = randomName('__frezen_v2g');
   const pcName = randomName('__frezen_v2pc');
   const bufferName = randomName('__frezen_v2b');
   const instructionName = randomName('__frezen_v2ins');
@@ -168,16 +167,6 @@ export function compileFrezenVmV2(source, options = {}) {
     `local ${expectedLinesName}=${sourceLineCount}`,
     `local ${actualChecksumName}=0`,
     `local ${actualLinesName}=1`,
-    `local function ${digitName}(a,c)`,
-    `  local i=1`,
-    `  while i<=#a do`,
-    `    if string.sub(a,i,i)==c then`,
-    `      return i-1`,
-    `    end`,
-    `    i=i+1`,
-    `  end`,
-    `  error("FREZEN_VM_V2_ALPHABET_ERROR")`,
-    `end`,
     `local function ${decodeName}(k)`,
     `  local e=${poolName}[k]`,
     `  if not e then`,
@@ -190,11 +179,15 @@ export function compileFrezenVmV2(source, options = {}) {
     `  local step=e[5]`,
     `  local round=e[6]`,
     `  local alphabet=e[7]`,
+    `  local digits={}`,
+    `  for ${indexName}=1,16 do`,
+    `    digits[string.byte(alphabet,${indexName})]=${indexName}-1`,
+    `  end`,
     `  local out={}`,
     `  local ${byteIndexName}=0`,
     `  for ${indexName}=1,#s,2 do`,
-    `    local ${raw1Name}=${digitName}(alphabet,string.sub(s,${indexName},${indexName}))`,
-    `    local ${raw2Name}=${digitName}(alphabet,string.sub(s,${indexName}+1,${indexName}+1))`,
+    `    local ${raw1Name}=digits[string.byte(s,${indexName})]`,
+    `    local ${raw2Name}=digits[string.byte(s,${indexName}+1)]`,
     `    local ${charName}=${raw1Name}*16+${raw2Name}`,
     `    if ${byteIndexName}<n then`,
     `      ${charName}=(${charName}-round)%256`,
