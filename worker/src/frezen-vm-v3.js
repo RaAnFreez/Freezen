@@ -76,7 +76,7 @@ class Compiler {
     const entry = type === 'b' ? { t: 'b', v: value ? 1 : 0 }
       : type === 'z' ? { t: 'z' }
       : { t: type, ...encodeBytes(Array.from(new TextEncoder().encode(String(value)))) };
-    const index = this.constants.length;
+    const index = this.constants.length + 1;
     this.constants.push(entry);
     this.constantMap.set(key, index);
     return index;
