@@ -47,20 +47,20 @@ describe('Frezen VM v3', () => {
       'end',
       'local total = add(7, 5)',
       'local t = { value = total }',
-      '_G.FREZEN_VM_TEST_RESULT = t.value',
+      'error("FREZEN_VM_TEST_RESULT:" .. tostring(t.value))',
     ].join('\n');
 
     const result = compileFrezenVmV3(source);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frezen-vm-v3-'));
     const file = path.join(dir, 'payload.lua');
-    fs.writeFileSync(file, `${result.code}\nprint(_G.FREZEN_VM_TEST_RESULT)\n`, 'utf8');
+    fs.writeFileSync(file, result.code, 'utf8');
 
     const run = spawnSync(runtime, [file], { encoding: 'utf8', timeout: 15000 });
     try {
       if (run.status !== 0) {
         throw new Error([`status=${run.status}`, `stdout=${run.stdout}`, `stderr=${run.stderr}`].join('\\n'));
       }
-      expect(run.stdout.trim().split(/\r?\n/).at(-1)).toBe('12');
+      expect(run.stderr).toContain('FREZEN_VM_TEST_RESULT:12');
       expect(run.stdout).not.toContain('FREZEN_SECRET_RUNTIME_ONLY');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
