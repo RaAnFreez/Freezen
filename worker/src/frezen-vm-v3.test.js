@@ -53,6 +53,18 @@ describe('Frezen VM v3', () => {
     expect(result.code).not.toContain('VM_V3_COMPILE_FAILED:(node.arguments || []).map is not a function');
   });
 
+  it('supports Lua 5.1 numeric for statements', () => {
+    const result = compileFrezenVmV3([
+      'local total = 0',
+      'for i = 1, 3 do',
+      '  total = total + i',
+      'end',
+      'print(total)',
+    ].join('\n'));
+    expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
+    expect(result.code).not.toContain('VM_V3_UNSUPPORTED_STATEMENT:ForNumericStatement');
+  });
+
   it('uses the Lua 5.1 source grammar for obfuscation input', () => {
     expect(FREZEN_VM_V3_LUA_VERSION).toBe('5.1');
     expect(() => compileFrezenVmV3('local x = 7 // 2')).toThrow(/VM_V3_PARSE_FAILED:/);
