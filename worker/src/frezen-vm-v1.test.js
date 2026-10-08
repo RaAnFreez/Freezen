@@ -12,7 +12,7 @@ describe('Frezen VM v1', () => {
   });
 
   it('keeps the Frezen watermark as the only watermark header', () => {
-    const result = compileFrezenVm('local url = "https://example.com/test"\\nprint(url)');
+    const result = compileFrezenVm('local url = "https://example.com/test"\nprint(url)');
     expect(result.code.startsWith(OBFUSCATION_WATERMARK + '\\n')).toBe(true);
     expect(result.code.split(OBFUSCATION_WATERMARK).length - 1).toBe(1);
     expect(result.code).not.toContain('https://example.com/test');
@@ -23,10 +23,10 @@ describe('Frezen VM v1', () => {
   });
 
   it('uses encoded chunks and randomized instruction identifiers', () => {
-    const result = compileFrezenVm('local secret = "FrezenSecret"\\nreturn secret', { chunkSize: 24 });
+    const result = compileFrezenVm('local secret = "FrezenSecret"\nreturn secret', { chunkSize: 24 });
     expect(result.chunkCount).toBeGreaterThan(1);
     expect(result.code).not.toContain('FrezenSecret');
-    expect(result.code).toMatch(/\\\\\\d{3}/);
+    expect(result.code).toMatch(/\\\d{3}/);
     expect(result.code).toMatch(/local __frezen_v[pi]/);
   });
 
