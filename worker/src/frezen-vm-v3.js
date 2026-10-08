@@ -97,7 +97,7 @@ class Compiler {
   compile(source) {
     let ast;
     try {
-      ast = luaparse.parse(source, { comments: false, scope: false, locations: false, ranges: false, wait: false });
+      ast = luaparse.parse(source, { luaVersion: '5.3', comments: false, scope: false, locations: false, ranges: false, wait: false });
     } catch (error) {
       const message = String(error?.message ?? error);
       throw new Error('VM_V3_PARSE_FAILED:' + message.slice(0, 240));

@@ -59,7 +59,7 @@ async function parseUpload(request) {
   let obfuscated;
   try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) {
     const reason = String(error?.message ?? error);
-    return { error: reason === 'OBFUSCATED_LUA_TOO_LARGE' ? 'OBFUSCATED_LUA_TOO_LARGE' : 'OBFUSCATION_FAILED' };
+    return { error: reason.startsWith('VM_V3_') ? reason : (reason === 'OBFUSCATED_LUA_TOO_LARGE' ? 'OBFUSCATED_LUA_TOO_LARGE' : 'OBFUSCATION_FAILED') };
   }
   const sourceSha256 = await sha256Hex(source);
   const outputSha256 = await sha256Hex(obfuscated.code);
