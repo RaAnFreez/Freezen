@@ -142,5 +142,5 @@ export function isFrezenVm(value) {
     && /while true do/.test(text)
     && /loadstring or load/.test(text)
     && /string\.byte/.test(text)
-    && /table\\.concat/.test(text);
+    && /table\.concat/.test(text);
 }
