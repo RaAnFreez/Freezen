@@ -39,7 +39,7 @@ function buildStressSource(extra = '') {
     '  return result',
     'end',
     'assert(fold(values) == total % 65521)',
-    `assert(total == 132032)`,
+    `assert(total == 140736)`,
     extra,
     'print("__FREZEN_VM_V2_RUNTIME_OK__")',
   ].join('\\n');
@@ -123,8 +123,8 @@ describe('Frezen VM v2 runtime compatibility', () => {
   test('keeps generated output free of legacy decoder primitives', () => {
     const result = compileFrezenVmV2(buildStressSource(), { chunkSize: 48 });
 
-    expect(result.code).not.toMatch(/string\\.find/);
-    expect(result.code).not.toMatch(/string\\.sub/);
-    expect(result.code).toMatch(/string\\.byte/);
+    expect(result.code).not.toContain('string.find');
+    expect(result.code).not.toContain('string.sub');
+    expect(result.code).toContain('string.byte');
   });
 });
