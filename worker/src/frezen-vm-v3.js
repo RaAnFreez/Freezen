@@ -136,7 +136,7 @@ function rewriteCompoundTarget(lhs, operator, rhs, source, counter) {
           "local " + temp.name + " = " + base,
           left + " = " + value,
           "end",
-        ].join("; "),
+        ].join("\n"),
       };
     }
 
@@ -162,7 +162,7 @@ function rewriteCompoundTarget(lhs, operator, rhs, source, counter) {
           "local " + tempKey.name + " = " + key,
           left + " = " + value,
           "end",
-        ].join("; "),
+        ].join("\n"),
       };
     }
 
