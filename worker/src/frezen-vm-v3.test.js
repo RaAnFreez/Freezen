@@ -89,6 +89,12 @@ describe('Frezen VM v3', () => {
     expect(() => compileFrezenVmV3('goto nope\n::nope::')).toThrow(/VM_V3_PARSE_FAILED:/);
   });
 
+  it('captures the payload execution environment for global lookup', () => {
+    const result = compileFrezenVmV3('print(type(print))');
+    expect(result.code).toContain('getfenv');
+    expect(result.code).toContain('FREZEN_VM_V3_CALL_NONFUNCTION:nil');
+  });
+
   it('emits callable-friendly runtime dispatch', () => {
     const result = compileFrezenVmV3('print(type(print))');
     expect(result.code).toContain('FREZEN_VM_V3_CALL_NONFUNCTION:nil');

@@ -441,6 +441,7 @@ function runtimeNames() {
     O: randomName('__o'),
     T: randomName('__t'),
     U: randomName('__u'),
+    W: randomName('__w'),
   };
 }
 
@@ -468,6 +469,7 @@ export function compileFrezenVmV3(source) {
     `local ${names.K}=${luaLiteral(program)}`,
     `local ${names.E}={p=nil,v={},h={},a={n=0}}`,
     `local ${names.G}={}`,
+    `local ${names.W}; do local ok,env=pcall(function() if type(getfenv)=="function" then return getfenv(0) end return nil end); if ok and type(env)=="table" then ${names.W}=env else local current=rawget(_G,"_ENV"); if type(current)=="table" then ${names.W}=current else ${names.W}=_G end end end`,
     `local ${names.F},${names.T},${names.V},${names.U},${names.O}`,
     `local function ${names.D}(i)`,
     `local e=${names.P}[i]`,
@@ -484,7 +486,7 @@ export function compileFrezenVmV3(source) {
     `end`,
     `local function ${names.Y}(e,n)`,
     `local q=e; while q do if q.h[n] then return q.v[n] end q=q.p end`,
-    `local ge=rawget(_G,"_ENV"); local g=type(ge)=="table" and rawget(ge,n) or nil; if g~=nil then return g end local z=rawget(_G,n); if z~=nil then return z end local gf=rawget(_G,"getfenv"); if type(gf)=="function" then local ok,env=pcall(gf,0); if ok and type(env)=="table" then local v=rawget(env,n); if v~=nil then return v end end end return nil`,
+    `local v=rawget(${names.W},n); if v~=nil then return v end local ge=rawget(_G,"_ENV"); if type(ge)=="table" then v=rawget(ge,n); if v~=nil then return v end end local z=rawget(_G,n); if z~=nil then return z end return nil`,
     `end`,
     `local function ${names.Z}(e,n,v) local q=${names.X}(e,n); if q then q.v[n]=v; return end local ge=rawget(_G,"_ENV"); if type(ge)=="table" then rawset(ge,n,v) else rawset(_G,n,v) end end`,
     `local function ${names.R}(...)`,
