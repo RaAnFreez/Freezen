@@ -59,6 +59,15 @@ describe('Frezen VM v2', () => {
     expect(wrapper).toContain('elseif ');
   });
 
+
+  it('allocates unique chunk keys for large payloads', () => {
+    const source = 'local x=1\\n' + 'return x\\n'.repeat(5000);
+    const result = compileFrezenVmV2(source, { chunkSize: 24 });
+    const keys = [...result.code.matchAll(/\\[(\\d+)\\]=\\{/g)].map((match) => match[1]);
+    expect(keys.length).toBe(result.chunkCount);
+    expect(new Set(keys).size).toBe(result.chunkCount);
+  });
+
   it('hides source literals and creates multiple chunks', () => {
     const result = compileFrezenVmV2('local secret = "FrezenSecret"\nreturn secret', { chunkSize: 24 });
     expect(result.chunkCount).toBeGreaterThan(1);
