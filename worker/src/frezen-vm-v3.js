@@ -194,7 +194,7 @@ class Compiler {
         return [OPS.REPEAT, this.block(node.body || []), this.expr(node.condition)];
       case 'DoStatement':
         return [OPS.DO, this.block(node.body || [])];
-      case 'NumericForStatement':
+      case 'ForNumericStatement':
         if (node.variable?.type !== 'Identifier') throw new Error('VM_V3_UNSUPPORTED_NUMFOR_VARIABLE');
         return [OPS.NUMFOR, this.string(node.variable.name), this.expr(node.start), this.expr(node.end), node.step ? this.expr(node.step) : [OPS.CONST, this.number(1)], this.block(node.body || [])];
       case 'ForGenericStatement':
