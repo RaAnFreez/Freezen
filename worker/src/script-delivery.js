@@ -140,7 +140,8 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
   if (!env.DB) return bad(json, requestId, 'DATABASE_UNAVAILABLE', 503);
   let body; try { body = await request.json(); } catch { return bad(json, requestId, 'INVALID_JSON'); }
   const source = String(body?.source ?? '');
-  const protectionMode = normalizeProtectionMode(body?.protection_mode);
+  const requestedProtectionMode = body?.protection_mode;
+  let protectionMode = normalizeProtectionMode(requestedProtectionMode);
   if (!source.trim()) return bad(json, requestId, 'SOURCE_REQUIRED');
   if (protectionMode === 'vm-v1' && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V1_DISABLED', 409);
   if (isFrezenObfuscated(source)) return bad(json, requestId, 'SOURCE_MUST_BE_PLAIN_LUA');
@@ -150,8 +151,9 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
     await ensureSchema(env);
     const script = await env.DB.prepare('SELECT id FROM delivery_scripts WHERE id=?1 LIMIT 1').bind(deliveryId).first();
     if (!script) return bad(json, requestId, 'DELIVERY_SCRIPT_NOT_FOUND', 404);
-    const row = await env.DB.prepare('SELECT v.id,v.version,v.release_notes,f.id AS file_id FROM delivery_script_versions v JOIN delivery_script_files f ON f.delivery_script_version_id=v.id WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1').bind(versionId,deliveryId).first();
+    const row = await env.DB.prepare('SELECT v.id,v.version,v.release_notes,f.id AS file_id,f.content AS existing_content FROM delivery_script_versions v JOIN delivery_script_files f ON f.delivery_script_version_id=v.id WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1').bind(versionId,deliveryId).first();
     if (!row) return bad(json, requestId, 'DELIVERY_VERSION_NOT_FOUND', 404);
+    if (requestedProtectionMode === undefined) protectionMode = isFrezenVm(row.existing_content) ? 'vm-v1' : 'source-v11';
     let obfuscated;
     try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) { const reason=String(error?.message??error); return bad(json,requestId,reason==='OBFUSCATED_LUA_TOO_LARGE'?'OBFUSCATED_LUA_TOO_LARGE':'OBFUSCATION_FAILED',reason==='OBFUSCATED_LUA_TOO_LARGE'?413:422); }
     const sourceSha256=await sha256Hex(source);
