@@ -9,8 +9,8 @@ const SAFE_GLOBALS = new Set([
 ]);
 
 export const ADVANCED_V11_PROFILE = Object.freeze({
-  version: '1.3',
-  mode: 'Maximum Multi-Layer String Pool',
+  version: '1.4',
+  mode: 'Hybrid Readable Anchors + Multi-Layer String Pool',
   strength: 'VERY_HIGH',
   protectionLevel: 100,
   mangleNames: true,
@@ -24,7 +24,10 @@ export const ADVANCED_V11_PROFILE = Object.freeze({
   deadCodeInjection: false,
   antiDebugging: false,
   minify: true,
-  encryptionAlgorithm: 'multi-layer-pool-permutation',
+  encryptionAlgorithm: 'hybrid-sharded-pool-state-machine',
+  readableAnchors: true,
+  decoderStateMachine: true,
+  poolShards: 2,
 });
 
 export const MAX_SOURCE_BYTES = 3 * 1024 * 1024;
@@ -183,7 +186,20 @@ function variedNumber(value) {
   }
 }
 
-function buildStringPool(tokens) {
+const READABLE_STRING_PATTERNS = [
+  /^https?:\/\//i,
+  /^rbxasset(?:id)?:\/\//i,
+  /^rbxgameasset:\/\//i,
+];
+
+function shouldPreserveReadableString(text, options = {}) {
+  if (options.preserveReadableStrings === false) return false;
+  if (READABLE_STRING_PATTERNS.some((pattern) => pattern.test(text))) return true;
+  if (!Array.isArray(options.readableStrings)) return false;
+  return options.readableStrings.includes(text);
+}
+
+function buildStringPool(tokens, options = {}) {
   const poolName = randomName('__frezen_sp');
   const decodeName = randomName('__frezen_sd');
   const entries = [];
@@ -195,6 +211,9 @@ function buildStringPool(tokens) {
       ? decodeQuotedLuaString(token.raw)
       : decodeLongLuaString(token.raw);
     if (!text.length) return { type: 'raw', value: '""', raw: '""' };
+    if (shouldPreserveReadableString(text, options)) {
+      return token;
+    }
 
     let entry = byText.get(text);
     if (!entry) {
@@ -239,20 +258,24 @@ function buildStringPool(tokens) {
 
   if (!entries.length) return { tokens: transformed, prefix: '' };
 
-  const tableEntries = entries.map((entry) =>
+  const shardAName = randomName('__frezen_pa');
+  const shardBName = randomName('__frezen_pb');
+  const shardA = entries.filter((entry) => entry.key % 2 === 0);
+  const shardB = entries.filter((entry) => entry.key % 2 !== 0);
+  const renderEntries = (items) => items.map((entry) =>
     `[${entry.keyExpr}]={"${entry.escaped}",${entry.key1},${entry.key2},${entry.inverse},${entry.rotation}}`
   ).join(',');
 
   const prefix = [
-    `local ${poolName}={${tableEntries}}`,
-    `local ${decodeName}=function(k)local v=${poolName}[k]if not v then return nil end local t=v[1]local k1=v[2]local k2=v[3]local inv=v[4]local rot=v[5]local n=#t local s=""for z=0,n-1 do local p=((z-rot)%n)+1 local j=n-p+1 local idx=z%256 local a=(string.byte(t,j)-k2-idx)%256 local b=(a*inv)%256 local c=(b-k1-((idx*7)%256))%256 s=s..string.char(c)end return s end`,
+    `local ${shardAName}={${renderEntries(shardA)}}`,
+    `local ${shardBName}={${renderEntries(shardB)}}`,
+    `local ${decodeName}=function(k)local S=0;local v,t,k1,k2,inv,rot,n,s,z,p,j,idx,a,b,c;while true do if S==0 then v=((k%2)==0 and ${shardAName}[k] or ${shardBName}[k]);if not v then return nil end;S=1 elseif S==1 then t=v[1];k1=v[2];k2=v[3];inv=v[4];rot=v[5];n=#t;s="";z=0;S=2 elseif S==2 then if z>=n then S=4 else S=3 end elseif S==3 then p=((z-rot)%n)+1;j=n-p+1;idx=z%256;a=(string.byte(t,j)-k2-idx)%256;b=(a*inv)%256;c=(b-k1-((idx*7)%256))%256;s=s..string.char(c);z=z+1;S=2 else return s end end end`,
   ].join('\n');
-
   return { tokens: transformed, prefix };
 }
 
-function encodeString(text) {
-  const built = buildStringPool([{ type: 'string', raw: JSON.stringify(text) }]);
+function encodeString(text, options = {}) {
+  const built = buildStringPool([{ type: 'string', raw: JSON.stringify(text) }], options);
   return built.tokens[0]?.raw ?? '""';
 }function parseInteger(value) {
   const normalized = value.replace(/_/g, '');
@@ -363,8 +386,8 @@ function containsCompatibilitySensitiveCode(source) {
   return /\b(coroutine|loadstring|load)\s*\(|\b(getfenv|setfenv)\b|\b_ENV\b|\bsetmetatable\b|\bgetmetatable\b|\bdebug\b|\b__index\b|\b__newindex\b/i.test(source);
 }
 
-function applyStringPoolToSource(tokens) {
-  return buildStringPool(tokens);
+function applyStringPoolToSource(tokens, options = {}) {
+  return buildStringPool(tokens, options);
 }
 
 export function obfuscateLuaV11(source, options = {}) {
@@ -377,7 +400,7 @@ export function obfuscateLuaV11(source, options = {}) {
   const minify = options.minify !== false;
   const keepComments = options.keepComments === true;
   let tokens = tokenize(text, { keepComments });
-  const pooled = applyStringPoolToSource(tokens);
+  const pooled = applyStringPoolToSource(tokens, options);
   tokens = pooled.tokens;
 
   // Compatibility-first: do not rewrite or wrap control-flow structures.

@@ -4,14 +4,17 @@ import { isFrezenObfuscated } from './script-obfuscation-contract.js';
 
 describe('Maximum multi-layer compatibility-first obfuscation', () => {
   it('keeps the configured maximum protection profile', () => {
-    expect(ADVANCED_V11_PROFILE.version).toBe('1.3');
-    expect(ADVANCED_V11_PROFILE.mode).toBe('Maximum Multi-Layer String Pool');
+    expect(ADVANCED_V11_PROFILE.version).toBe('1.4');
+    expect(ADVANCED_V11_PROFILE.mode).toBe('Hybrid Readable Anchors + Multi-Layer String Pool');
     expect(ADVANCED_V11_PROFILE.strength).toBe('VERY_HIGH');
     expect(ADVANCED_V11_PROFILE.protectionLevel).toBe(100);
-    expect(ADVANCED_V11_PROFILE.encryptionAlgorithm).toBe('multi-layer-pool-permutation');
+    expect(ADVANCED_V11_PROFILE.encryptionAlgorithm).toBe('hybrid-sharded-pool-state-machine');
     expect(ADVANCED_V11_PROFILE.stringPool).toBe(true);
     expect(ADVANCED_V11_PROFILE.numericVariations).toBe(true);
     expect(ADVANCED_V11_PROFILE.stringLayers).toBe(5);
+    expect(ADVANCED_V11_PROFILE.readableAnchors).toBe(true);
+    expect(ADVANCED_V11_PROFILE.decoderStateMachine).toBe(true);
+    expect(ADVANCED_V11_PROFILE.poolShards).toBe(2);
   });
 
   it('encodes strings and removes comments without binary XOR syntax', () => {
@@ -22,7 +25,8 @@ describe('Maximum multi-layer compatibility-first obfuscation', () => {
     expect(result.code).toContain('string.char');
     expect(result.code).not.toContain('t[i]~');
     expect(result.code).toContain('string.byte');
-    expect(result.code).toContain('local __frezen_sp');
+    expect(result.code).toContain('local __frezen_pa');
+    expect(result.code).toContain('local __frezen_pb');
     expect(result.code).toContain('local __frezen_sd');
     expect(result.code).toContain('-- This file obfuscation with Frezen Obfuscation');
     expect((result.code.match(/-- This file obfuscation with Frezen Obfuscation/g) || []).length).toBe(1);
@@ -70,7 +74,6 @@ describe('Maximum multi-layer compatibility-first obfuscation', () => {
   });
 });
 
-
 describe('Frezen obfuscation marker detection', () => {
   it('only treats an actual payload header as obfuscated', () => {
     const plain = "local text = '-- This file obfuscation with Frezen Obfuscation'\nprint(text)";
@@ -79,7 +82,6 @@ describe('Frezen obfuscation marker detection', () => {
     expect(isFrezenObfuscated("\uFEFF-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR\nlocal x=1")).toBe(true);
   });
 });
-
 
 describe('Lua 5.1 generated-output compatibility', () => {
   it('uses only Lua 5.1-compatible constructs for its generated protection layers', () => {
@@ -91,7 +93,6 @@ describe('Lua 5.1 generated-output compatibility', () => {
     expect(result.code).not.toContain('>>');
   });
 });
-
 
 describe('renderer lexical boundaries', () => {
   it('separates Lua keywords from generated pooled string calls', () => {
@@ -128,12 +129,33 @@ describe('pooled string expressions in shorthand calls', () => {
   });
 });
 
+describe('hybrid readable anchors', () => {
+  it('keeps URL strings readable while protecting ordinary strings', () => {
+    const source = 'local url = "https://example.com/delivery/test"\nlocal secret = "FrezenSecret"\nprint(url, secret)';
+    const result = obfuscateLuaV11(source, { preserveReadableStrings: true });
+    expect(result.code).toContain('https://example.com/delivery/test');
+    expect(result.code).not.toContain('FrezenSecret');
+    expect(result.code).toContain('__frezen_pa');
+    expect(result.code).toContain('__frezen_pb');
+    expect(result.code).toContain('while true do');
+    expect(result.code).toContain('S==0');
+  });
+
+  it('supports an explicit readable string allowlist', () => {
+    const source = 'local keep = "ImportantFunction"\nlocal hide = "OtherSecret"';
+    const result = obfuscateLuaV11(source, { readableStrings: ['ImportantFunction'] });
+    expect(result.code).toContain('ImportantFunction');
+    expect(result.code).not.toContain('OtherSecret');
+  });
+});
+
 describe('randomized string pool', () => {
   it('deduplicates repeated strings while hiding plaintext and varying the pool', () => {
     const source = 'local first = "https://example.com"\nlocal second = "https://example.com"\nprint(first, second)';
-    const result = obfuscateLuaV11(source);
+    const result = obfuscateLuaV11(source, { preserveReadableStrings: false });
     expect(result.code).not.toContain('https://example.com');
-    expect(result.code).toContain('local __frezen_sp');
+    expect(result.code).toContain('local __frezen_pa');
+    expect(result.code).toContain('local __frezen_pb');
     expect(result.code).toContain('local __frezen_sd');
     expect(result.code).toContain('string.byte');
     expect(result.code).toMatch(/\\\d{3}/);
