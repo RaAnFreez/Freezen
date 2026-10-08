@@ -42,7 +42,7 @@ function buildStressSource(extra = '') {
     `assert(total == 140736)`,
     extra,
     'print("__FREZEN_VM_V2_RUNTIME_OK__")',
-  ].join('\\n');
+  ].join('\n');
 }
 
 function buildLargeCommentSource() {
@@ -51,7 +51,7 @@ function buildLargeCommentSource() {
     lines.push(`-- payload-stress-${i.toString(16).padStart(4, '0')} URL=https://frezen.my.id/delivery/v2/${i}`);
   }
   lines.push('print("__FREZEN_VM_V2_LARGE_PAYLOAD_OK__")');
-  return lines.join('\\n');
+  return lines.join('\n');
 }
 
 function runGeneratedScript(runtime, source, options = {}) {
