@@ -12,5 +12,8 @@
     "@cloudflare/workers-types": "latest",
     "wrangler": "latest",
     "vitest": "latest"
+  },
+  "dependencies": {
+    "luaparse": "0.3.1"
   }
 }
