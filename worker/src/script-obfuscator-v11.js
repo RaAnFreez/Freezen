@@ -9,8 +9,8 @@ const SAFE_GLOBALS = new Set([
 ]);
 
 export const ADVANCED_V11_PROFILE = Object.freeze({
-  version: '1.4',
-  mode: 'Hybrid Readable Anchors + Multi-Layer String Pool',
+  version: '1.5',
+  mode: 'Secure Hybrid Multi-Layer String Pool',
   strength: 'VERY_HIGH',
   protectionLevel: 100,
   mangleNames: true,
@@ -24,8 +24,9 @@ export const ADVANCED_V11_PROFILE = Object.freeze({
   deadCodeInjection: false,
   antiDebugging: false,
   minify: true,
-  encryptionAlgorithm: 'hybrid-sharded-pool-state-machine',
-  readableAnchors: true,
+  encryptionAlgorithm: 'hybrid-sharded-double-affine-state-machine',
+  readableAnchors: false,
+  readableAnchorsMode: 'opt-in',
   decoderStateMachine: true,
   poolShards: 2,
 });
@@ -193,10 +194,9 @@ const READABLE_STRING_PATTERNS = [
 ];
 
 function shouldPreserveReadableString(text, options = {}) {
-  if (options.preserveReadableStrings === false) return false;
-  if (READABLE_STRING_PATTERNS.some((pattern) => pattern.test(text))) return true;
-  if (!Array.isArray(options.readableStrings)) return false;
-  return options.readableStrings.includes(text);
+  if (Array.isArray(options.readableStrings) && options.readableStrings.includes(text)) return true;
+  if (options.preserveReadableStrings !== true) return false;
+  return READABLE_STRING_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function buildStringPool(tokens, options = {}) {
@@ -225,6 +225,12 @@ function buildStringPool(tokens, options = {}) {
       if (multiplier === 1) multiplier = 3;
       const inverse = modularInverse256(multiplier);
       const rotation = bytes.length > 1 ? randomInt(0, bytes.length - 1) : 0;
+      const outerAdd = randomInt(17, 251);
+      let outerMultiplier = randomInt(3, 255) | 1;
+      if (outerMultiplier === 1) outerMultiplier = 5;
+      const outerInverse = modularInverse256(outerMultiplier);
+      const outerIndexMul = randomInt(3, 251);
+      const outerIndexAdd = randomInt(1, 251);
 
       const encoded = bytes.map((byte, index) => {
         const idx = index % 256;
@@ -232,9 +238,15 @@ function buildStringPool(tokens, options = {}) {
         return ((layer1 * multiplier) + key2 + idx) % 256;
       });
 
+      const doublyEncoded = encoded.map((value, index) => {
+        const idx = index % 256;
+        const mixed = (value + outerAdd + ((idx * outerIndexMul) % 256)) % 256;
+        return ((mixed * outerMultiplier) + ((idx * outerIndexAdd) % 256)) % 256;
+      });
+
       const rotated = rotation
-        ? encoded.slice(rotation).concat(encoded.slice(0, rotation))
-        : encoded;
+        ? doublyEncoded.slice(rotation).concat(doublyEncoded.slice(0, rotation))
+        : doublyEncoded;
       const finalBytes = rotated.reverse();
 
       entry = {
@@ -245,6 +257,10 @@ function buildStringPool(tokens, options = {}) {
         key2,
         inverse,
         rotation,
+        outerAdd,
+        outerInverse,
+        outerIndexMul,
+        outerIndexAdd,
       };
       byText.set(text, entry);
       entries.push(entry);
@@ -263,13 +279,13 @@ function buildStringPool(tokens, options = {}) {
   const shardA = entries.filter((entry) => entry.key % 2 === 0);
   const shardB = entries.filter((entry) => entry.key % 2 !== 0);
   const renderEntries = (items) => items.map((entry) =>
-    `[${entry.keyExpr}]={"${entry.escaped}",${entry.key1},${entry.key2},${entry.inverse},${entry.rotation}}`
+    `[${entry.keyExpr}]={"${entry.escaped}",${entry.key1},${entry.key2},${entry.inverse},${entry.rotation},${entry.outerAdd},${entry.outerInverse},${entry.outerIndexMul},${entry.outerIndexAdd}}`
   ).join(',');
 
   const prefix = [
     `local ${shardAName}={${renderEntries(shardA)}}`,
     `local ${shardBName}={${renderEntries(shardB)}}`,
-    `local ${decodeName}=function(k)local S=0;local v,t,k1,k2,inv,rot,n,s,z,p,j,idx,a,b,c;while true do if S==0 then v=((k%2)==0 and ${shardAName}[k] or ${shardBName}[k]);if not v then return nil end;S=1 elseif S==1 then t=v[1];k1=v[2];k2=v[3];inv=v[4];rot=v[5];n=#t;s="";z=0;S=2 elseif S==2 then if z>=n then S=4 else S=3 end elseif S==3 then p=((z-rot)%n)+1;j=n-p+1;idx=z%256;a=(string.byte(t,j)-k2-idx)%256;b=(a*inv)%256;c=(b-k1-((idx*7)%256))%256;s=s..string.char(c);z=z+1;S=2 else return s end end end`,
+    `local ${decodeName}=function(k)local S=0;local v,t,k1,k2,inv,rot,oa,oi,om,oo,n,s,z,p,j,idx,a,b,c,d;while true do if S==0 then v=((k%2)==0 and ${shardAName}[k] or ${shardBName}[k]);if not v then return nil end;S=1 elseif S==1 then t=v[1];k1=v[2];k2=v[3];inv=v[4];rot=v[5];oa=v[6];oi=v[7];om=v[8];oo=v[9];n=#t;s="";z=0;S=2 elseif S==2 then if z>=n then S=4 else S=3 end elseif S==3 then p=((z-rot)%n)+1;j=n-p+1;idx=z%256;a=(string.byte(t,j)-((idx*oo)%256))%256;b=(a*om)%256;c=(b-oa-((idx*oi)%256))%256;d=(c-k2-idx)%256;a=(d*inv)%256;c=(a-k1-((idx*7)%256))%256;s=s..string.char(c);z=z+1;S=2 else return s end end end`,
   ].join('\n');
   return { tokens: transformed, prefix };
 }
