@@ -71,6 +71,175 @@ function memberName(node) {
     : String(value ?? '');
 }
 
+const COMPOUND_OPERATOR_MAP = Object.freeze({
+  "+=": "+",
+  "-=": "-",
+  "*=": "*",
+  "/=": "/",
+  "%=": "%",
+  "^=": "^",
+  "..=": "..",
+});
+
+function nextCompoundTemp(source, counter) {
+  let n = counter;
+  let name;
+  do {
+    n += 1;
+    name = "__frezen_v3_compound_" + n;
+  } while (source.includes(name));
+  return { name, counter: n };
+}
+
+function findMatchingOpenBracket(text, closeIndex) {
+  let depth = 0;
+  let quote = null;
+  for (let i = closeIndex; i >= 0; i -= 1) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote && text[i - 1] !== "\\") quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (ch === ']') depth += 1;
+    else if (ch === '[') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function rewriteCompoundTarget(lhs, operator, rhs, source, counter) {
+  const target = lhs.trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(target)) {
+    const memberMatch = target.match(/^(.*)\.([A-Za-z_][A-Za-z0-9_]*)$/);
+    const indexClose = target.endsWith(']') ? target.length - 1 : -1;
+
+    if (memberMatch) {
+      const base = memberMatch[1].trim();
+      if (!base) return null;
+      const temp = nextCompoundTemp(source, counter);
+      const key = JSON.stringify(memberMatch[2]);
+      const left = temp.name + "[" + key + "]";
+      const value = operator === "//="
+        ? "math.floor(" + left + " / " + rhs + ")"
+        : left + " " + COMPOUND_OPERATOR_MAP[operator] + " " + rhs;
+      if (operator !== "//=" && !COMPOUND_OPERATOR_MAP[operator]) return null;
+      return {
+        counter: temp.counter,
+        text: [
+          "do",
+          "local " + temp.name + " = " + base,
+          left + " = " + value,
+          "end",
+        ].join("\n"),
+      };
+    }
+
+    if (indexClose >= 0) {
+      const open = findMatchingOpenBracket(target, indexClose);
+      if (open <= 0) return null;
+      const base = target.slice(0, open).trim();
+      const key = target.slice(open + 1, indexClose).trim();
+      if (!base || !key) return null;
+
+      const tempBase = nextCompoundTemp(source, counter);
+      const tempKey = nextCompoundTemp(source, tempBase.counter);
+      const left = tempBase.name + "[" + tempKey.name + "]";
+      const value = operator === "//="
+        ? "math.floor(" + left + " / " + rhs + ")"
+        : left + " " + COMPOUND_OPERATOR_MAP[operator] + " " + rhs;
+      if (operator !== "//=" && !COMPOUND_OPERATOR_MAP[operator]) return null;
+      return {
+        counter: tempKey.counter,
+        text: [
+          "do",
+          "local " + tempBase.name + " = " + base,
+          "local " + tempKey.name + " = " + key,
+          left + " = " + value,
+          "end",
+        ].join("\n"),
+      };
+    }
+
+    return null;
+  }
+
+  const op = operator === "//=" ? null : COMPOUND_OPERATOR_MAP[operator];
+  if (operator === "//=") {
+    return {
+      counter,
+      text: target + " = math.floor(" + target + " / " + rhs + ")",
+    };
+  }
+  return { counter, text: target + " = " + target + " " + op + " " + rhs };
+}
+
+function normalizeLuauCompoundAssignments(source) {
+  const operators = ["//=", "..=", "+=", "-=", "*=", "/=", "%=", "^="];
+  const lines = String(source ?? "").split(/\r?\n/);
+  let counter = 0;
+  const out = [];
+
+  for (const line of lines) {
+    let quote = null;
+    let commentAt = -1;
+    let operatorAt = -1;
+    let operator = null;
+
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
+      if (quote) {
+        if (ch === quote && line[i - 1] !== "\\") quote = null;
+        continue;
+      }
+      if (ch === "'" || ch === '"') {
+        quote = ch;
+        continue;
+      }
+      if (ch === '-' && line[i + 1] === '-') {
+        commentAt = i;
+        break;
+      }
+      for (const candidate of operators) {
+        if (line.startsWith(candidate, i)) {
+          operatorAt = i;
+          operator = candidate;
+          break;
+        }
+      }
+      if (operatorAt >= 0) break;
+    }
+
+    if (operatorAt < 0) {
+      out.push(line);
+      continue;
+    }
+
+    const lhs = line.slice(0, operatorAt).trim();
+    const rhs = line.slice(operatorAt + operator.length, commentAt >= 0 ? commentAt : line.length).trim();
+    const comment = commentAt >= 0 ? line.slice(commentAt) : "";
+    if (!lhs || !rhs || /\b(local|return|if|elseif|while|until|for|function|do|repeat|and|or)\b/.test(lhs)) {
+      out.push(line);
+      continue;
+    }
+
+    const rewritten = rewriteCompoundTarget(lhs, operator, rhs, source, counter);
+    if (!rewritten) {
+      out.push(line);
+      continue;
+    }
+    counter = rewritten.counter;
+    out.push(line.slice(0, line.indexOf(lhs)) + rewritten.text + comment);
+  }
+
+  return out.join("\n");
+}
+
 class Compiler {
   constructor() {
     this.constants = [];
@@ -98,7 +267,8 @@ class Compiler {
   compile(source) {
     let ast;
     try {
-      ast = luaparse.parse(source, { luaVersion: FREZEN_VM_V3_LUA_VERSION, comments: false, scope: false, locations: false, ranges: false, wait: false });
+      const parserSource = normalizeLuauCompoundAssignments(source);
+      ast = luaparse.parse(parserSource, { luaVersion: FREZEN_VM_V3_LUA_VERSION, comments: false, scope: false, locations: false, ranges: false, wait: false });
     } catch (error) {
       const message = String(error?.message ?? error);
       throw new Error('VM_V3_PARSE_FAILED:' + message.slice(0, 240));
