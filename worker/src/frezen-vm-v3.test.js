@@ -74,10 +74,12 @@ describe('Frezen VM v3', () => {
       'data.value += total',
       'local index = "value"',
       'data[index] += 1',
+      'data.value //= 2',
       'print(total, data.value)',
     ].join('\n'));
     expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
     expect(result.code).not.toContain('VM_V3_PARSE_FAILED:');
+    expect(result.code).toContain('math.floor');
   });
 
   it('uses the Lua 5.1 source grammar for obfuscation input', () => {
