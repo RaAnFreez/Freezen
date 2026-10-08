@@ -312,7 +312,7 @@ export function compileFrezenVmV3(source) {
     `local e={p=f.e,v={},h={},a={n=0}}`,
     `for i=1,#f.p do local n=${names.D}(f.p[i]); e.h[n]=true; e.v[n]=args[i] end`,
     `if f.va then local a={n=math.max(0,#args-#f.p)}; for i=#f.p+1,#args do a[i-#f.p]=args[i] end e.a=a end`,
-    `local r=${names.O}(f.b,e); if r and r.k==1 then return r.v end return {}`,
+    `local r=${names.O}(f.b,e); if r and r.k==1 then local out={n=#r.v}; for i=1,#r.v do out[i]=r.v[i] end return out end return {n=0}`,
     `end`,
     `if type(f)~="function" then error("FREZEN_VM_V3_CALL_NONFUNCTION") end`,
     `local unpacker=table.unpack or unpack; local ok,a,b,c,d,e2,f2,g2,h2,i2,j2=pcall(function() return f(unpacker(args,1,#args)) end)`,
