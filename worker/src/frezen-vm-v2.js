@@ -26,6 +26,12 @@ function randomName(prefix = '__fvm') {
   return prefix + randomInt(RANDOM_MIN, RANDOM_MAX);
 }
 
+function computeSourceChecksum16(bytes) {
+  let checksum = 0;
+  for (const byte of bytes) checksum = (checksum + byte) % 65521;
+  return checksum;
+}
+
 function shuffle(values) {
   const output = [...values];
   for (let i = output.length - 1; i > 0; i -= 1) {
@@ -95,6 +101,8 @@ export function compileFrezenVmV2(source, options = {}) {
   if (!text.trim()) throw new Error('EMPTY_LUA_SOURCE');
 
   const sourceBytes = new TextEncoder().encode(text);
+  const sourceChecksum16 = computeSourceChecksum16(sourceBytes);
+  const sourceLineCount = text.split(/\r\n|\r|\n/).length;
   if (sourceBytes.byteLength > MAX_VM_V2_SOURCE_BYTES) {
     throw new Error('LUA_SOURCE_TOO_LARGE');
   }
@@ -128,6 +136,11 @@ export function compileFrezenVmV2(source, options = {}) {
   const b2Name = randomName('__frezen_v2x');
   const b3Name = randomName('__frezen_v2y');
   const byteIndexName = randomName('__frezen_v2bi');
+  const expectedBytesName = randomName('__frezen_v2len');
+  const expectedChecksumName = randomName('__frezen_v2sum');
+  const expectedLinesName = randomName('__frezen_v2lines');
+  const actualChecksumName = randomName('__frezen_v2actualsum');
+  const actualLinesName = randomName('__frezen_v2actuallines');
 
   const opcodeDecode = randomInt(11, 97);
   let opcodeExecute = randomInt(101, 191);
@@ -151,6 +164,11 @@ export function compileFrezenVmV2(source, options = {}) {
   const prefix = [
     `local ${poolName}={${entries.join(',')}}`,
     `local ${programName}={${instructions.join(',')}}`,
+    `local ${expectedBytesName}=${sourceBytes.byteLength}`,
+    `local ${expectedChecksumName}=${sourceChecksum16}`,
+    `local ${expectedLinesName}=${sourceLineCount}`,
+    `local ${actualChecksumName}=0`,
+    `local ${actualLinesName}=1`,
     `local function ${digitName}(a,c)`,
     `  local i=1`,
     `  while i<=#a do`,
@@ -188,6 +206,10 @@ export function compileFrezenVmV2(source, options = {}) {
     `      if ${charName}<0 then`,
     `        ${charName}=${charName}+256`,
     `      end`,
+    `      ${actualChecksumName}=(${actualChecksumName}+${charName})%65521`,
+    `      if ${charName}==10 then`,
+    `        ${actualLinesName}=${actualLinesName}+1`,
+    `      end`,
     `      out[#out+1]=string.char(${charName})`,
     `      ${byteIndexName}=${byteIndexName}+1`,
     `    end`,
@@ -199,6 +221,10 @@ export function compileFrezenVmV2(source, options = {}) {
     `      if ${b2Name}<0 then`,
     `        ${b2Name}=${b2Name}+256`,
     `      end`,
+    `      ${actualChecksumName}=(${actualChecksumName}+${b2Name})%65521`,
+    `      if ${b2Name}==10 then`,
+    `        ${actualLinesName}=${actualLinesName}+1`,
+    `      end`,
     `      out[#out+1]=string.char(${b2Name})`,
     `      ${byteIndexName}=${byteIndexName}+1`,
     `    end`,
@@ -209,6 +235,10 @@ export function compileFrezenVmV2(source, options = {}) {
     `      ${b3Name}=(${b3Name}-add-((${byteIndexName}%256)*step)%256)%256`,
     `      if ${b3Name}<0 then`,
     `        ${b3Name}=${b3Name}+256`,
+    `      end`,
+    `      ${actualChecksumName}=(${actualChecksumName}+${b3Name})%65521`,
+    `      if ${b3Name}==10 then`,
+    `        ${actualLinesName}=${actualLinesName}+1`,
     `      end`,
     `      out[#out+1]=string.char(${b3Name})`,
     `      ${byteIndexName}=${byteIndexName}+1`,
@@ -228,6 +258,15 @@ export function compileFrezenVmV2(source, options = {}) {
     `    ${bufferName}[#${bufferName}+1]=${decodeName}(${instructionName}[2])`,
     `  elseif ${opName}==${opcodeExecute} then`,
     `    local ${sourceName}=table.concat(${bufferName})`,
+    `    if #${sourceName}~=${expectedBytesName} then`,
+    `      error("FREZEN_VM_V2_DECODE_LENGTH_MISMATCH:"..tostring(#${sourceName})..":"..tostring(${expectedBytesName}))`,
+    `    end`,
+    `    if ${actualChecksumName}~=${expectedChecksumName} then`,
+    `      error("FREZEN_VM_V2_DECODE_CHECKSUM_MISMATCH:"..tostring(${actualChecksumName})..":"..tostring(${expectedChecksumName}))`,
+    `    end`,
+    `    if ${actualLinesName}~=${expectedLinesName} then`,
+    `      error("FREZEN_VM_V2_DECODE_LINE_COUNT_MISMATCH:"..tostring(${actualLinesName})..":"..tostring(${expectedLinesName}))`,
+    `    end`,
     `    local ${loaderName}=loadstring or load`,
     `    if type(${loaderName})~="function" then`,
     `      error("FREZEN_VM_V2_LOAD_UNAVAILABLE")`,
@@ -262,7 +301,7 @@ export function compileFrezenVmV2(source, options = {}) {
       sourceCompatible: true,
       strings: 'printable-layered-chunks',
       transform: 'layered-base64-alphabet-chunks',
-      integrity: 'none',
+      integrity: 'length+checksum16+line-count',
     },
   };
 }
