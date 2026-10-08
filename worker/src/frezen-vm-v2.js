@@ -9,7 +9,7 @@ export const FREZEN_VM_V2_PROFILE = Object.freeze({
   runtimeVm: true,
   sourceCompatible: true,
   chunkSize: 48,
-  transform: 'layered-base64-alphabet-chunks',
+  transform: 'layered-nibble-alphabet-chunks',
 });
 
 export const MAX_VM_V2_SOURCE_BYTES = 3 * 1024 * 1024;
@@ -68,15 +68,10 @@ function encodeChunk(bytes) {
   });
 
   const payload = [];
-  for (let i = 0; i < transformed.length; i += 3) {
-    const b1 = transformed[i] ?? 0;
-    const b2 = transformed[i + 1] ?? 0;
-    const b3 = transformed[i + 2] ?? 0;
-    const d1 = Math.floor(b1 / 4);
-    const d2 = ((b1 % 4) * 16) + Math.floor(b2 / 16);
-    const d3 = ((b2 % 16) * 4) + Math.floor(b3 / 64);
-    const d4 = b3 % 64;
-    payload.push(alphabet[d1], alphabet[d2], alphabet[d3], alphabet[d4]);
+  for (const byte of transformed) {
+    const high = (byte - (byte % 16)) / 16;
+    const low = byte % 16;
+    payload.push(alphabet[high], alphabet[low]);
   }
 
   return {
@@ -131,10 +126,6 @@ export function compileFrezenVmV2(source, options = {}) {
   const charName = randomName('__frezen_v2char');
   const raw1Name = randomName('__frezen_v2a');
   const raw2Name = randomName('__frezen_v2b');
-  const raw3Name = randomName('__frezen_v2c');
-  const raw4Name = randomName('__frezen_v2d');
-  const b2Name = randomName('__frezen_v2x');
-  const b3Name = randomName('__frezen_v2y');
   const byteIndexName = randomName('__frezen_v2bi');
   const expectedBytesName = randomName('__frezen_v2len');
   const expectedChecksumName = randomName('__frezen_v2sum');
@@ -193,12 +184,10 @@ export function compileFrezenVmV2(source, options = {}) {
     `  local alphabet=e[7]`,
     `  local out={}`,
     `  local ${byteIndexName}=0`,
-    `  for ${indexName}=1,#s,4 do`,
+    `  for ${indexName}=1,#s,2 do`,
     `    local ${raw1Name}=${digitName}(alphabet,string.sub(s,${indexName},${indexName}))`,
     `    local ${raw2Name}=${digitName}(alphabet,string.sub(s,${indexName}+1,${indexName}+1))`,
-    `    local ${raw3Name}=${digitName}(alphabet,string.sub(s,${indexName}+2,${indexName}+2))`,
-    `    local ${raw4Name}=${digitName}(alphabet,string.sub(s,${indexName}+3,${indexName}+3))`,
-    `    local ${charName}=${raw1Name}*4+((${raw2Name}-${raw2Name}%16)/16)`,
+    `    local ${charName}=${raw1Name}*16+${raw2Name}`,
     `    if ${byteIndexName}<n then`,
     `      ${charName}=(${charName}-round)%256`,
     `      ${charName}=(${charName}*inv)%256`,
@@ -211,36 +200,6 @@ export function compileFrezenVmV2(source, options = {}) {
     `        ${actualLinesName}=${actualLinesName}+1`,
     `      end`,
     `      out[#out+1]=string.char(${charName})`,
-    `      ${byteIndexName}=${byteIndexName}+1`,
-    `    end`,
-    `    local ${b2Name}=(${raw2Name}%16)*16+((${raw3Name}-${raw3Name}%4)/4)`,
-    `    if ${byteIndexName}<n then`,
-    `      ${b2Name}=(${b2Name}-round)%256`,
-    `      ${b2Name}=(${b2Name}*inv)%256`,
-    `      ${b2Name}=(${b2Name}-add-((${byteIndexName}%256)*step)%256)%256`,
-    `      if ${b2Name}<0 then`,
-    `        ${b2Name}=${b2Name}+256`,
-    `      end`,
-    `      ${actualChecksumName}=(${actualChecksumName}+${b2Name})%65521`,
-    `      if ${b2Name}==10 then`,
-    `        ${actualLinesName}=${actualLinesName}+1`,
-    `      end`,
-    `      out[#out+1]=string.char(${b2Name})`,
-    `      ${byteIndexName}=${byteIndexName}+1`,
-    `    end`,
-    `    local ${b3Name}=(${raw3Name}%4)*64+${raw4Name}`,
-    `    if ${byteIndexName}<n then`,
-    `      ${b3Name}=(${b3Name}-round)%256`,
-    `      ${b3Name}=(${b3Name}*inv)%256`,
-    `      ${b3Name}=(${b3Name}-add-((${byteIndexName}%256)*step)%256)%256`,
-    `      if ${b3Name}<0 then`,
-    `        ${b3Name}=${b3Name}+256`,
-    `      end`,
-    `      ${actualChecksumName}=(${actualChecksumName}+${b3Name})%65521`,
-    `      if ${b3Name}==10 then`,
-    `        ${actualLinesName}=${actualLinesName}+1`,
-    `      end`,
-    `      out[#out+1]=string.char(${b3Name})`,
     `      ${byteIndexName}=${byteIndexName}+1`,
     `    end`,
     `  end`,
@@ -300,7 +259,7 @@ export function compileFrezenVmV2(source, options = {}) {
       runtimeVm: true,
       sourceCompatible: true,
       strings: 'printable-layered-chunks',
-      transform: 'layered-base64-alphabet-chunks',
+      transform: 'layered-nibble-alphabet-chunks',
       integrity: 'length+checksum16+line-count',
     },
   };
