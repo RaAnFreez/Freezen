@@ -138,7 +138,17 @@ export function renderScripts(root) {
             <button class="ghost-button small" data-disable="${esc(script.id)}">${script.status === "ACTIVE" ? "Disable" : "Enable"}</button>
             <button class="danger-button small" data-delete="${esc(script.id)}">Delete</button>
           </div>
-          <div class="script-upload" data-panel="${esc(script.id)}" hidden><input type="file" accept=".lua,text/x-lua" data-file="${esc(script.id)}" /><input placeholder="Version e.g. 1.0.0" data-version="${esc(script.id)}" maxlength="80" /><input placeholder="Release notes (optional)" data-notes="${esc(script.id)}" maxlength="2000" /><button class="primary-button small" data-submit-upload="${esc(script.id)}">Upload</button></div>
+          <div class="script-upload" data-panel="${esc(script.id)}" hidden>
+        <input type="file" accept=".lua,text/x-lua" data-file="${esc(script.id)}" />
+        <input placeholder="Version e.g. 1.0.0" data-version="${esc(script.id)}" maxlength="80" />
+        <select data-protection-mode="${esc(script.id)}" aria-label="Protection mode">
+          <option value="source-v11">Source V11 — compatibility</option>
+          <option value="vm-v2">VM V2 — layered runtime</option>
+          <option value="vm-v3">VM V3 — virtualized, strongest</option>
+        </select>
+        <input placeholder="Release notes (optional)" data-notes="${esc(script.id)}" maxlength="2000" />
+        <button class="primary-button small" data-submit-upload="${esc(script.id)}">Upload</button>
+      </div>
         </article>`).join("");
 
       const detailById = new Map(data.scripts.map((script) => [String(script.id), script]));
@@ -187,9 +197,10 @@ export function renderScripts(root) {
         const id = button.dataset.submitUpload;
         const file = root.querySelector(`[data-file="${CSS.escape(id)}"]`).files[0];
         const version = root.querySelector(`[data-version="${CSS.escape(id)}"]`).value.trim();
+        const mode = root.querySelector(`[data-protection-mode="${CSS.escape(id)}"]`).value;
         const notes = root.querySelector(`[data-notes="${CSS.escape(id)}"]`).value.trim();
         if (!file) throw new Error("Select a .lua file first.");
-        const form = new FormData(); form.append("file", file); form.append("version", version); form.append("release_notes", notes);
+        const form = new FormData(); form.append("file", file); form.append("version", version); form.append("protection_mode", mode); form.append("release_notes", notes);
         await api(`/scripts/${encodeURIComponent(id)}/versions`, { method: "POST", body: form });
         showMessage("Lua version uploaded. Activate it from the version control endpoint when ready."); await load(); return;
       }
