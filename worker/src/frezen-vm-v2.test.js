@@ -8,7 +8,7 @@ describe('Frezen VM v2', () => {
     expect(FREZEN_VM_V2_PROFILE.bytecode).toBe(true);
     expect(FREZEN_VM_V2_PROFILE.runtimeVm).toBe(true);
     expect(FREZEN_VM_V2_PROFILE.sourceCompatible).toBe(true);
-    expect(FREZEN_VM_V2_PROFILE.transform).toBe('layered-base64-alphabet-chunks');
+    expect(FREZEN_VM_V2_PROFILE.transform).toBe('layered-nibble-alphabet-chunks');
   });
 
   it('generates printable payloads without fragile runtime helpers', () => {
