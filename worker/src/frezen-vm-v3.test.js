@@ -31,7 +31,7 @@ describe('Frezen VM v3', () => {
   });
 
   it('parses Lua 5.3 floor-division syntax supported by the VM', () => {
-    const result = compileFrezenVmV3('local x = 7 // 2\\nprint(x)');
+    const result = compileFrezenVmV3('local x = 7 // 2\nprint(x)');
     expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
   });
 
