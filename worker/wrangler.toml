@@ -11,16 +11,17 @@ binding = "ASSETS"
 FREZEN_ENV = "development"
 FREZEN_KEY_LOADER_ENABLED = "true"
 FREZEN_EMBEDDED_LOADER_ENABLED = "true"
+FREZEN_VM_ENABLED = "true"
 
 [env.staging]
 name = "frezen-control-system-v3-staging"
 workers_dev = true
-vars = { FREZEN_ENV = "staging", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true" }
+vars = { FREZEN_ENV = "staging", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_VM_ENABLED = "true" }
 
 [env.production]
 name = "frezen"
 workers_dev = true
-vars = { FREZEN_ENV = "production", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_PUBLIC_ORIGIN = "https://frezen.my.id" }
+vars = { FREZEN_ENV = "production", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_VM_ENABLED = "true", FREZEN_PUBLIC_ORIGIN = "https://frezen.my.id" }
 
 [[env.production.d1_databases]]
 binding = "DB"
