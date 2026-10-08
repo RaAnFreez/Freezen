@@ -55,7 +55,7 @@ describe('Frezen VM v2', () => {
     expect(wrapper).not.toContain(')then ');
     expect(wrapper).not.toContain('}if ');
     expect(wrapper).not.toContain('}then ');
-    expect(wrapper).toContain('local i=1');
+    expect(wrapper).toMatch(/local [A-Za-z_][A-Za-z0-9_]*=1\n/);
     expect(wrapper).toContain('if not ');
     expect(wrapper).toContain('elseif ');
   });
