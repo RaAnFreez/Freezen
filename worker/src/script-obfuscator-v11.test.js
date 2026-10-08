@@ -138,6 +138,7 @@ describe('secure readable-anchor defaults', () => {
     expect(result.code).toContain('__frezen_pa');
     expect(result.code).toContain('__frezen_pb');
   });
+});
 
 describe('hybrid readable anchors', () => {
   it('keeps URL strings readable while protecting ordinary strings', () => {
