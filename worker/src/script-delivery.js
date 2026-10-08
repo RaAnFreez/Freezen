@@ -107,7 +107,7 @@ export async function getDeliveryScript(request, env, requestId, json, deliveryI
         script_id: deliveryId,
         version: { id: row.id, version: row.version, status: row.status, release_notes: row.release_notes, created_at: row.created_at },
         source: { available: Boolean(source), content: source, size_bytes: source ? Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength) : 0, sha256: row.source_sha256 ?? (source ? await sha256Hex(source) : null), ...(sourceUnavailableReason ? { reason: sourceUnavailableReason } : {}) },
-        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? OBFUSCATION_PROFILE : { version: 'legacy', status: 'unverified' }, content: row.content },
+        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? (isFrezenVm(row.content) ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE) : { version: 'legacy', status: 'unverified' }, content: row.content },
         request_id: requestId,
       });
     }
@@ -153,7 +153,7 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
     const row = await env.DB.prepare('SELECT v.id,v.version,v.release_notes,f.id AS file_id FROM delivery_script_versions v JOIN delivery_script_files f ON f.delivery_script_version_id=v.id WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1').bind(versionId,deliveryId).first();
     if (!row) return bad(json, requestId, 'DELIVERY_VERSION_NOT_FOUND', 404);
     let obfuscated;
-    try { obfuscated = obfuscateLuaV11(source); } catch (error) { const reason=String(error?.message??error); return bad(json,requestId,reason==='OBFUSCATED_LUA_TOO_LARGE'?'OBFUSCATED_LUA_TOO_LARGE':'OBFUSCATION_FAILED',reason==='OBFUSCATED_LUA_TOO_LARGE'?413:422); }
+    try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) { const reason=String(error?.message??error); return bad(json,requestId,reason==='OBFUSCATED_LUA_TOO_LARGE'?'OBFUSCATED_LUA_TOO_LARGE':'OBFUSCATION_FAILED',reason==='OBFUSCATED_LUA_TOO_LARGE'?413:422); }
     const sourceSha256=await sha256Hex(source);
     const payloadSha256=await sha256Hex(obfuscated.code);
     const outputBytes=new TextEncoder().encode(obfuscated.code).byteLength;
@@ -161,7 +161,7 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
     await env.DB.prepare('UPDATE delivery_script_files SET content=?1,size_bytes=?2,sha256=?3,source_size_bytes=?4,source_content=?5,source_sha256=?6,obfuscation_version=?7,obfuscation_strength=?8,obfuscation_protection_level=?9 WHERE id=?10 AND delivery_script_version_id=?11').bind(obfuscated.code,outputBytes,payloadSha256,sourceBytes,source,sourceSha256,OBFUSCATION_PROFILE.version,OBFUSCATION_PROFILE.strength,OBFUSCATION_PROFILE.protectionLevel,row.file_id,versionId).run();
     if (body?.release_notes !== undefined) await env.DB.prepare('UPDATE delivery_script_versions SET release_notes=?1 WHERE id=?2 AND delivery_script_id=?3').bind(releaseNotes,versionId,deliveryId).run();
     await env.DB.prepare('UPDATE delivery_scripts SET updated_at=CURRENT_TIMESTAMP WHERE id=?1').bind(deliveryId).run();
-    await audit(env,auth,'DELIVERY_VERSION_UPDATED',deliveryId,requestId,{version_id:versionId,version:row.version,source_bytes:sourceBytes,output_bytes:outputBytes,obfuscation:OBFUSCATION_PROFILE});
+    await audit(env,auth,'DELIVERY_VERSION_UPDATED',deliveryId,requestId,{version_id:versionId,version:row.version,source_bytes:sourceBytes,output_bytes:outputBytes,obfuscation:protectionProfile(protectionMode),protection_mode:protectionMode});
     return json({status:'updated',version:{id:versionId,version:row.version,size_bytes:outputBytes,source_size_bytes:sourceBytes,sha256:payloadSha256,source_sha256:sourceSha256,release_notes:releaseNotes,protection:OBFUSCATION_PROFILE},request_id:requestId});
   } catch { return bad(json,requestId,'DATABASE_ERROR',503); }
 }
