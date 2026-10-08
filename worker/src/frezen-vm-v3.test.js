@@ -31,7 +31,7 @@ describe('Frezen VM v3', () => {
   });
 
   it('rejects syntax that the virtual runtime deliberately does not emulate', () => {
-    expect(() => compileFrezenVmV3('local x = 1 & 2')).toThrow(/VM_V3_UNSUPPORTED/);
+    expect(() => compileFrezenVmV3('local x = 1 & 2')).toThrow(/VM_V3_PARSE_FAILED/);
     expect(() => compileFrezenVmV3('goto nope\n::nope::')).toThrow(/VM_V3_PARSE_FAILED/);
     expect(() => compileFrezenVmV3('local x = 1 & 2')).toThrow(/VM_V3_UNSUPPORTED/);
   });
