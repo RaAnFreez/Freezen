@@ -30,6 +30,17 @@ describe('Frezen VM v3', () => {
     expect(isFrezenVmV3(result.code)).toBe(true);
   });
 
+  it('supports function-valued local initializers', () => {
+    const result = compileFrezenVmV3([
+      'local fn = function(a)',
+      '  return a + 1',
+      'end',
+      'print(fn(4))',
+    ].join('\n'));
+    expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
+    expect(result.code).not.toContain('VM_V3_UNSUPPORTED_EXPRESSION:FunctionDeclaration');
+  });
+
   it('parses Lua 5.3 floor-division syntax supported by the VM', () => {
     const result = compileFrezenVmV3(['local x = 7 // 2', 'print(x)'].join('\n'));
     expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
