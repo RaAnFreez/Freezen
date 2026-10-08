@@ -1,6 +1,7 @@
 import { obfuscateLuaV11 } from './script-obfuscator-v11.js';
 import { compileFrezenVm, FREZEN_VM_PROFILE, isFrezenVm } from './frezen-vm-v1.js';
 import { compileFrezenVmV2, FREZEN_VM_V2_PROFILE, isFrezenVmV2 } from './frezen-vm-v2.js';
+import { compileFrezenVmV3, FREZEN_VM_V3_PROFILE, isFrezenVmV3 } from './frezen-vm-v3.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from './script-obfuscation-contract.js';
 
 const VERSION_RE = /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
@@ -11,13 +12,14 @@ const text = (v, max) => { const s = String(v ?? '').trim(); return s && s.lengt
 const version = (v) => { const s = String(v ?? '').trim(); return VERSION_RE.test(s) ? (s.startsWith('v') ? s : `v${s}`) : null; };
 const normalizeProtectionMode = (value) => {
   const mode = String(value ?? 'source-v11').trim().toLowerCase();
+  if (mode === 'vm-v3') return 'vm-v3';
   if (mode === 'vm-v2') return 'vm-v2';
   if (mode === 'vm-v1') return 'vm-v1';
   return 'source-v11';
 };
-const isVmProtectionMode = (mode) => mode === 'vm-v1' || mode === 'vm-v2';
-const protectionProfile = (mode) => mode === 'vm-v2' ? FREZEN_VM_V2_PROFILE : (mode === 'vm-v1' ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE);
-const compileProtectedLua = (source, mode) => mode === 'vm-v2' ? compileFrezenVmV2(source) : (mode === 'vm-v1' ? compileFrezenVm(source) : obfuscateLuaV11(source));
+const isVmProtectionMode = (mode) => mode === 'vm-v1' || mode === 'vm-v2' || mode === 'vm-v3';
+const protectionProfile = (mode) => mode === 'vm-v3' ? FREZEN_VM_V3_PROFILE : (mode === 'vm-v2' ? FREZEN_VM_V2_PROFILE : (mode === 'vm-v1' ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE));
+const compileProtectedLua = (source, mode) => mode === 'vm-v3' ? compileFrezenVmV3(source) : (mode === 'vm-v2' ? compileFrezenVmV2(source) : (mode === 'vm-v1' ? compileFrezenVm(source) : obfuscateLuaV11(source)));
 
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -114,7 +116,7 @@ export async function getDeliveryScript(request, env, requestId, json, deliveryI
         script_id: deliveryId,
         version: { id: row.id, version: row.version, status: row.status, release_notes: row.release_notes, created_at: row.created_at },
         source: { available: Boolean(source), content: source, size_bytes: source ? Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength) : 0, sha256: row.source_sha256 ?? (source ? await sha256Hex(source) : null), ...(sourceUnavailableReason ? { reason: sourceUnavailableReason } : {}) },
-        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? (isFrezenVmV2(row.content) ? FREZEN_VM_V2_PROFILE : (isFrezenVm(row.content) ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE)) : { version: 'legacy', status: 'unverified' }, content: row.content },
+        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? (isFrezenVmV3(row.content) ? FREZEN_VM_V3_PROFILE : (isFrezenVmV2(row.content) ? FREZEN_VM_V2_PROFILE : (isFrezenVm(row.content) ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE))) : { version: 'legacy', status: 'unverified' }, content: row.content },
         request_id: requestId,
       });
     }
