@@ -30,6 +30,12 @@ jobs:
         with:
           node-version: 22
 
+      - name: Build Luau runtime for VM integration tests
+        run: |
+          git clone --depth 1 https://github.com/luau-lang/luau.git "$RUNNER_TEMP/luau"
+          make -C "$RUNNER_TEMP/luau" -j2 config=release luau
+          echo "$RUNNER_TEMP/luau" >> "$GITHUB_PATH"
+
       - name: Install dependencies
         run: npm install
 
