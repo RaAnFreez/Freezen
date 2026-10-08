@@ -4,15 +4,16 @@ import { isFrezenObfuscated } from './script-obfuscation-contract.js';
 
 describe('Maximum multi-layer compatibility-first obfuscation', () => {
   it('keeps the configured maximum protection profile', () => {
-    expect(ADVANCED_V11_PROFILE.version).toBe('1.4');
-    expect(ADVANCED_V11_PROFILE.mode).toBe('Hybrid Readable Anchors + Multi-Layer String Pool');
+    expect(ADVANCED_V11_PROFILE.version).toBe('1.5');
+    expect(ADVANCED_V11_PROFILE.mode).toBe('Secure Hybrid Multi-Layer String Pool');
     expect(ADVANCED_V11_PROFILE.strength).toBe('VERY_HIGH');
     expect(ADVANCED_V11_PROFILE.protectionLevel).toBe(100);
-    expect(ADVANCED_V11_PROFILE.encryptionAlgorithm).toBe('hybrid-sharded-pool-state-machine');
+    expect(ADVANCED_V11_PROFILE.encryptionAlgorithm).toBe('hybrid-sharded-double-affine-state-machine');
     expect(ADVANCED_V11_PROFILE.stringPool).toBe(true);
     expect(ADVANCED_V11_PROFILE.numericVariations).toBe(true);
     expect(ADVANCED_V11_PROFILE.stringLayers).toBe(5);
-    expect(ADVANCED_V11_PROFILE.readableAnchors).toBe(true);
+    expect(ADVANCED_V11_PROFILE.readableAnchors).toBe(false);
+    expect(ADVANCED_V11_PROFILE.readableAnchorsMode).toBe('opt-in');
     expect(ADVANCED_V11_PROFILE.decoderStateMachine).toBe(true);
     expect(ADVANCED_V11_PROFILE.poolShards).toBe(2);
   });
@@ -128,6 +129,15 @@ describe('pooled string expressions in shorthand calls', () => {
     expect(result.code).toContain(':GetService(__frezen_sd');
   });
 });
+
+describe('secure readable-anchor defaults', () => {
+  it('hides URLs by default', () => {
+    const source = 'local url = "https://example.com/delivery/test"\nprint(url)';
+    const result = obfuscateLuaV11(source);
+    expect(result.code).not.toContain('https://example.com/delivery/test');
+    expect(result.code).toContain('__frezen_pa');
+    expect(result.code).toContain('__frezen_pb');
+  });
 
 describe('hybrid readable anchors', () => {
   it('keeps URL strings readable while protecting ordinary strings', () => {
