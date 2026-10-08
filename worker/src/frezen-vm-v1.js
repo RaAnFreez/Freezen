@@ -30,9 +30,6 @@ function modularInverse256(value) {
   throw new Error('FREZEN_VM_INVERSE_UNAVAILABLE');
 }
 
-function escapeDecimalBytes(bytes) {
-  return bytes.map((byte) => '\\' + String(byte).padStart(3, '0')).join('');
-}
 
 function encodeChunk(bytes) {
   const add = randomInt(17, 251);
@@ -47,7 +44,7 @@ function encodeChunk(bytes) {
     return ((mixed * multiplier) + ((idx * indexAdd) % 256)) % 256;
   });
   return {
-    payload: escapeDecimalBytes(encoded),
+    payload: encoded,
     add,
     inverse,
     indexMul,
@@ -101,7 +98,7 @@ export function compileFrezenVm(source, options = {}) {
     const key = randomInt(100000, 9999999);
     const encoded = encodeChunk(chunk);
     entries.push(
-      `[${key}]={"${encoded.payload}",${encoded.add},${encoded.inverse},${encoded.indexMul},${encoded.indexAdd}}`,
+      `[${key}]={${encoded.payload.join(',')},${encoded.add},${encoded.inverse},${encoded.indexMul},${encoded.indexAdd}}`,
     );
     instructions.push(`{${opcodeDecode},${key}}`);
   }
@@ -111,7 +108,7 @@ export function compileFrezenVm(source, options = {}) {
   const prefix = [
     `local ${poolName}={${entries.join(',')}}`,
     `local ${programName}={${instructions.join(',')}}`,
-    `local ${decodeName}=function(k)local e=${poolName}[k] if not e then error("FREZEN_VM_CHUNK_MISSING") end local t=e[1] local add=e[2] local inv=e[3] local im=e[4] local ia=e[5] local out={} for ${indexName}=1,#t do local ${byteName}=string.byte(t,${indexName}) local ${valueName}=(${byteName}-((((${indexName}-1)%256)*ia)%256))%256 ${valueName}=(${valueName}*inv)%256 ${valueName}=(${valueName}-add-((((${indexName}-1)%256)*im)%256))%256 out[${indexName}]=string.char(${valueName}) end return table.concat(out) end`,
+    `local ${decodeName}=function(k)local e=${poolName}[k] if not e then error("FREZEN_VM_CHUNK_MISSING") end local add=e[#e-3] local inv=e[#e-2] local im=e[#e-1] local ia=e[#e] local out={} for ${indexName}=1,#e-4 do local ${byteName}=e[${indexName}] local ${valueName}=(${byteName}-((((${indexName}-1)%256)*ia)%256))%256 ${valueName}=(${valueName}*inv)%256 ${valueName}=(${valueName}-add-((((${indexName}-1)%256)*im)%256))%256 out[${indexName}]=string.char(${valueName}) end return table.concat(out) end`,
     `local ${pcName}=1 local ${bufferName}={}`,
     `while true do local ${instructionName}=${programName}[${pcName}] if not ${instructionName} then break end local ${opName}=${instructionName}[1] if ${opName}==${opcodeDecode} then ${bufferName}[#${bufferName}+1]=${decodeName}(${instructionName}[2]) elseif ${opName}==${opcodeExecute} then local ${sourceName}=table.concat(${bufferName}) local ${loaderName}=loadstring or load if type(${loaderName})~="function" then error("FREZEN_VM_LOAD_UNAVAILABLE") end local ${functionName},${errorName}=${loaderName}(${sourceName}) if type(${functionName})~="function" then error("FREZEN_VM_COMPILE_FAILED:"..tostring(${errorName})) end local ${okName},${resultName}=pcall(${functionName}) if not ${okName} then error("FREZEN_VM_RUNTIME_FAILED:"..tostring(${resultName})) end return ${resultName} elseif ${opName}==${opcodeNop} then end ${pcName}=${pcName}+1 end`,
   ].join('\n');
@@ -130,7 +127,7 @@ export function compileFrezenVm(source, options = {}) {
       bytecode: true,
       runtimeVm: true,
       sourceCompatible: true,
-      strings: 'chunked',
+      strings: 'chunked-numeric-bytes',
       transform: 'double-affine-bytecode-chunks',
     },
   };
