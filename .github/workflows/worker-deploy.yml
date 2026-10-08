@@ -36,23 +36,6 @@ jobs:
       - name: Install worker dependencies
         run: npm install
 
-      - name: Install dashboard dependencies
-        working-directory: dashboard
-        run: npm install
-
-      - name: Build dashboard assets
-        working-directory: dashboard
-        run: npm run build
-
-      - name: Stage dashboard assets for Worker
-        working-directory: .
-        run: |
-          rm -rf worker/public
-          mkdir -p worker/public
-          cp -R dashboard/dist/. worker/public/
-          test -f worker/public/index.html
-          grep -R -q 'vm-v3' worker/public
-
       - name: Run tests
         run: npm test
 
