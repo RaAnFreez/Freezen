@@ -19,6 +19,8 @@ describe('Frezen VM v1', () => {
     expect(result.code).toContain('while true do');
     expect(result.code).toContain('string.byte');
     expect(result.code).toContain('loadstring or load');
+    expect(result.code).not.toMatch(/\]=\["/);
+    expect(result.code).toMatch(/\]\=\{"\\\\\d{3}/);
     expect(isFrezenVm(result.code)).toBe(true);
   });
 
