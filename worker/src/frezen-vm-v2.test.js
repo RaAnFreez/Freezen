@@ -8,7 +8,7 @@ describe('Frezen VM v2', () => {
     expect(FREZEN_VM_V2_PROFILE.bytecode).toBe(true);
     expect(FREZEN_VM_V2_PROFILE.runtimeVm).toBe(true);
     expect(FREZEN_VM_V2_PROFILE.sourceCompatible).toBe(true);
-    expect(FREZEN_VM_V2_PROFILE.transform).toBe('layered-base64-alphabet-chunks');
+    expect(FREZEN_VM_V2_PROFILE.transform).toBe('layered-nibble-alphabet-chunks');
   });
 
   it('generates printable payloads without fragile runtime helpers', () => {
@@ -24,6 +24,8 @@ describe('Frezen VM v2', () => {
     expect(result.code).not.toContain('FREZEN_VM_PAYLOAD_CORRUPTED_SUM');
     expect(result.code).not.toContain('FREZEN_VM_PAYLOAD_CORRUPTED_LEN');
     expect(result.code).toContain('out[#out+1]');
+    expect(result.code).toContain('local ');
+    expect(result.transforms.transform).toBe('layered-nibble-alphabet-chunks');
     expect(result.code).toMatch(/\]\={"[^"]+",\d+,\d+,\d+,\d+,\d+,"[^"]+"}/);
     expect(isFrezenVmV2(result.code)).toBe(true);
   });
