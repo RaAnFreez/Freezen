@@ -303,7 +303,7 @@ export function compileFrezenVmV3(source) {
     `${names.F}=function(f,args)`,
     `if type(f)=="table" and f.__frezen_v3 then`,
     `local e={p=f.e,v={},h={},a={n=0}}`,
-    `for i=1,#f.p do e.h[f.p[i]]=true; e.v[f.p[i]]=args[i] end`,
+    `for i=1,#f.p do local n=${names.D}(f.p[i]); e.h[n]=true; e.v[n]=args[i] end`,
     `if f.va then local a={n=math.max(0,#args-#f.p)}; for i=#f.p+1,#args do a[i-#f.p]=args[i] end e.a=a end`,
     `local r=${names.O}(f.b,e); if r and r.k==1 then return r.v end return {}`,
     `end`,
