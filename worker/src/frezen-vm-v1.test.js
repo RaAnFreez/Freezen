@@ -20,7 +20,7 @@ describe('Frezen VM v1', () => {
     expect(result.code).toContain('string.byte');
     expect(result.code).toContain('loadstring or load');
     expect(result.code).not.toContain(']=["');
-    expect(result.code).toContain(']={"\\');
+    expect(result.code).toMatch(/\]\=\{\d+,\d+,\d+/);
     expect(isFrezenVm(result.code)).toBe(true);
   });
 
@@ -28,7 +28,7 @@ describe('Frezen VM v1', () => {
     const result = compileFrezenVm('local secret = "FrezenSecret"\nreturn secret', { chunkSize: 24 });
     expect(result.chunkCount).toBeGreaterThan(1);
     expect(result.code).not.toContain('FrezenSecret');
-    expect(result.code).toMatch(/\\\d{3}/);
+    expect(result.code).toMatch(/\]\=\{\d+(?:,\d+){5,}\}/);
     expect(result.code).toMatch(/local __frezen_v[pi]/);
   });
 
