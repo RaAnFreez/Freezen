@@ -96,7 +96,7 @@ class Compiler {
       throw new Error('VM_V3_PARSE_FAILED:' + message.slice(0, 240));
     }
     const program = this.block(ast.body);
-    return { program, constants: shuffle(this.constants), constantRemap: null };
+    return { program, constants: this.constants, constantRemap: null };
   }
 
   expr(node) {
@@ -317,7 +317,7 @@ export function compileFrezenVmV3(source) {
     `if x[1]==${OPS.VARARG} then local unpacker=table.unpack or unpack; local r=${names.R}(unpacker(e.a,1,e.a.n or 0)); return setmetatable(r,{__frezen_multi=true}) end`,
     `if x[1]==${OPS.INDEX} then local b=${names.T}(e,x[2],false); local k=${names.T}(e,x[3],false); return b[k] end`,
     `if x[1]==${OPS.UNARY} then local a=${names.T}(e,x[3],false); if x[2]==1 then return -a elseif x[2]==2 then return #a elseif x[2]==3 then return not a end end`,
-    `if x[1]==${OPS.BIN} then local a=${names.T}(e,x[3],false); local b=${names.T}(e,x[4],false); local o=x[2]; if o==1 then if type(a)~="number" or type(b)~="number" then error("FREZEN_VM_V3_BIN_ADD:"..type(a)..":"..type(b)..":"..tostring(a)..":"..tostring(b)) end return a+b elseif o==2 then return a-b elseif o==3 then return a*b elseif o==4 then return a/b elseif o==5 then return a%b elseif o==6 then return a^b elseif o==7 then return a..b elseif o==8 then return a==b elseif o==9 then return a~=b elseif o==10 then return a<b elseif o==11 then return a<=b elseif o==12 then return a>b elseif o==13 then return a>=b elseif o==14 then return math.floor(a/b) end end`,
+    `if x[1]==${OPS.BIN} then local a=${names.T}(e,x[3],false); local b=${names.T}(e,x[4],false); local o=x[2]; if o==1 then return a+b elseif o==2 then return a-b elseif o==3 then return a*b elseif o==4 then return a/b elseif o==5 then return a%b elseif o==6 then return a^b elseif o==7 then return a..b elseif o==8 then return a==b elseif o==9 then return a~=b elseif o==10 then return a<b elseif o==11 then return a<=b elseif o==12 then return a>b elseif o==13 then return a>=b elseif o==14 then return math.floor(a/b) end end`,
     `if x[1]==${OPS.LOGIC} then local a=${names.T}(e,x[3],false); if x[2]==1 then return a and ${names.T}(e,x[4],false) or a end return a or ${names.T}(e,x[4],false) end`,
     `if x[1]==${OPS.CALL} then local f=${names.T}(e,x[2],false); local a={}; for i=1,#x[3] do local r=${names.T}(e,x[3][i],i==#x[3]); if i==#x[3] and type(r)==\"table\" and r.__frezen_multi then for j=1,r.n do a[#a+1]=r[j] end else a[i]=r end end; local r=${names.F}(f,a); return setmetatable(r,{__frezen_multi=true}) end`,
     `if x[1]==${OPS.MCALL} then local b=${names.T}(e,x[2],false); local k=${names.T}(e,x[3],false); local f=b[k]; local a={b}; for i=1,#x[4] do local r=${names.T}(e,x[4][i],i==#x[4]); if i==#x[4] and type(r)==\"table\" and r.__frezen_multi then for j=1,r.n do a[#a+1]=r[j] end else a[i+1]=r end end; local r=${names.F}(f,a); return setmetatable(r,{__frezen_multi=true}) end`,
