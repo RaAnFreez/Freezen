@@ -141,6 +141,6 @@ export function isFrezenVm(value) {
   return text.startsWith(OBFUSCATION_WATERMARK)
     && /while true do/.test(text)
     && /loadstring or load/.test(text)
-    && /string\\.byte/.test(text)
+    && /string\.byte/.test(text)
     && /table\\.concat/.test(text);
 }
