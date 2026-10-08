@@ -128,17 +128,25 @@ class Compiler {
         if (LOGIC_OPS[node.operator] === undefined) throw new Error('VM_V3_UNSUPPORTED_LOGICAL:' + node.operator);
         return [OPS.LOGIC, LOGIC_OPS[node.operator], this.expr(node.left), this.expr(node.right)];
       case 'CallExpression': {
+        const args = Array.isArray(node.arguments)
+          ? node.arguments
+          : node.arguments
+            ? [node.arguments]
+            : [];
         if (node.isMethod) {
           const base = node.base?.type === 'MemberExpression' ? node.base.base : node.base;
           const key = node.base?.type === 'MemberExpression'
             ? [OPS.CONST, this.string(memberName(node.base))]
             : [OPS.CONST, this.nil()];
-          return [OPS.MCALL, this.expr(base), key, (node.arguments || []).map((arg) => this.expr(arg))];
+          return [OPS.MCALL, this.expr(base), key, args.map((arg) => this.expr(arg))];
         }
-        return [OPS.CALL, this.expr(node.base), (node.arguments || []).map((arg) => this.expr(arg))];
+        return [OPS.CALL, this.expr(node.base), args.map((arg) => this.expr(arg))];
       }
-      case 'TableCallExpression':
-        return [OPS.CALL, this.expr(node.base), [[OPS.TABLE, (node.arguments || []).map((field) => [3, this.expr(field)])]]];
+      case 'TableCallExpression': {
+        const arg = node.arguments;
+        if (!arg) throw new Error('VM_V3_MISSING_TABLE_CALL_ARGUMENT');
+        return [OPS.CALL, this.expr(node.base), [this.expr(arg)]];
+      }
       case 'StringCallExpression':
         return [OPS.CALL, this.expr(node.expression), [[OPS.CONST, this.string(node.argument?.value ?? node.argument?.raw ?? '')]]];
       case 'FunctionExpression':
