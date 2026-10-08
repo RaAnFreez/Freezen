@@ -264,7 +264,6 @@ export function compileFrezenVmV3(source) {
     `local ${names.P}={${constants.map((v) => v.t === 'b' ? `{2,${v.v}}` : v.t === 'z' ? '{3}' : `{1,"${v.value}",${v.add},${v.step},${v.length}}`).join(',')}}`,
     `local ${names.K}=${JSON.stringify(program)}`,
     `local ${names.E}={p=nil,v={},h={},a={n=0}}`,
-    `local ${names.N}=${JSON.stringify({ ...OPS, BC: BIN_OPS, LG: LOGIC_OPS, UN: UNARY_OPS })}`,
     `local ${names.G}={}`,
     `local function ${names.D}(i)`,
     `local e=${names.P}[i]`,
