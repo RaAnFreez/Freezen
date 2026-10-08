@@ -139,10 +139,18 @@ export function compileFrezenVmV2(source, options = {}) {
   let opcodeNop = randomInt(193, 251);
   if (opcodeNop === opcodeDecode || opcodeNop === opcodeExecute) opcodeNop = 251;
 
-  const generatedChunks = chunks.map((chunk) => ({
-    key: randomInt(100000, 9999999),
-    encoded: encodeChunk(chunk),
-  }));
+  const usedChunkKeys = new Set();
+  const generatedChunks = chunks.map((chunk) => {
+    let key;
+    do {
+      key = randomInt(100000, 9999999);
+    } while (usedChunkKeys.has(key));
+    usedChunkKeys.add(key);
+    return {
+      key,
+      encoded: encodeChunk(chunk),
+    };
+  });
 
   const entries = shuffle(generatedChunks).map(({ key, encoded }) =>
     `[${key}]={"${encoded.payload}",${encoded.byteLength},${encoded.add},${encoded.inverse},${encoded.step},${encoded.roundAdd},"${encoded.alphabet}"}`,
