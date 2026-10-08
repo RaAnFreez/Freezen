@@ -13,6 +13,15 @@ export const FREZEN_VM_PROFILE = Object.freeze({
 });
 
 export const MAX_VM_SOURCE_BYTES = 3 * 1024 * 1024;
+const CHECKSUM_MOD = 65521;
+const CHECKSUM_SEED = 17;
+const CHECKSUM_MULTIPLIER = 131;
+
+function sourceChecksum(bytes) {
+  let hash = CHECKSUM_SEED;
+  for (const byte of bytes) hash = (hash * CHECKSUM_MULTIPLIER + byte) % CHECKSUM_MOD;
+  return hash;
+}
 
 function randomInt(min = 1000, max = 9999999) {
   return Math.floor(min + Math.random() * (max - min + 1));
@@ -98,22 +107,29 @@ export function compileFrezenVm(source, options = {}) {
     const key = randomInt(100000, 9999999);
     const encoded = encodeChunk(chunk);
     entries.push(
-      `[${key}]={${encoded.payload.join(',')},${encoded.add},${encoded.inverse},${encoded.indexMul},${encoded.indexAdd}}`,
+      `[${key}]={${encoded.payload.join(',')},${encoded.payload.length},${encoded.add},${encoded.inverse},${encoded.indexMul},${encoded.indexAdd}}`,
     );
     instructions.push(`{${opcodeDecode},${key}}`);
   }
   instructions.push(`{${opcodeNop}}`);
   instructions.push(`{${opcodeExecute}}`);
 
+  const expectedLengthName = randomName('__frezen_len');
+  const expectedChecksumName = randomName('__frezen_sum');
+  const checksumName = randomName('__frezen_chk');
+  const scanIndexName = randomName('__frezen_scan');
+  const expectedLength = sourceBytes.byteLength;
+  const expectedChecksum = sourceChecksum(Array.from(sourceBytes));
   const prefix = [
     `local ${poolName}={${entries.join(',')}}`,
     `local ${programName}={${instructions.join(',')}}`,
-    `local ${decodeName}=function(k)local e=${poolName}[k] if not e then error("FREZEN_VM_CHUNK_MISSING") end local add=e[#e-3] local inv=e[#e-2] local im=e[#e-1] local ia=e[#e] local out={} for ${indexName}=1,#e-4 do local ${byteName}=e[${indexName}] local ${valueName}=(${byteName}-((((${indexName}-1)%256)*ia)%256))%256 ${valueName}=(${valueName}*inv)%256 ${valueName}=(${valueName}-add-((((${indexName}-1)%256)*im)%256))%256 out[${indexName}]=string.char(${valueName}) end return table.concat(out) end`,
+    `local ${decodeName}=function(k)local e=${poolName}[k] if not e then error("FREZEN_VM_CHUNK_MISSING") end local n=e[#e-4] local add=e[#e-3] local inv=e[#e-2] local im=e[#e-1] local ia=e[#e] local out={} for ${indexName}=1,n do local ${byteName}=e[${indexName}] local ${valueName}=(${byteName}-((((${indexName}-1)%256)*ia)%256))%256 ${valueName}=(${valueName}*inv)%256 ${valueName}=(${valueName}-add-((((${indexName}-1)%256)*im)%256))%256 out[${indexName}]=string.char(${valueName}) end return table.concat(out) end`,
     `local ${pcName}=1 local ${bufferName}={}`,
-    `while true do local ${instructionName}=${programName}[${pcName}] if not ${instructionName} then break end local ${opName}=${instructionName}[1] if ${opName}==${opcodeDecode} then ${bufferName}[#${bufferName}+1]=${decodeName}(${instructionName}[2]) elseif ${opName}==${opcodeExecute} then local ${sourceName}=table.concat(${bufferName}) local ${loaderName}=loadstring or load if type(${loaderName})~="function" then error("FREZEN_VM_LOAD_UNAVAILABLE") end local ${functionName},${errorName}=${loaderName}(${sourceName}) if type(${functionName})~="function" then error("FREZEN_VM_COMPILE_FAILED:"..tostring(${errorName})) end local ${okName},${resultName}=pcall(${functionName}) if not ${okName} then error("FREZEN_VM_RUNTIME_FAILED:"..tostring(${resultName})) end return ${resultName} elseif ${opName}==${opcodeNop} then end ${pcName}=${pcName}+1 end`,
+    `while true do local ${instructionName}=${programName}[${pcName}] if not ${instructionName} then break end local ${opName}=${instructionName}[1] if ${opName}==${opcodeDecode} then ${bufferName}[#${bufferName}+1]=${decodeName}(${instructionName}[2]) elseif ${opName}==${opcodeExecute} then local ${sourceName}=table.concat(${bufferName}) if #${sourceName}~=${expectedLengthName} then error("FREZEN_VM_PAYLOAD_CORRUPTED_LEN") end local ${checksumName}=${CHECKSUM_SEED} for ${scanIndexName}=1,#${sourceName} do ${checksumName}=(${checksumName}*${CHECKSUM_MULTIPLIER}+string.byte(${sourceName},${scanIndexName}))%${CHECKSUM_MOD} end if ${checksumName}~=${expectedChecksumName} then error("FREZEN_VM_PAYLOAD_CORRUPTED_SUM") end local ${loaderName}=loadstring or load if type(${loaderName})~="function" then error("FREZEN_VM_LOAD_UNAVAILABLE") end local ${functionName},${errorName}=${loaderName}(${sourceName}) if type(${functionName})~="function" then error("FREZEN_VM_COMPILE_FAILED:"..tostring(${errorName})) end local ${okName},${resultName}=pcall(${functionName}) if not ${okName} then error("FREZEN_VM_RUNTIME_FAILED:"..tostring(${resultName})) end return ${resultName} elseif ${opName}==${opcodeNop} then end ${pcName}=${pcName}+1 end`,
   ].join('\n');
 
-  const code = `${OBFUSCATION_WATERMARK}\n${prefix}`;
+  const integrity = `local ${expectedLengthName}=${expectedLength} local ${expectedChecksumName}=${expectedChecksum}`;
+  const code = `${OBFUSCATION_WATERMARK}\n${integrity}\n${prefix}`;
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_VM_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
