@@ -141,7 +141,12 @@ class Compiler {
       case 'StringCallExpression':
         return [OPS.CALL, this.expr(node.expression), [[OPS.CONST, this.string(node.argument?.value ?? node.argument?.raw ?? '')]]];
       case 'FunctionExpression':
-        return [OPS.FUNC, (node.parameters || []).map((p) => p.type === 'Identifier' ? this.string(p.name) : this.string('...')), !!node.isVararg, this.block(node.body || [])];
+      case 'FunctionDeclaration':
+        return [OPS.FUNC,
+          (node.parameters || []).map((p) => p.type === 'Identifier' ? this.string(p.name) : this.string('...')),
+          !!node.isVararg,
+          this.block(node.body || []),
+        ];
       case 'TableConstructorExpression':
         return [OPS.TABLE, (node.fields || []).map((field) => {
           if (field.type === 'TableKeyString') return [1, this.string(field.key?.name ?? field.key), this.expr(field.value)];
