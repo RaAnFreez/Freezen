@@ -73,7 +73,6 @@ describe('Maximum multi-layer compatibility-first obfuscation', () => {
   });
 });
 
-
 describe('Frezen obfuscation marker detection', () => {
   it('only treats an actual payload header as obfuscated', () => {
     const plain = "local text = '-- This file obfuscation with Frezen Obfuscation'\nprint(text)";
@@ -82,7 +81,6 @@ describe('Frezen obfuscation marker detection', () => {
     expect(isFrezenObfuscated("\uFEFF-- FREZEN_OBFUSCATION: ADVANCED_V11|VERY_HIGH|100|XOR\nlocal x=1")).toBe(true);
   });
 });
-
 
 describe('Lua 5.1 generated-output compatibility', () => {
   it('uses only Lua 5.1-compatible constructs for its generated protection layers', () => {
@@ -94,7 +92,6 @@ describe('Lua 5.1 generated-output compatibility', () => {
     expect(result.code).not.toContain('>>');
   });
 });
-
 
 describe('renderer lexical boundaries', () => {
   it('separates Lua keywords from generated pooled string calls', () => {
@@ -154,7 +151,7 @@ describe('hybrid readable anchors', () => {
 describe('randomized string pool', () => {
   it('deduplicates repeated strings while hiding plaintext and varying the pool', () => {
     const source = 'local first = "https://example.com"\nlocal second = "https://example.com"\nprint(first, second)';
-    const result = obfuscateLuaV11(source);
+    const result = obfuscateLuaV11(source, { preserveReadableStrings: false });
     expect(result.code).not.toContain('https://example.com');
     expect(result.code).toContain('local __frezen_sp');
     expect(result.code).toContain('local __frezen_sd');
