@@ -35,6 +35,16 @@ describe('Frezen VM v3', () => {
     expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
   });
 
+  it('accepts a function declaration node when encountered in an expression position', () => {
+    const result = compileFrezenVmV3([
+      'local fn = function(a)',
+      '  return a + 1',
+      'end',
+      'print(fn(4))',
+    ].join('\\n'));
+    expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
+  });
+
   it('rejects syntax that the virtual runtime deliberately does not emulate', () => {
     expect(() => compileFrezenVmV3('local x = 1 & 2')).toThrow(/VM_V3_UNSUPPORTED_BINARY:&/);
     expect(() => compileFrezenVmV3('goto nope\n::nope::')).toThrow(/VM_V3_UNSUPPORTED_STATEMENT:GotoStatement/);
