@@ -92,7 +92,15 @@ export default {
       const access = await requirePrivateAccess(request, env, crypto.randomUUID());
       if (access instanceof Response) return access;
       if (!env.ASSETS) return new Response(JSON.stringify({ error: "STATIC_ASSETS_NOT_CONFIGURED" }), { status: 503, headers: { "content-type": "application/json" } });
-      return env.ASSETS.fetch(request, env, ctx);
+      const assetResponse = await env.ASSETS.fetch(request, env, ctx);
+      const contentType = assetResponse.headers.get("content-type") || "";
+      if (contentType.toLowerCase().includes("text/html")) {
+        const headers = new Headers(assetResponse.headers);
+        headers.set("cache-control", "no-store, no-cache, must-revalidate");
+        headers.set("pragma", "no-cache");
+        return new Response(assetResponse.body, { status: assetResponse.status, statusText: assetResponse.statusText, headers });
+      }
+      return assetResponse;
     }
 
     return worker.fetch(request, env, ctx);
