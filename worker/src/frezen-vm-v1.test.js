@@ -13,7 +13,7 @@ describe('Frezen VM v1', () => {
 
   it('keeps the Frezen watermark as the only watermark header', () => {
     const result = compileFrezenVm('local url = "https://example.com/test"\nprint(url)');
-    expect(result.code.startsWith(OBFUSCATION_WATERMARK + '\\n')).toBe(true);
+    expect(result.code.startsWith(OBFUSCATION_WATERMARK + '\n')).toBe(true);
     expect(result.code.split(OBFUSCATION_WATERMARK).length - 1).toBe(1);
     expect(result.code).not.toContain('https://example.com/test');
     expect(result.code).toContain('while true do');
