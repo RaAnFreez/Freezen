@@ -18,11 +18,13 @@ describe('Frezen VM v1', () => {
     expect(result.code).not.toContain('https://example.com/test');
     expect(result.code).toContain('while true do');
     expect(result.code).toContain('string.char');
-    expect(result.code).toContain('string.byte');
+    expect(result.code).not.toContain('string.byte');
     expect(result.code).toContain('loadstring or load');
     expect(result.code).toContain('FREZEN_VM_PAYLOAD_CORRUPTED_LEN');
     expect(result.code).toContain('%65521');
-    expect(result.code).toContain('if __frezen_b<0 then __frezen_b=__frezen_b+256 end');
+    expect(result.code).toMatch(/local __frezen_rsum\d+=17/);
+    expect(result.code).toMatch(/local __frezen_rlen\d+=0/);
+    expect(result.code).toContain('FREZEN_VM_PAYLOAD_CORRUPTED_SUM');
     expect(result.code).not.toContain(']=["');
     expect(result.code).toMatch(/\]\=\{\d+,\d+,\d+/);
     expect(isFrezenVm(result.code)).toBe(true);
