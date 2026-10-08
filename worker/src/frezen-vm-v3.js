@@ -220,6 +220,18 @@ class Compiler {
   }
 }
 
+function luaLiteral(value) {
+  if (Array.isArray(value)) return `{${value.map(luaLiteral).join(',')}}`;
+  if (value === null || value === undefined) return 'nil';
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('VM_V3_NONFINITE_NUMBER');
+    return String(value);
+  }
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'string') return JSON.stringify(value);
+  throw new Error('VM_V3_UNSUPPORTED_LITERAL:' + typeof value);
+}
+
 function runtimeNames() {
   return {
     P: randomName('__p'),
@@ -262,7 +274,7 @@ export function compileFrezenVmV3(source) {
   const names = runtimeNames();
   const code = OBFUSCATION_WATERMARK + '\n' + [
     `local ${names.P}={${constants.map((v) => v.t === 'b' ? `{2,${v.v}}` : v.t === 'z' ? '{3}' : `{1,"${v.value}",${v.add},${v.step},${v.length}}`).join(',')}}`,
-    `local ${names.K}=${JSON.stringify(program)}`,
+    `local ${names.K}=${luaLiteral(program)}`,
     `local ${names.E}={p=nil,v={},h={},a={n=0}}`,
     `local ${names.G}={}`,
     `local function ${names.D}(i)`,
