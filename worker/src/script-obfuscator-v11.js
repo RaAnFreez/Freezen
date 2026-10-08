@@ -285,7 +285,7 @@ function buildStringPool(tokens, options = {}) {
   const prefix = [
     `local ${shardAName}={${renderEntries(shardA)}}`,
     `local ${shardBName}={${renderEntries(shardB)}}`,
-    `local ${decodeName}=function(k)local S=0;local v,t,k1,k2,inv,rot,oa,oi,om,oo,n,s,z,p,j,idx,a,b,c,d;while true do if S==0 then v=((k%2)==0 and ${shardAName}[k] or ${shardBName}[k]);if not v then return nil end;S=1 elseif S==1 then t=v[1];k1=v[2];k2=v[3];inv=v[4];rot=v[5];oa=v[6];oi=v[7];om=v[8];oo=v[9];n=#t;s="";z=0;S=2 elseif S==2 then if z>=n then S=4 else S=3 end elseif S==3 then p=((z-rot)%n)+1;j=n-p+1;idx=z%256;a=(string.byte(t,j)-((idx*oo)%256))%256;b=(a*om)%256;c=(b-oa-((idx*oi)%256))%256;d=(c-k2-idx)%256;a=(d*inv)%256;c=(a-k1-((idx*7)%256))%256;s=s..string.char(c);z=z+1;S=2 else return s end end end`,
+    `local ${decodeName}=function(k)local S=0;local v,t,k1,k2,inv,rot,oa,oi,om,oo,n,s,z,p,j,idx,a,b,c,d;while true do if S==0 then v=((k%2)==0 and ${shardAName}[k] or ${shardBName}[k]);if not v then return nil end;S=1 elseif S==1 then t=v[1];k1=v[2];k2=v[3];inv=v[4];rot=v[5];oa=v[6];oi=v[7];om=v[8];oo=v[9];n=#t;s="";z=0;S=2 elseif S==2 then if z>=n then S=4 else S=3 end elseif S==3 then p=((z-rot)%n)+1;j=n-p+1;idx=z%256;a=(string.byte(t,j)-((idx*oo)%256))%256;b=(a*oi)%256;c=(b-oa-((idx*om)%256))%256;d=(c-k2-idx)%256;a=(d*inv)%256;c=(a-k1-((idx*7)%256))%256;s=s..string.char(c);z=z+1;S=2 else return s end end end`,
   ].join('\n');
   return { tokens: transformed, prefix };
 }
