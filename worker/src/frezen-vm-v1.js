@@ -101,7 +101,7 @@ export function compileFrezenVm(source, options = {}) {
     const key = randomInt(100000, 9999999);
     const encoded = encodeChunk(chunk);
     entries.push(
-      `[${key}]=["${encoded.payload}",${encoded.add},${encoded.inverse},${encoded.indexMul},${encoded.indexAdd}]`,
+      `[${key}]={"${encoded.payload}",${encoded.add},${encoded.inverse},${encoded.indexMul},${encoded.indexAdd}}`,
     );
     instructions.push(`{${opcodeDecode},${key}}`);
   }
