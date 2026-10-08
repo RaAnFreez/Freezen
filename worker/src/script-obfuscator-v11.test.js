@@ -154,7 +154,8 @@ describe('randomized string pool', () => {
     const source = 'local first = "https://example.com"\nlocal second = "https://example.com"\nprint(first, second)';
     const result = obfuscateLuaV11(source, { preserveReadableStrings: false });
     expect(result.code).not.toContain('https://example.com');
-    expect(result.code).toContain('local __frezen_sp');
+    expect(result.code).toContain('local __frezen_pa');
+    expect(result.code).toContain('local __frezen_pb');
     expect(result.code).toContain('local __frezen_sd');
     expect(result.code).toContain('string.byte');
     expect(result.code).toMatch(/\\\d{3}/);
