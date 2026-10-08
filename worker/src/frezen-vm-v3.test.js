@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { compileFrezenVmV3, FREZEN_VM_V3_PROFILE, isFrezenVmV3 } from './frezen-vm-v3.js';
+import { compileFrezenVmV3, FREZEN_VM_V3_LUA_VERSION, FREZEN_VM_V3_PROFILE, isFrezenVmV3 } from './frezen-vm-v3.js';
 import { OBFUSCATION_WATERMARK } from './script-obfuscation-contract.js';
 
 describe('Frezen VM v3', () => {
@@ -41,14 +41,11 @@ describe('Frezen VM v3', () => {
     expect(result.code).not.toContain('VM_V3_UNSUPPORTED_EXPRESSION:FunctionDeclaration');
   });
 
-  it('parses Lua 5.3 floor-division syntax supported by the VM', () => {
-    const result = compileFrezenVmV3(['local x = 7 // 2', 'print(x)'].join('\n'));
-    expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
-  });
-
-  it('rejects syntax that the virtual runtime deliberately does not emulate', () => {
-    expect(() => compileFrezenVmV3('local x = 1 & 2')).toThrow(/VM_V3_UNSUPPORTED_BINARY:&/);
-    expect(() => compileFrezenVmV3('goto nope\n::nope::')).toThrow(/VM_V3_UNSUPPORTED_STATEMENT:GotoStatement/);
+  it('uses the Lua 5.1 source grammar for obfuscation input', () => {
+    expect(FREZEN_VM_V3_LUA_VERSION).toBe('5.1');
+    expect(() => compileFrezenVmV3('local x = 7 // 2')).toThrow(/VM_V3_PARSE_FAILED:/);
+    expect(() => compileFrezenVmV3('local x = 1 & 2')).toThrow(/VM_V3_PARSE_FAILED:/);
+    expect(() => compileFrezenVmV3('goto nope\n::nope::')).toThrow(/VM_V3_PARSE_FAILED:/);
   });
 
   it('executes core Lua semantics in the Luau integration runtime', () => {
