@@ -36,7 +36,7 @@ describe('Frezen VM v3', () => {
       '  return a + 1',
       'end',
       'print(fn(4))',
-    ].join('\\n'));
+    ].join('\n'));
     expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
     expect(result.code).not.toContain('VM_V3_UNSUPPORTED_EXPRESSION:FunctionDeclaration');
   });
