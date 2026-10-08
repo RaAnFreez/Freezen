@@ -45,7 +45,8 @@ describe('Frezen VM v2', () => {
     const keywords = ['if', 'then', 'elseif', 'else', 'end', 'do', 'while', 'for', 'return'];
     const invalidToken = wrapper
       .split(/\s+/)
-      .find((token) => keywords.some((keyword) => token !== keyword && token.endsWith(keyword)));
+      .find((token) => !keywords.includes(token)
+        && keywords.some((keyword) => token.endsWith(keyword)));
 
     expect(invalidToken).toBeUndefined();
     expect(wrapper).not.toContain('local i=1 while');
