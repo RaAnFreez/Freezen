@@ -25,7 +25,8 @@ describe('Maximum multi-layer compatibility-first obfuscation', () => {
     expect(result.code).toContain('string.char');
     expect(result.code).not.toContain('t[i]~');
     expect(result.code).toContain('string.byte');
-    expect(result.code).toContain('local __frezen_sp');
+    expect(result.code).toContain('local __frezen_pa');
+    expect(result.code).toContain('local __frezen_pb');
     expect(result.code).toContain('local __frezen_sd');
     expect(result.code).toContain('-- This file obfuscation with Frezen Obfuscation');
     expect((result.code.match(/-- This file obfuscation with Frezen Obfuscation/g) || []).length).toBe(1);
