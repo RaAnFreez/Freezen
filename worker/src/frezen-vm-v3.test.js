@@ -46,6 +46,7 @@ describe('Frezen VM v3', () => {
       '  return a + b',
       'end',
       'local total = add(7, 5)',
+      'print(total)',
       'local t = { value = total }',
       'print(t.value)',
     ].join('\n');
@@ -60,7 +61,7 @@ describe('Frezen VM v3', () => {
       if (run.status !== 0) {
         throw new Error([`status=${run.status}`, `stdout=${run.stdout}`, `stderr=${run.stderr}`].join('\\n'));
       }
-      expect(run.stdout.trim().split(/\r?\n/).at(-1)).toBe('12');
+      expect(run.stdout.trim().split(/\r?\n/)).toEqual(['12', '12']);
       expect(run.stdout).not.toContain('FREZEN_SECRET_RUNTIME_ONLY');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
