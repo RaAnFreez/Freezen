@@ -799,7 +799,6 @@ export function compileFrezenVmV3(source) {
     `end`,
     `if f==nil then error("FREZEN_VM_V3_CALL_NONFUNCTION:nil") end`,
     `local unpacker=table.unpack or unpack; local packed=${names.R}(pcall(function() return f(unpacker(args,1,args.n or #args)) end)); if not packed[1] then error("FREZEN_VM_V3_CALL_NONFUNCTION:"..type(f)..":"..tostring(packed[2])) end; local out={n=packed.n-1}; for i=1,out.n do out[i]=packed[i+1] end; return out`,
-    `if not ok then error("FREZEN_VM_V3_CALL_NONFUNCTION:"..type(f)..":"..tostring(a)) end return {n=10,[1]=a,[2]=b,[3]=c,[4]=d,[5]=e2,[6]=f2,[7]=g2,[8]=h2,[9]=i2,[10]=j2}`,
     `end`,
     `${names.T}=function(e,x,multi)`,
     `if x[1]==${runtimeOps.CONST} then return ${names.D}(x[2]) end`,
