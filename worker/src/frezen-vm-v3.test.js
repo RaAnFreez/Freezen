@@ -15,6 +15,9 @@ describe('Frezen VM v3', () => {
       'end',
       'local t = { value = add(7, 5) }',
       'print(t.value)',
+      'print "string-call-ok"',
+      'local receiver = { value = 4, add = function(self, x) return self.value + x end }',
+      'print(receiver:add(3))',
     ].join('\n');
 
     const result = compileFrezenVmV3(source);
@@ -180,7 +183,7 @@ describe('Frezen VM v3', () => {
       if (run.status !== 0) {
         throw new Error([`status=${run.status}`, `stdout=${run.stdout}`, `stderr=${run.stderr}`].join('\\n'));
       }
-      expect(run.stdout.trim().split(/\r?\n/)).toEqual(['12', '12']);
+      expect(run.stdout.trim().split(/\r?\n/)).toEqual(['12', '12', 'string-call-ok', '7']);
       expect(run.stdout).not.toContain('FREZEN_SECRET_RUNTIME_ONLY');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
