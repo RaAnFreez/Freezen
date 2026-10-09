@@ -222,7 +222,7 @@ describe('Frezen VM v3', () => {
       'end }))',
       'payload()',
       '_G.print = nativePrint',
-    ].join('\\n');
+    ].join('\n');
 
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frezen-vm-v3-env-'));
     const file = path.join(dir, 'payload-env.lua');
