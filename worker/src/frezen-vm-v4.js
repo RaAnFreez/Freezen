@@ -9,7 +9,7 @@ export const FREZEN_VM_V4_PROFILE = Object.freeze({
   runtimeVm: true,
   sourceCompatible: true,
   sourceMaterialization: true,
-  loadstring: true,
+  nativeLoader: true,
   layers: 2,
   algorithm: 'two-stage-affine-payload+randomized-dispatch+dual-checksum',
 });
@@ -306,8 +306,12 @@ export function compileFrezenVmV4(source, options = {}) {
     names.chunk + ',' + names.loadError + '=loadstring(' + names.source + ')',
     'elseif ' + names.runtimeType + '(load)=="function" then',
     'local loadOk,loadValue,loadMessage=' + names.runtimePcall + '(load,' + names.source + ',"frezen-layered","t",' + names.env + ')',
-    'if loadOk then ' + names.chunk + ',' + names.loadError + '=loadValue,loadMessage else ' + names.loadError + '=loadValue end',
+    'if loadOk and ' + names.runtimeType + '(loadValue)=="function" then ' + names.chunk + ',' + names.loadError + '=loadValue,loadMessage else',
+    'local readerUsed=false; local reader=function() if readerUsed then return nil end readerUsed=true; return ' + names.source + ' end',
+    'local readerOk,readerValue,readerMessage=' + names.runtimePcall + '(load,reader)',
+    'if readerOk then ' + names.chunk + ',' + names.loadError + '=readerValue,readerMessage else ' + names.loadError + '=readerValue end',
     'end',
+    'end'
     'if ' + names.runtimeType + '(' + names.chunk + ')~="function" then ' + names.runtimeError + '("Frezen could not initialize the script.",0) end',
     'if ' + names.runtimeType + '(setfenv)=="function" then ' + names.runtimePcall + '(setfenv,' + names.chunk + ',' + names.env + ') end',
     'local ' + names.pack + '=function(...) return {n=' + names.runtimeSelect + '("#",...),...} end',
