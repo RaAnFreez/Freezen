@@ -1,8 +1,6 @@
 import { obfuscateLuaV11 } from './script-obfuscator-v11.js';
-import { compileFrezenVm, FREZEN_VM_PROFILE, isFrezenVm } from './frezen-vm-v1.js';
-import { compileFrezenVmV2, FREZEN_VM_V2_PROFILE, isFrezenVmV2 } from './frezen-vm-v2.js';
-import { compileFrezenVmV3, FREZEN_VM_V3_PROFILE, isFrezenVmV3 } from './frezen-vm-v3.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from './script-obfuscation-contract.js';
+import { compileFrezenVmV4, FREZEN_VM_V4_PROFILE, isFrezenVmV4 } from './frezen-vm-v4.js';
 
 const MAX_LUA_BYTES = 3 * 1024 * 1024;
 const VERSION_RE = /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
@@ -12,14 +10,13 @@ const id = () => crypto.randomUUID();
 const statusOk = (value) => String(value ?? '').trim().toUpperCase();
 const normalizeProtectionMode = (value) => {
   const mode = String(value ?? 'source-v11').trim().toLowerCase();
-  if (mode === 'vm-v3') return 'vm-v3';
-  if (mode === 'vm-v2') return 'vm-v2';
-  if (mode === 'vm-v1') return 'vm-v1';
+  if (['vm-v1', 'vm-v2', 'vm-v3', 'vm-v4'].includes(mode)) return 'vm-v4';
   return 'source-v11';
 };
-const isVmProtectionMode = (mode) => mode === 'vm-v1' || mode === 'vm-v2' || mode === 'vm-v3';
-const protectionProfile = (mode) => mode === 'vm-v3' ? FREZEN_VM_V3_PROFILE : (mode === 'vm-v2' ? FREZEN_VM_V2_PROFILE : (mode === 'vm-v1' ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE));
-const compileProtectedLua = (source, mode) => mode === 'vm-v3' ? compileFrezenVmV3(source) : (mode === 'vm-v2' ? compileFrezenVmV2(source) : (mode === 'vm-v1' ? compileFrezenVm(source) : obfuscateLuaV11(source)));
+const isVmProtectionMode = (mode) => mode === 'vm-v4';
+const isRetiredVmArtifact = (value) => { const source = String(value ?? ''); return source.startsWith(OBFUSCATION_MARKER) && ((source.includes('FREZEN_VM_V3_BAD_EXPR') && source.includes('__frezen_v3')) || source.includes('FREZEN_VM_V2_CHUNK_MISSING') || source.includes('FREZEN_VM_CHUNK_MISSING')); };
+const protectionProfile = (mode) => mode === 'vm-v4' ? FREZEN_VM_V4_PROFILE : OBFUSCATION_PROFILE;
+const compileProtectedLua = (source, mode) => mode === 'vm-v4' ? compileFrezenVmV4(source) : obfuscateLuaV11(source);
 
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -150,7 +147,7 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
     // Owners can upload/prepare a new version while the script remains disabled.
     const service = await env.DB.prepare('SELECT id FROM frezen_key_services WHERE id=?1 AND owner_id=?2 LIMIT 1').bind(script.service_id, auth?.user_id).first();
     if (!service) return bad(json, requestId, 'SERVICE_NOT_FOUND', 404);
-    if (isVmProtectionMode(parsed.protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, parsed.protectionMode === 'vm-v3' ? 'VM_V3_DISABLED' : (parsed.protectionMode === 'vm-v2' ? 'VM_V2_DISABLED' : 'VM_V1_DISABLED'), 409);
+    if (isVmProtectionMode(parsed.protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V4_DISABLED', 409);
     const versionId = id();
     const fileId = id();
     let obfuscated;
@@ -158,7 +155,7 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
       obfuscated = compileProtectedLua(parsed.content, parsed.protectionMode);
     } catch (error) {
       const reason = String(error?.message ?? error);
-      const compileError = reason.startsWith('VM_V3_') ? reason : 'OBFUSCATION_FAILED';
+      const compileError = reason === 'OBFUSCATED_LUA_TOO_LARGE' ? reason : 'OBFUSCATION_FAILED';
       return bad(json, requestId, compileError, reason === 'OBFUSCATED_LUA_TOO_LARGE' ? 413 : 422, compileError === 'OBFUSCATION_FAILED' ? undefined : { protection_mode: parsed.protectionMode });
     }
     const sourceSha256 = await sha256Hex(parsed.content);
@@ -203,12 +200,12 @@ export async function updateScriptVersionSource(request, env, requestId, json, a
   if (sourceBytes > MAX_LUA_BYTES) return bad(json, requestId, 'LUA_FILE_TOO_LARGE', 413);
   try {
     await ensureScriptSchema(env);
-    if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, protectionMode === 'vm-v3' ? 'VM_V3_DISABLED' : (protectionMode === 'vm-v2' ? 'VM_V2_DISABLED' : 'VM_V1_DISABLED'), 409);
+    if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V4_DISABLED', 409);
     const access = await env.DB.prepare('SELECT s.id FROM scripts s JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 AND sv.owner_id=?2 LIMIT 1').bind(scriptId, auth?.user_id).first();
     if (!access) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
     const row = await env.DB.prepare('SELECT sv.id,sv.version,sv.release_notes,sf.id AS file_id,sf.content AS existing_content FROM script_versions sv JOIN script_files sf ON sf.script_version_id=sv.id WHERE sv.id=?1 AND sv.script_id=?2 LIMIT 1').bind(versionId, scriptId).first();
     if (!row) return bad(json, requestId, 'SCRIPT_VERSION_NOT_FOUND', 404);
-    if (requestedProtectionMode === undefined) protectionMode = isFrezenVmV2(row.existing_content) ? 'vm-v2' : (isFrezenVm(row.existing_content) ? 'vm-v1' : 'source-v11');
+    if (requestedProtectionMode === undefined) protectionMode = (isFrezenVmV4(row.existing_content) || isRetiredVmArtifact(row.existing_content)) ? 'vm-v4' : 'source-v11';
     let obfuscated;
     try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) {
       const reason = String(error?.message ?? error);
@@ -317,7 +314,7 @@ export async function getScript(request, env, requestId, json, scriptId) {
           sha256: row.sha256,
           obfuscation_verified: verified,
           obfuscation_marker: verified ? OBFUSCATION_MARKER : 'marker-missing',
-          profile: verified ? (isFrezenVmV3(row.content) ? FREZEN_VM_V3_PROFILE : (isFrezenVmV2(row.content) ? FREZEN_VM_V2_PROFILE : (isFrezenVm(row.content) ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE))) : { version: 'legacy', status: 'unverified' },
+          profile: verified ? (isFrezenVmV4(row.content) ? FREZEN_VM_V4_PROFILE : (isRetiredVmArtifact(row.content) ? { version: 'legacy', mode: 'Retired Frezen VM artifact', strength: 'LEGACY', protectionLevel: 0 } : OBFUSCATION_PROFILE)) : { version: 'legacy', status: 'unverified' },
           content: row.content,
         },
         request_id: requestId,
@@ -342,7 +339,7 @@ export async function getScript(request, env, requestId, json, scriptId) {
           sha256: row.sha256,
           obfuscation_verified: verified,
           obfuscation_marker: verified ? OBFUSCATION_MARKER : 'marker-missing',
-          profile: verified ? (isFrezenVmV3(row.content) ? FREZEN_VM_V3_PROFILE : (isFrezenVmV2(row.content) ? FREZEN_VM_V2_PROFILE : (isFrezenVm(row.content) ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE))) : { version: 'legacy', status: 'unverified' },
+          profile: verified ? (isFrezenVmV4(row.content) ? FREZEN_VM_V4_PROFILE : (isRetiredVmArtifact(row.content) ? { version: 'legacy', mode: 'Retired Frezen VM artifact', strength: 'LEGACY', protectionLevel: 0 } : OBFUSCATION_PROFILE)) : { version: 'legacy', status: 'unverified' },
           content: row.content,
         },
         request_id: requestId,
