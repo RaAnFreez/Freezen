@@ -223,7 +223,7 @@ describe('Frezen VM v3', () => {
       'setfenv(payload, setmetatable({ print = customPrint }, { __index = _G }))',
       'payload()',
       'print(table.concat(captured, "\\n"))',
-    ].join('\\n');
+    ].join('\n');
 
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frezen-vm-v3-env-'));
     const file = path.join(dir, 'payload-env.lua');
@@ -232,7 +232,7 @@ describe('Frezen VM v3', () => {
     try {
       const run = spawnSync(runtime, [file], { encoding: 'utf8', timeout: 15000 });
       if (run.status !== 0) {
-        throw new Error(['status=' + run.status, 'stdout=' + run.stdout, 'stderr=' + run.stderr].join('\\n'));
+        throw new Error(['status=' + run.status, 'stdout=' + run.stdout, 'stderr=' + run.stderr].join('\n'));
       }
       expect(run.stdout.trim()).toBe('resolved-from-payload-env');
     } finally {
