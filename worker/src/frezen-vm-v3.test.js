@@ -184,7 +184,17 @@ describe('Frezen VM v3', () => {
       'print "string-call-ok"',
       'local receiver = { value = 4, add = function(self, x) return self.value + x end }',
       'print(receiver:add(3))',
-      'print("unicode ∞ café 🎵")',
+      'print(select("#", "head", "middle", nil))',
+      'print(select("#", nil, "middle"))',
+      'local function verifyNilArguments(first, middle, last)',
+      '  return first == nil and middle == "middle-kept" and last == nil',
+      'end',
+      'print(verifyNilArguments(nil, "middle-kept", nil))',
+      'local function countVarargs(...)',
+      '  return select("#", ...)',
+      'end',
+      'print(countVarargs("head", "middle", nil))',
+      'print("unicode ∞ café 🎵")'
       'local unicodeLong = [=[long unicode ∞ 🎵]=]',
       'print(unicodeLong)',
     ].join('\n');
@@ -199,7 +209,7 @@ describe('Frezen VM v3', () => {
       if (run.status !== 0) {
         throw new Error([`status=${run.status}`, `stdout=${run.stdout}`, `stderr=${run.stderr}`].join('\\n'));
       }
-      expect(run.stdout.trim().split(/\r?\n/)).toEqual(['12', '12', 'string-call-ok', '7', 'unicode ∞ café 🎵', 'long unicode ∞ 🎵']);
+      expect(run.stdout.trim().split(/\r?\n/)).toEqual(['12', '12', 'string-call-ok', '7', '3', '2', 'true', '3', 'unicode ∞ café 🎵', 'long unicode ∞ 🎵']);
       expect(run.stdout).not.toContain('FREZEN_SECRET_RUNTIME_ONLY');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
