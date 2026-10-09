@@ -194,7 +194,7 @@ describe('Frezen VM v3', () => {
       '  return select("#", ...)',
       'end',
       'print(countVarargs("head", "middle", nil))',
-      'print("unicode ∞ café 🎵")'
+      'print("unicode ∞ café 🎵")',
       'local unicodeLong = [=[long unicode ∞ 🎵]=]',
       'print(unicodeLong)',
     ].join('\n');
