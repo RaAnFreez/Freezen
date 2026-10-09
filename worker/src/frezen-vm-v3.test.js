@@ -205,4 +205,38 @@ describe('Frezen VM v3', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+  it('resolves globals through the payload function environment', () => {
+    const runtime = process.env.FREZEN_LUA_RUNTIME;
+    if (!runtime) return;
+
+    const result = compileFrezenVmV3('print("resolved-from-payload-env")');
+    const wrapper = [
+      'local nativePrint = print',
+      '_G.print = nil',
+      'local payload = function()',
+      result.code,
+      'end',
+      'setfenv(payload, setmetatable({}, { __index = function(_, name)',
+      '  if name == "print" then return nativePrint end',
+      '  return _G[name]',
+      'end }))',
+      'payload()',
+      '_G.print = nativePrint',
+    ].join('\\n');
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frezen-vm-v3-env-'));
+    const file = path.join(dir, 'payload-env.lua');
+    fs.writeFileSync(file, wrapper, 'utf8');
+
+    try {
+      const run = spawnSync(runtime, [file], { encoding: 'utf8', timeout: 15000 });
+      if (run.status !== 0) {
+        throw new Error(['status=' + run.status, 'stdout=' + run.stdout, 'stderr=' + run.stderr].join('\\n'));
+      }
+      expect(run.stdout.trim()).toBe('resolved-from-payload-env');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
 });
