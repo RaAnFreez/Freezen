@@ -1,23 +1,22 @@
-Automatic Lua upload profile:
+# Frezen Lua Protection Profiles
 
-- Maximum Multi-Layer String Pool source protection
-- Very High public strength (100 protection level) retained for API/UI compatibility
-- Profile version 1.2
-- Four string-protection stages: rolling additive mask, modular arithmetic substitution, reverse-order permutation, Lua decimal-escape rendering
-- Conservative identifier mangling
-- Integer/constant masking
-- Token-safe comment removal and minification
-- No runtime anti-debug layer
-- No control-flow flattening
-- No custom VM layer
-- No Lua bytecode compilation inside the Cloudflare Worker
-- Plain Lua source is still required at upload; the Worker obfuscates after validation
-- Generated protection helpers use Lua 5.1-compatible constructs
-- String literals in the protected payload are rendered with three-digit Lua decimal escapes such as \\065\\122\\051
+## Source v1.1 profile
 
-The upload wrapper transforms the file before the existing script-version persistence endpoint sees it. The existing keyed loader then returns the persisted transformed payload.
+- String-pool protection, identifier mangling, constant masking, and token-safe minification.
+- Plain Lua source is validated before transformation.
+- This profile avoids custom VM execution and is the lighter compatibility option.
 
-No D1 migration is required. Existing stored versions are not rewritten by this change.
+## Frezen Layered VM v4 profile
 
+- Two randomized printable encoding layers over chunked UTF-8 source.
+- Per-build random dispatcher opcodes, shuffled payload records, and harmless no-op entries.
+- Runtime length, additive checksum, rolling checksum, and line-count validation.
+- Native Lua/Luau loading is used after validation to preserve functions, varargs, nil values, method calls, Unicode, closures, and runtime-specific globals.
+- Runtime loader supports `loadstring`, modern `load`, and Lua 5.1 reader-style `load` fallback.
+- The generated output begins with exactly one watermark: `-- This file obfuscation with Frezen Obfuscation`.
 
-The current maximum profile also deduplicates repeated strings into a randomized local string pool and varies the numeric table keys/expressions per build. The generated runtime decoder is intentionally compact and compatibility-first; no custom VM or control-flow virtualization is injected.
+## Limits
+
+The Worker does not compile the source into platform bytecode. Layer encoding is randomized reversible obfuscation, not cryptographic encryption. The original source is reconstructed in memory before native compilation and can potentially be captured by someone who controls the execution runtime. There is no crash-on-inspection or global-function replacement.
+
+Both profiles share the existing upload/version storage flow. Old VM engines are retired from new uploads; legacy stored outputs are not rewritten automatically. No D1 migration is required.
