@@ -130,7 +130,7 @@ export async function uploadDeliveryVersion(request, env, requestId, json, auth,
   if (!env.DB) return bad(json, requestId, 'DATABASE_UNAVAILABLE', 503);
   const parsed = await parseUpload(request);
   if (parsed.error) return bad(json, requestId, parsed.error, parsed.error === 'LUA_FILE_TOO_LARGE' ? 413 : 422);
-  if (isVmProtectionMode(parsed.protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, parsed.protectionMode === 'vm-v4' ? 'VM_V4_DISABLED' : (parsed.protectionMode === 'vm-v4' ? 'VM_V4_DISABLED' : (protectionMode === 'vm-v2' ? 'VM_V2_DISABLED' : 'VM_V1_DISABLED')), 409);
+  if (isVmProtectionMode(parsed.protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, parsed.protectionMode === 'vm-v4' ? 'VM_V4_DISABLED' : (parsed.protectionMode === 'vm-v2' ? 'VM_V2_DISABLED' : 'VM_V1_DISABLED'), 409);
   try {
     await ensureSchema(env);
     const script = await env.DB.prepare('SELECT id,status FROM delivery_scripts WHERE id=?1 LIMIT 1').bind(deliveryId).first();
