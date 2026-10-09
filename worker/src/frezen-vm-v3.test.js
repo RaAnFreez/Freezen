@@ -148,7 +148,7 @@ describe('Frezen VM v3', () => {
       'local quoted = "infinity ∞ café 🎵"',
       'local long = [=[long unicode ∞ 🎵]=]',
       'print(quoted, long)',
-    ].join('\\n'));
+    ].join('\n'));
 
     expect(result.code).not.toContain('VM_V3_PARSE_FAILED:');
     expect(result.code).not.toContain('__FREZEN_UTF8_');
