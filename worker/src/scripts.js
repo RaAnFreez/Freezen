@@ -206,6 +206,7 @@ export async function updateScriptVersionSource(request, env, requestId, json, a
     const row = await env.DB.prepare('SELECT sv.id,sv.version,sv.release_notes,sf.id AS file_id,sf.content AS existing_content FROM script_versions sv JOIN script_files sf ON sf.script_version_id=sv.id WHERE sv.id=?1 AND sv.script_id=?2 LIMIT 1').bind(versionId, scriptId).first();
     if (!row) return bad(json, requestId, 'SCRIPT_VERSION_NOT_FOUND', 404);
     if (requestedProtectionMode === undefined) protectionMode = (isFrezenVmV4(row.existing_content) || isRetiredVmArtifact(row.existing_content)) ? 'vm-v4' : 'source-v11';
+    if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V4_DISABLED', 409);
     let obfuscated;
     try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) {
       const reason = String(error?.message ?? error);
