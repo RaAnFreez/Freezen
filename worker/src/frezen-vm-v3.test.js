@@ -105,6 +105,37 @@ describe('Frezen VM v3', () => {
     expect(first.profile.algorithm).toContain('per-build-opcode-map');
   });
 
+  it('randomizes the constant pool and substitution alphabet per build', () => {
+    const source = [
+      'local message = "FREZEN_POOL_SECRET"',
+      'local value = 17',
+      'local data = { alpha = message, beta = value }',
+      'local function add(a, b)',
+      '  return a + b',
+      'end',
+      'print(add(data.beta, 3), data.alpha)',
+    ].join('\n');
+
+    const first = compileFrezenVmV3(source);
+    const second = compileFrezenVmV3(source);
+    const readAlphabet = (code) => code.match(
+      /local function dg\(z\) for q=1,#"([^"]+)" do if string\.byte\("([^"]+)",q\)==z then return q-1 end end error/
+    );
+    const firstAlphabet = readAlphabet(first.code);
+    const secondAlphabet = readAlphabet(second.code);
+
+    expect(first.transforms.constantPool).toBe('per-build-shuffled-index-map');
+    expect(first.transforms.strings).toContain('per-build-substitution-alphabet');
+    expect(firstAlphabet).toBeTruthy();
+    expect(secondAlphabet).toBeTruthy();
+    expect(firstAlphabet[1]).toBe(firstAlphabet[2]);
+    expect(secondAlphabet[1]).toBe(secondAlphabet[2]);
+    expect(new Set(firstAlphabet[1]).size).toBe(firstAlphabet[1].length);
+    expect(firstAlphabet[1]).not.toBe(secondAlphabet[1]);
+    expect(first.code).not.toContain('FREZEN_POOL_SECRET');
+  });
+
+
   it('uses the Lua 5.1 source grammar for obfuscation input', () => {
     expect(FREZEN_VM_V3_LUA_VERSION).toBe('5.1');
     expect(() => compileFrezenVmV3('local x = 7 // 2')).toThrow(/VM_V3_PARSE_FAILED:/);
