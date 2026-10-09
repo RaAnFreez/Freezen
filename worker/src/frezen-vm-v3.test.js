@@ -82,6 +82,29 @@ describe('Frezen VM v3', () => {
     expect(result.code).toContain('math.floor');
   });
 
+  it('randomizes virtual opcode identifiers for each compiled artifact', () => {
+    const source = [
+      'local value = 3',
+      'if value > 1 then',
+      '  value = value + 4',
+      'end',
+      'print(value)',
+    ].join('\n');
+
+    const first = compileFrezenVmV3(source);
+    const second = compileFrezenVmV3(source);
+    const readOpcodeIds = (code) =>
+      Array.from(code.matchAll(/if (?:x\[1\]|op)==(\d+)/g), (match) => Number(match[1]));
+    const firstIds = readOpcodeIds(first.code);
+    const secondIds = readOpcodeIds(second.code);
+
+    expect(firstIds.length).toBeGreaterThan(15);
+    expect(new Set(firstIds).size).toBe(firstIds.length);
+    expect(firstIds.every((id) => id >= 257 && id <= 65535)).toBe(true);
+    expect(firstIds).not.toEqual(secondIds);
+    expect(first.profile.algorithm).toContain('per-build-opcode-map');
+  });
+
   it('uses the Lua 5.1 source grammar for obfuscation input', () => {
     expect(FREZEN_VM_V3_LUA_VERSION).toBe('5.1');
     expect(() => compileFrezenVmV3('local x = 7 // 2')).toThrow(/VM_V3_PARSE_FAILED:/);
