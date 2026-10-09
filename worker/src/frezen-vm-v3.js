@@ -248,12 +248,144 @@ function normalizeLuauCompoundAssignments(source) {
   return out.join("\n");
 }
 
+// Finds Lua long-bracket strings/comments such as [[...]], [=[...]=], [==[...]==].
+function readLongBracket(source, start) {
+  if (source[start] !== "[") return null;
+  let cursor = start + 1;
+  while (source[cursor] === "=") cursor += 1;
+  if (source[cursor] !== "[") return null;
+  const equals = source.slice(start + 1, cursor);
+  return {
+    contentStart: cursor + 1,
+    close: "]" + equals + "]",
+  };
+}
+
+// luaparse's pseudo-latin1 mode rejects raw code points above U+00FF.
+// Replace those characters only inside Lua string literals with collision-free
+// ASCII markers, then restore them before constant encoding.
+function protectUnicodeStringLiterals(source) {
+  const input = String(source ?? "");
+  let prefix;
+  do {
+    prefix = "__FREZEN_UTF8_" + rint(100000, 999999999) + "_";
+  } while (input.includes(prefix));
+
+  const markers = new Map();
+  const output = [];
+  let markerIndex = 0;
+  let i = 0;
+
+  function appendStringCharacter(character) {
+    if (character.codePointAt(0) > 0xff) {
+      const marker = prefix + markerIndex + "__";
+      markerIndex += 1;
+      markers.set(marker, character);
+      output.push(marker);
+    } else {
+      output.push(character);
+    }
+  }
+
+  function appendStringBody(end) {
+    while (i < end) {
+      const character = String.fromCodePoint(input.codePointAt(i));
+      appendStringCharacter(character);
+      i += character.length;
+    }
+  }
+
+  while (i < input.length) {
+    // Comments are not string literals; skip them so quotes inside comments
+    // cannot accidentally change the scanner's state.
+    if (input.startsWith("--", i)) {
+      const long = readLongBracket(input, i + 2);
+      if (long) {
+        output.push(input.slice(i, long.contentStart));
+        i = long.contentStart;
+        const end = input.indexOf(long.close, i);
+        if (end < 0) {
+          appendStringBody(input.length);
+          break;
+        }
+        appendStringBody(end);
+        output.push(long.close);
+        i = end + long.close.length;
+        continue;
+      }
+
+      const end = input.indexOf("\n", i);
+      if (end < 0) {
+        output.push(input.slice(i));
+        break;
+      }
+      output.push(input.slice(i, end));
+      i = end;
+      continue;
+    }
+
+    const current = input[i];
+    if (current === "'" || current === '"') {
+      const quote = current;
+      output.push(quote);
+      i += 1;
+
+      while (i < input.length) {
+        if (input[i] === "\\") {
+          output.push("\\");
+          i += 1;
+          if (i < input.length) {
+            const escaped = String.fromCodePoint(input.codePointAt(i));
+            output.push(escaped);
+            i += escaped.length;
+          }
+          continue;
+        }
+        if (input[i] === quote) {
+          output.push(quote);
+          i += 1;
+          break;
+        }
+
+        const character = String.fromCodePoint(input.codePointAt(i));
+        appendStringCharacter(character);
+        i += character.length;
+      }
+      continue;
+    }
+
+    if (current === "[") {
+      const long = readLongBracket(input, i);
+      if (long) {
+        output.push(input.slice(i, long.contentStart));
+        i = long.contentStart;
+        const end = input.indexOf(long.close, i);
+        if (end < 0) {
+          appendStringBody(input.length);
+          break;
+        }
+        appendStringBody(end);
+        output.push(long.close);
+        i = end + long.close.length;
+        continue;
+      }
+    }
+
+    const character = String.fromCodePoint(input.codePointAt(i));
+    output.push(character);
+    i += character.length;
+  }
+
+  return { source: output.join(""), markers };
+}
+
 class Compiler {
   constructor(opcodes = createOpcodeMap(), alphabet = ALPHABET) {
     this.ops = opcodes;
     this.alphabet = alphabet;
     this.constants = [];
     this.constantMap = new Map();
+    this.unicodeMarkers = new Map();
   }
 
   constant(type, value) {
@@ -269,7 +401,13 @@ class Compiler {
     return index;
   }
 
-  string(value) { return this.constant('s', value); }
+  string(value) {
+    let restored = String(value ?? "");
+    for (const [marker, character] of this.unicodeMarkers) {
+      restored = restored.split(marker).join(character);
+    }
+    return this.constant('s', restored);
+  }
   number(value) { return this.constant('n', value); }
   boolean(value) { return this.constant('b', value); }
   nil() { return this.constant('z', null); }
@@ -277,8 +415,10 @@ class Compiler {
   compile(source) {
     let ast;
     try {
-      const parserSource = normalizeLuauCompoundAssignments(source);
-      ast = luaparse.parse(parserSource, { luaVersion: FREZEN_VM_V3_LUA_VERSION, encodingMode: 'pseudo-latin1', comments: false, scope: false, locations: false, ranges: false, wait: false });
+      const compoundNormalized = normalizeLuauCompoundAssignments(source);
+      const unicodeProtected = protectUnicodeStringLiterals(compoundNormalized);
+      this.unicodeMarkers = unicodeProtected.markers;
+      ast = luaparse.parse(unicodeProtected.source, { luaVersion: FREZEN_VM_V3_LUA_VERSION, encodingMode: 'pseudo-latin1', comments: false, scope: false, locations: false, ranges: false, wait: false });
     } catch (error) {
       const message = String(error?.message ?? error);
       throw new Error('VM_V3_PARSE_FAILED:' + message.slice(0, 240));
