@@ -119,7 +119,7 @@ describe('Frezen VM v3', () => {
     const first = compileFrezenVmV3(source);
     const second = compileFrezenVmV3(source);
     const readAlphabet = (code) => code.match(
-      /local function dg\\(z\\) for q=1,#"([^"]+)" do if string\\.byte\\("([^"]+)",q\\)==z then return q-1 end end error/
+      /local function dg\(z\) for q=1,#"([^"]+)" do if string\.byte\("([^"]+)",q\)==z then return q-1 end end error/
     );
     const firstAlphabet = readAlphabet(first.code);
     const secondAlphabet = readAlphabet(second.code);
