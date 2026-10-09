@@ -313,22 +313,15 @@ class Compiler {
           : node.arguments
             ? [node.arguments]
             : [];
-        if (node.isMethod) {
-          const base = node.base?.type === 'MemberExpression' ? node.base.base : node.base;
-          const key = node.base?.type === 'MemberExpression'
-            ? [this.ops.CONST, this.string(memberName(node.base))]
-            : [this.ops.CONST, this.nil()];
-          return [this.ops.MCALL, this.expr(base), key, args.map((arg) => this.expr(arg))];
-        }
-        return [this.ops.CALL, this.expr(node.base), args.map((arg) => this.expr(arg))];
+        return this.call(node.base, args.map((arg) => this.expr(arg)));
       }
       case 'TableCallExpression': {
         const arg = node.arguments;
         if (!arg) throw new Error('VM_V3_MISSING_TABLE_CALL_ARGUMENT');
-        return [this.ops.CALL, this.expr(node.base), [this.expr(arg)]];
+        return this.call(node.base, [this.expr(arg)]);
       }
       case 'StringCallExpression':
-        return [this.ops.CALL, this.expr(node.expression), [[this.ops.CONST, this.string(node.argument?.value ?? node.argument?.raw ?? '')]]];
+        return this.call(node.base, [[this.ops.CONST, this.string(node.argument?.value ?? node.argument?.raw ?? '')]]);
       case 'FunctionExpression':
       case 'FunctionDeclaration':
         return [this.ops.FUNC,
@@ -345,6 +338,20 @@ class Compiler {
       default:
         throw new Error('VM_V3_UNSUPPORTED_EXPRESSION:' + node.type);
     }
+  }
+
+  call(base, args) {
+    // luaparse represents obj:method(...) as a CallExpression whose base
+    // is a MemberExpression with indexer ':'. Add the receiver explicitly.
+    if (base?.type === 'MemberExpression' && base.indexer === ':') {
+      return [
+        this.ops.MCALL,
+        this.expr(base.base),
+        [this.ops.CONST, this.string(memberName(base))],
+        args,
+      ];
+    }
+    return [this.ops.CALL, this.expr(base), args];
   }
 
   target(node) {
