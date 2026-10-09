@@ -12,12 +12,11 @@ const text = (v, max) => { const s = String(v ?? '').trim(); return s && s.lengt
 const version = (v) => { const s = String(v ?? '').trim(); return VERSION_RE.test(s) ? (s.startsWith('v') ? s : `v${s}`) : null; };
 const normalizeProtectionMode = (value) => {
   const mode = String(value ?? 'source-v11').trim().toLowerCase();
-  if (mode === 'vm-v4' || mode === 'vm-v3') return 'vm-v4';
-  if (mode === 'vm-v2') return 'vm-v2';
-  if (mode === 'vm-v1') return 'vm-v1';
+  if (mode === 'vm-v1' || mode === 'vm-v2' || mode === 'vm-v3' || mode === 'vm-v4') return 'vm-v4';
   return 'source-v11';
 };
 const isVmProtectionMode = (mode) => mode === 'vm-v1' || mode === 'vm-v2' || mode === 'vm-v4';
+const isRetiredVmV3 = (value) => { const source = String(value ?? ''); return source.startsWith(OBFUSCATION_MARKER) && source.includes('FREZEN_VM_V3_BAD_EXPR') && source.includes('__frezen_v3'); };
 const protectionProfile = (mode) => mode === 'vm-v4' ? FREZEN_VM_V4_PROFILE : (mode === 'vm-v2' ? FREZEN_VM_V2_PROFILE : (mode === 'vm-v1' ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE));
 const compileProtectedLua = (source, mode) => mode === 'vm-v4' ? compileFrezenVmV4(source) : (mode === 'vm-v2' ? compileFrezenVmV2(source) : (mode === 'vm-v1' ? compileFrezenVm(source) : obfuscateLuaV11(source)));
 
@@ -116,7 +115,7 @@ export async function getDeliveryScript(request, env, requestId, json, deliveryI
         script_id: deliveryId,
         version: { id: row.id, version: row.version, status: row.status, release_notes: row.release_notes, created_at: row.created_at },
         source: { available: Boolean(source), content: source, size_bytes: source ? Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength) : 0, sha256: row.source_sha256 ?? (source ? await sha256Hex(source) : null), ...(sourceUnavailableReason ? { reason: sourceUnavailableReason } : {}) },
-        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? (isFrezenVmV4(row.content) ? FREZEN_VM_V4_PROFILE : (isFrezenVmV2(row.content) ? FREZEN_VM_V2_PROFILE : (isFrezenVm(row.content) ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE))) : { version: 'legacy', status: 'unverified' }, content: row.content },
+        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? (isFrezenVmV4(row.content) ? FREZEN_VM_V4_PROFILE : (isRetiredVmV3(row.content) ? { version: '3.0', mode: 'Retired Frezen VM v3 (legacy artifact)', strength: 'LEGACY', protectionLevel: 0 } : (isFrezenVmV2(row.content) ? FREZEN_VM_V2_PROFILE : (isFrezenVm(row.content) ? FREZEN_VM_PROFILE : OBFUSCATION_PROFILE)))) : { version: 'legacy', status: 'unverified' }, content: row.content },
         request_id: requestId,
       });
     }
@@ -162,7 +161,7 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
     if (!script) return bad(json, requestId, 'DELIVERY_SCRIPT_NOT_FOUND', 404);
     const row = await env.DB.prepare('SELECT v.id,v.version,v.release_notes,f.id AS file_id,f.content AS existing_content FROM delivery_script_versions v JOIN delivery_script_files f ON f.delivery_script_version_id=v.id WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1').bind(versionId,deliveryId).first();
     if (!row) return bad(json, requestId, 'DELIVERY_VERSION_NOT_FOUND', 404);
-    if (requestedProtectionMode === undefined) protectionMode = isFrezenVmV2(row.existing_content) ? 'vm-v2' : (isFrezenVm(row.existing_content) ? 'vm-v1' : 'source-v11');
+    if (requestedProtectionMode === undefined) protectionMode = isFrezenVmV2(row.existing_content) ? 'vm-v2' : (isFrezenVm(row.existing_content) ? 'vm-v1' : (isRetiredVmV3(row.existing_content) ? 'vm-v4' : 'source-v11'));
     let obfuscated;
     try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) { const reason=String(error?.message??error); return bad(json,requestId,reason==='OBFUSCATED_LUA_TOO_LARGE'?'OBFUSCATED_LUA_TOO_LARGE':'OBFUSCATION_FAILED',reason==='OBFUSCATED_LUA_TOO_LARGE'?413:422); }
     const sourceSha256=await sha256Hex(source);
