@@ -11,7 +11,7 @@ export const FREZEN_VM_V3_PROFILE = Object.freeze({
   sourceCompatible: true,
   sourceMaterialization: false,
   loadstring: false,
-  algorithm: 'ast-instruction-virtualization+lazy-constant-pool+per-build-opcode-map',
+  algorithm: 'ast-instruction-virtualization+lazy-constant-pool+per-build-opcode-map+per-build-pool-permutation+per-build-alphabet',
 });
 
 export const MAX_VM_V3_SOURCE_BYTES = 2 * 1024 * 1024;
@@ -56,14 +56,14 @@ function createOpcodeMap() {
   return Object.freeze(Object.fromEntries(keys.map((key, index) => [key, ids[index]])));
 }
 
-function encodeBytes(bytes) {
+function encodeBytes(bytes, alphabet = ALPHABET) {
   const add = rint(7, 247);
   const step = rint(1, 251);
   const out = [];
   for (let i = 0; i < bytes.length; i += 1) {
     const b = bytes[i];
     const x = (b + add + ((i * step) % 256)) % 256;
-    out.push(ALPHABET[(x >> 4) & 15], ALPHABET[x & 15]);
+    out.push(alphabet[(x >> 4) & 15], alphabet[x & 15]);
   }
   return { value: out.join(''), add, step, length: bytes.length };
 }
@@ -249,8 +249,9 @@ function normalizeLuauCompoundAssignments(source) {
 }
 
 class Compiler {
-  constructor(opcodes = createOpcodeMap()) {
+  constructor(opcodes = createOpcodeMap(), alphabet = ALPHABET) {
     this.ops = opcodes;
+    this.alphabet = alphabet;
     this.constants = [];
     this.constantMap = new Map();
   }
@@ -261,7 +262,7 @@ class Compiler {
     if (found !== undefined) return found;
     const entry = type === 'b' ? { t: 'b', v: value ? 1 : 0 }
       : type === 'z' ? { t: 'z' }
-      : { t: type, ...encodeBytes(Array.from(new TextEncoder().encode(String(value)))) };
+      : { t: type, ...encodeBytes(Array.from(new TextEncoder().encode(String(value))), this.alphabet) };
     const index = this.constants.length + 1;
     this.constants.push(entry);
     this.constantMap.set(key, index);
@@ -283,7 +284,7 @@ class Compiler {
       throw new Error('VM_V3_PARSE_FAILED:' + message.slice(0, 240));
     }
     const program = this.block(ast.body);
-    return { program, constants: this.constants, constantRemap: null, opcodes: this.ops };
+    return { program, constants: this.constants, constantRemap: null, opcodes: this.ops, alphabet: this.alphabet };
   }
 
   expr(node) {
@@ -420,6 +421,138 @@ class Compiler {
   }
 }
 
+function randomizeConstantPool(program, constants, ops) {
+  const order = shuffle(constants.map((_, index) => index));
+  const indexMap = new Map(order.map((oldIndex, newIndex) => [oldIndex + 1, newIndex + 1]));
+  const remapIndex = (index) => {
+    const mapped = indexMap.get(index);
+    if (mapped === undefined) throw new Error('VM_V3_CONSTANT_REMAP_FAILED');
+    return mapped;
+  };
+  const remapIndexList = (list) => {
+    for (let i = 0; i < (list || []).length; i += 1) list[i] = remapIndex(list[i]);
+  };
+  const remapExpressionList = (list) => (list || []).forEach(remapExpression);
+
+  function remapTarget(target) {
+    if (target[0] === 1) target[1] = remapIndex(target[1]);
+    else {
+      remapExpression(target[1]);
+      remapExpression(target[2]);
+    }
+  }
+
+  function remapExpression(node) {
+    if (!Array.isArray(node)) return;
+    const op = node[0];
+    if (op === ops.CONST || op === ops.VAR) {
+      node[1] = remapIndex(node[1]);
+      return;
+    }
+    if (op === ops.VARARG) return;
+    if (op === ops.INDEX) {
+      remapExpression(node[1]);
+      remapExpression(node[2]);
+      return;
+    }
+    if (op === ops.UNARY) {
+      remapExpression(node[2]);
+      return;
+    }
+    if (op === ops.BIN || op === ops.LOGIC) {
+      remapExpression(node[2]);
+      remapExpression(node[3]);
+      return;
+    }
+    if (op === ops.CALL) {
+      remapExpression(node[1]);
+      remapExpressionList(node[2]);
+      return;
+    }
+    if (op === ops.MCALL) {
+      remapExpression(node[1]);
+      remapExpression(node[2]);
+      remapExpressionList(node[3]);
+      return;
+    }
+    if (op === ops.FUNC) {
+      remapIndexList(node[1]);
+      remapBlock(node[3]);
+      return;
+    }
+    if (op === ops.TABLE) {
+      for (const field of node[1] || []) {
+        if (field[0] === 1) {
+          field[1] = remapIndex(field[1]);
+          remapExpression(field[2]);
+        } else if (field[0] === 2) {
+          remapExpression(field[1]);
+          remapExpression(field[2]);
+        } else if (field[0] === 3) {
+          remapExpression(field[1]);
+        }
+      }
+      return;
+    }
+    throw new Error('VM_V3_CONSTANT_REMAP_EXPRESSION:' + String(op));
+  }
+
+  function remapBlock(block) {
+    for (const statement of block || []) {
+      const op = statement[0];
+      if (op === ops.LOCAL) {
+        remapIndexList(statement[1]);
+        remapExpressionList(statement[2]);
+      } else if (op === ops.SET) {
+        for (const target of statement[1] || []) remapTarget(target);
+        remapExpressionList(statement[2]);
+      } else if (op === ops.CALL_STMT) {
+        remapExpression(statement[1]);
+      } else if (op === ops.RETURN) {
+        remapExpressionList(statement[1]);
+      } else if (op === ops.IF) {
+        for (const clause of statement[1] || []) {
+          remapExpression(clause[0]);
+          remapBlock(clause[1]);
+        }
+        remapBlock(statement[2]);
+      } else if (op === ops.WHILE) {
+        remapExpression(statement[1]);
+        remapBlock(statement[2]);
+      } else if (op === ops.REPEAT) {
+        remapBlock(statement[1]);
+        remapExpression(statement[2]);
+      } else if (op === ops.DO) {
+        remapBlock(statement[1]);
+      } else if (op === ops.NUMFOR) {
+        statement[1] = remapIndex(statement[1]);
+        remapExpression(statement[2]);
+        remapExpression(statement[3]);
+        remapExpression(statement[4]);
+        remapBlock(statement[5]);
+      } else if (op === ops.GENFOR) {
+        remapIndexList(statement[1]);
+        remapExpressionList(statement[2]);
+        remapBlock(statement[3]);
+      } else if (op === ops.FUNCDECL) {
+        remapTarget(statement[2]);
+        remapIndexList(statement[3]);
+        remapBlock(statement[5]);
+      } else if (op !== ops.BREAK) {
+        throw new Error('VM_V3_CONSTANT_REMAP_STATEMENT:' + String(op));
+      }
+    }
+    return block;
+  }
+
+  remapBlock(program);
+  return {
+    program,
+    constants: order.map((index) => constants[index]),
+  };
+}
+
+
 function luaLiteral(value) {
   if (Array.isArray(value)) return `{${value.map(luaLiteral).join(',')}}`;
   if (value === null || value === undefined) return 'nil';
@@ -460,7 +593,7 @@ export function compileFrezenVmV3(source) {
   const sourceBytes = new TextEncoder().encode(text).byteLength;
   if (sourceBytes > MAX_VM_V3_SOURCE_BYTES) throw new Error('LUA_SOURCE_TOO_LARGE');
 
-  const c = new Compiler(createOpcodeMap());
+  const c = new Compiler(createOpcodeMap(), shuffle(ALPHABET.split('')).join(''));
   let compiled;
   try {
     compiled = c.compile(text);
@@ -469,8 +602,15 @@ export function compileFrezenVmV3(source) {
     throw new Error(reason.startsWith('VM_V3_') ? reason : 'VM_V3_COMPILE_FAILED:' + reason);
   }
 
-  const program = compiled.program;
-  const constants = compiled.constants;
+  let pool;
+  try {
+    pool = randomizeConstantPool(compiled.program, compiled.constants, compiled.opcodes);
+  } catch (error) {
+    const reason = String(error?.message ?? error);
+    throw new Error(reason.startsWith('VM_V3_') ? reason : 'VM_V3_CONSTANT_POOL_FAILED:' + reason);
+  }
+  const program = pool.program;
+  const constants = pool.constants;
   const runtimeOps = compiled.opcodes;
 
   const names = runtimeNames();
@@ -487,7 +627,7 @@ export function compileFrezenVmV3(source) {
     `if e[1]==3 then return nil end`,
     `local a=e[2]; local add=e[3]; local step=e[4]; local n=e[5]; local out={}`,
     `for j=1,n do local c=string.byte(a,(j-1)*2+1); local d=string.byte(a,(j-1)*2+2); local x=0`,
-    `local function dg(z) for q=1,#${JSON.stringify(ALPHABET)} do if string.byte(${JSON.stringify(ALPHABET)},q)==z then return q-1 end end error("FREZEN_VM_V3_CONST") end`,
+    `local function dg(z) for q=1,#${JSON.stringify(compiled.alphabet)} do if string.byte(${JSON.stringify(compiled.alphabet)},q)==z then return q-1 end end error("FREZEN_VM_V3_CONST") end`,
     `x=dg(c)*16+dg(d); x=(x-add-(((j-1)*step)%256))%256; out[#out+1]=string.char(x) end`,
     `local text=table.concat(out); if e[1]==4 then return tonumber(text) end return text`,
     `end`,
@@ -563,7 +703,8 @@ export function compileFrezenVmV3(source) {
     outputBytes,
     instructionCount: JSON.stringify(program).length,
     transforms: {
-      strings: 'lazy-constant-pool',
+      strings: 'lazy-constant-pool+per-build-substitution-alphabet',
+      constantPool: 'per-build-shuffled-index-map',
       controlFlow: 'instruction-virtualization',
       runtimeSource: 'no-original-source',
       loader: 'none',
