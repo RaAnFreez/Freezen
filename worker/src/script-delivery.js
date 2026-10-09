@@ -10,7 +10,7 @@ const text = (v, max) => { const s = String(v ?? '').trim(); return s && s.lengt
 const version = (v) => { const s = String(v ?? '').trim(); return VERSION_RE.test(s) ? (s.startsWith('v') ? s : `v${s}`) : null; };
 const normalizeProtectionMode = (value) => {
   const mode = String(value ?? 'source-v11').trim().toLowerCase();
-  if (mode === 'vm-v1' || mode === 'vm-v2' || mode === 'vm-v3' || mode === 'vm-v4') return 'vm-v4';
+  if (['vm-v1', 'vm-v2', 'vm-v3', 'vm-v4'].includes(mode)) return 'vm-v4';
   return 'source-v11';
 };
 const isVmProtectionMode = (mode) => mode === 'vm-v4';
