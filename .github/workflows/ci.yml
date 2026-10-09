@@ -54,4 +54,4 @@ jobs:
           mkdir -p worker/public
           cp -R dashboard/dist/. worker/public/
           test -f worker/public/index.html
-          grep -R -q 'vm-v3' worker/public
+          grep -R -q 'vm-v4' worker/public
