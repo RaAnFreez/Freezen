@@ -465,8 +465,8 @@ class Compiler {
       case 'FunctionExpression':
       case 'FunctionDeclaration':
         return [this.ops.FUNC,
-          (node.parameters || []).map((p) => p.type === 'Identifier' ? this.string(p.name) : this.string('...')),
-          !!node.isVararg,
+          (node.parameters || []).filter((p) => p.type === 'Identifier').map((p) => this.string(p.name)),
+          !!node.isVararg || (node.parameters || []).some((p) => p.type !== 'Identifier'),
           this.block(node.body || []),
         ];
       case 'TableConstructorExpression':
@@ -542,8 +542,8 @@ class Compiler {
         return [this.ops.FUNCDECL,
           !!node.isLocal,
           this.targetFunction(node.identifier),
-          (node.parameters || []).map((p) => p.type === 'Identifier' ? this.string(p.name) : this.string('...')),
-          !!node.isVararg,
+          (node.parameters || []).filter((p) => p.type === 'Identifier').map((p) => this.string(p.name)),
+          !!node.isVararg || (node.parameters || []).some((p) => p.type !== 'Identifier'),
           this.block(node.body || []),
           !!node.isMethod,
         ];
