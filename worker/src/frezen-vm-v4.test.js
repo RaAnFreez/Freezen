@@ -110,6 +110,35 @@ describe('Frezen Layered VM v4', () => {
     ]);
   });
 
+  it('supports Lua 5.1-style reader-only load when loadstring is unavailable', () => {
+    const runtime = process.env.FREZEN_LUA_RUNTIME;
+    if (!runtime) return;
+
+    const generated = compileFrezenVmV4('print("reader loader fallback ok")').code;
+    const wrapper = [
+      'local nativeCompile = loadstring or function(source) return load(source) end',
+      'local function readerOnlyLoad(reader)',
+      '  if type(reader) ~= "function" then error("reader function required") end',
+      '  local parts = {}',
+      '  while true do local part = reader(); if part == nil then break end; parts[#parts + 1] = part end',
+      '  return nativeCompile(table.concat(parts))',
+      'end',
+      'local captured = {}',
+      'local payload = function()',
+      generated,
+      'end',
+      'local env = setmetatable({',
+      '  load = readerOnlyLoad,',
+      '  print = function(value) captured[#captured + 1] = tostring(value) end,',
+      '}, { __index = function(_, key) if key == "loadstring" then return nil end return _G[key] end })',
+      'setfenv(payload, env)',
+      'payload()',
+      'print(table.concat(captured, ""))',
+    ].join('\n');
+
+    expect(runLua(runtime, wrapper).trim()).toBe('reader loader fallback ok');
+  });
+
   it('resolves Roblox-like APIs through the payload execution environment', () => {
     const runtime = process.env.FREZEN_LUA_RUNTIME;
     if (!runtime) return;
