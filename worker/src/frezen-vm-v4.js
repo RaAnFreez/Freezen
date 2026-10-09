@@ -299,7 +299,7 @@ export function compileFrezenVmV4(source, options = {}) {
     'local ' + names.source + '=' + names.runtimeConcat + '(' + names.buffer + ')',
     'if #' + names.source + '~=' + names.expectedLength + ' or ' + names.sum + '~=' + names.expectedSum + ' or ' + names.rolling + '~=' + names.expectedRolling + ' or ' + names.lineCount + '~=' + names.expectedLines + ' then ' + names.runtimeError + '("Frezen could not validate this script.",0) end',
     'local ' + names.env + '=nil',
-    'if ' + names.runtimeType + '(getfenv)=="function" then local envOk,envValue=' + names.runtimePcall + '(getfenv,1); if envOk and ' + names.runtimeType + '(envValue)=="table" then ' + names.env + '=envValue end end',
+    'if ' + names.runtimeType + '(getfenv)=="function" then local envOk,envValue=' + names.runtimePcall + '(function() return getfenv(1) end); if envOk and ' + names.runtimeType + '(envValue)=="table" then ' + names.env + '=envValue end end',
     'if ' + names.env + '==nil then if ' + names.runtimeType + '(_ENV)=="table" then ' + names.env + '=_ENV else ' + names.env + '=_G end end',
     'local ' + names.chunk + ',' + names.loadError + '=nil,nil',
     'if ' + names.runtimeType + '(loadstring)=="function" then',
