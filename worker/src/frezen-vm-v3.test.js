@@ -211,18 +211,19 @@ describe('Frezen VM v3', () => {
 
     const result = compileFrezenVmV3('print("resolved-from-payload-env")');
     const wrapper = [
-      'local nativePrint = print',
-      '_G.print = nil',
+      'local captured = {}',
+      'local customPrint = function(...)',
+      '  local parts = {}',
+      '  for i = 1, select("#", ...) do parts[i] = tostring(select(i, ...)) end',
+      '  captured[#captured + 1] = table.concat(parts, " ")',
+      'end',
       'local payload = function()',
       result.code,
       'end',
-      'setfenv(payload, setmetatable({}, { __index = function(_, name)',
-      '  if name == "print" then return nativePrint end',
-      '  return _G[name]',
-      'end }))',
+      'setfenv(payload, setmetatable({ print = customPrint }, { __index = _G }))',
       'payload()',
-      '_G.print = nativePrint',
-    ].join('\n');
+      'print(table.concat(captured, "\\n"))',
+    ].join('\\n');
 
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frezen-vm-v3-env-'));
     const file = path.join(dir, 'payload-env.lua');
