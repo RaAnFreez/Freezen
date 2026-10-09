@@ -143,6 +143,19 @@ describe('Frezen VM v3', () => {
     expect(() => compileFrezenVmV3('goto nope\n::nope::')).toThrow(/VM_V3_PARSE_FAILED:/);
   });
 
+  it('accepts Unicode in quoted and long-bracket string literals', () => {
+    const result = compileFrezenVmV3([
+      'local quoted = "infinity ∞ café 🎵"',
+      'local long = [=[long unicode ∞ 🎵]=]',
+      'print(quoted, long)',
+    ].join('\\n'));
+
+    expect(result.code).not.toContain('VM_V3_PARSE_FAILED:');
+    expect(result.code).not.toContain('__FREZEN_UTF8_');
+    expect(result.code).not.toContain('infinity ∞');
+    expect(result.code).toContain('FREZEN_VM_V3_BAD_EXPR');
+  });
+
   it('captures the payload execution environment for global lookup', () => {
     const result = compileFrezenVmV3('print(type(print))');
     expect(result.code).toContain('getfenv');
@@ -171,6 +184,9 @@ describe('Frezen VM v3', () => {
       'print "string-call-ok"',
       'local receiver = { value = 4, add = function(self, x) return self.value + x end }',
       'print(receiver:add(3))',
+      'print("unicode ∞ café 🎵")',
+      'local unicodeLong = [=[long unicode ∞ 🎵]=]',
+      'print(unicodeLong)',
     ].join('\n');
 
     const result = compileFrezenVmV3(source);
@@ -183,7 +199,7 @@ describe('Frezen VM v3', () => {
       if (run.status !== 0) {
         throw new Error([`status=${run.status}`, `stdout=${run.stdout}`, `stderr=${run.stderr}`].join('\\n'));
       }
-      expect(run.stdout.trim().split(/\r?\n/)).toEqual(['12', '12', 'string-call-ok', '7']);
+      expect(run.stdout.trim().split(/\r?\n/)).toEqual(['12', '12', 'string-call-ok', '7', 'unicode ∞ café 🎵', 'long unicode ∞ 🎵']);
       expect(run.stdout).not.toContain('FREZEN_SECRET_RUNTIME_ONLY');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
