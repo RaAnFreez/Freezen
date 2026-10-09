@@ -106,7 +106,7 @@ describe('Frezen Layered VM v4', () => {
       'true',
       '7',
       'unicode ∞ café 🎵',
-      'a true c',
+      'a\ttrue\tc',
     ]);
   });
 
