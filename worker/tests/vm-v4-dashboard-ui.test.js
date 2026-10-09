@@ -28,6 +28,6 @@ describe('Layered VM v4 protection mode wiring', () => {
 
   it('keeps an old vm-v3 form submission compatible by selecting the replacement', () => {
     const source = read('src/script-delivery.js');
-    expect(source).toContain("mode === 'vm-v4' || mode === 'vm-v3'");
+    expect(source).toContain("['vm-v1', 'vm-v2', 'vm-v3', 'vm-v4'].includes(mode)");
   });
 });
