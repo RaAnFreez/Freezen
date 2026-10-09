@@ -278,7 +278,7 @@ class Compiler {
     let ast;
     try {
       const parserSource = normalizeLuauCompoundAssignments(source);
-      ast = luaparse.parse(parserSource, { luaVersion: FREZEN_VM_V3_LUA_VERSION, comments: false, scope: false, locations: false, ranges: false, wait: false });
+      ast = luaparse.parse(parserSource, { luaVersion: FREZEN_VM_V3_LUA_VERSION, encodingMode: 'pseudo-latin1', comments: false, scope: false, locations: false, ranges: false, wait: false });
     } catch (error) {
       const message = String(error?.message ?? error);
       throw new Error('VM_V3_PARSE_FAILED:' + message.slice(0, 240));
@@ -313,22 +313,15 @@ class Compiler {
           : node.arguments
             ? [node.arguments]
             : [];
-        if (node.isMethod) {
-          const base = node.base?.type === 'MemberExpression' ? node.base.base : node.base;
-          const key = node.base?.type === 'MemberExpression'
-            ? [this.ops.CONST, this.string(memberName(node.base))]
-            : [this.ops.CONST, this.nil()];
-          return [this.ops.MCALL, this.expr(base), key, args.map((arg) => this.expr(arg))];
-        }
-        return [this.ops.CALL, this.expr(node.base), args.map((arg) => this.expr(arg))];
+        return this.call(node.base, args.map((arg) => this.expr(arg)));
       }
       case 'TableCallExpression': {
         const arg = node.arguments;
         if (!arg) throw new Error('VM_V3_MISSING_TABLE_CALL_ARGUMENT');
-        return [this.ops.CALL, this.expr(node.base), [this.expr(arg)]];
+        return this.call(node.base, [this.expr(arg)]);
       }
       case 'StringCallExpression':
-        return [this.ops.CALL, this.expr(node.expression), [[this.ops.CONST, this.string(node.argument?.value ?? node.argument?.raw ?? '')]]];
+        return this.call(node.base, [[this.ops.CONST, this.string(node.argument?.value ?? '')]]);
       case 'FunctionExpression':
       case 'FunctionDeclaration':
         return [this.ops.FUNC,
@@ -345,6 +338,20 @@ class Compiler {
       default:
         throw new Error('VM_V3_UNSUPPORTED_EXPRESSION:' + node.type);
     }
+  }
+
+  call(base, args) {
+    // luaparse represents obj:method(...) as a CallExpression whose base
+    // is a MemberExpression with indexer ':'. Add the receiver explicitly.
+    if (base?.type === 'MemberExpression' && base.indexer === ':') {
+      return [
+        this.ops.MCALL,
+        this.expr(base.base),
+        [this.ops.CONST, this.string(memberName(base))],
+        args,
+      ];
+    }
+    return [this.ops.CALL, this.expr(base), args];
   }
 
   target(node) {
@@ -657,13 +664,13 @@ export function compileFrezenVmV3(source) {
     `${names.T}=function(e,x,multi)`,
     `if x[1]==${runtimeOps.CONST} then return ${names.D}(x[2]) end`,
     `if x[1]==${runtimeOps.VAR} then return ${names.Y}(e,${names.D}(x[2])) end`,
-    `if x[1]==${runtimeOps.VARARG} then local unpacker=table.unpack or unpack; local r=${names.R}(unpacker(e.a,1,e.a.n or 0)); if multi then return setmetatable(r,{__frezen_multi=true}) end return r[1] end`,
+    `if x[1]==${runtimeOps.VARARG} then local unpacker=table.unpack or unpack; local r=${names.R}(unpacker(e.a,1,e.a.n or 0)); if multi then r.__frezen_multi=true; return r end return r[1] end`,
     `if x[1]==${runtimeOps.INDEX} then local b=${names.T}(e,x[2],false); local k=${names.T}(e,x[3],false); return b[k] end`,
     `if x[1]==${runtimeOps.UNARY} then local a=${names.T}(e,x[3],false); if x[2]==1 then return -a elseif x[2]==2 then return #a elseif x[2]==3 then return not a end end`,
     `if x[1]==${runtimeOps.BIN} then local a=${names.T}(e,x[3],false); local b=${names.T}(e,x[4],false); local o=x[2]; if o==1 then return a+b elseif o==2 then return a-b elseif o==3 then return a*b elseif o==4 then return a/b elseif o==5 then return a%b elseif o==6 then return a^b elseif o==7 then return a..b elseif o==8 then return a==b elseif o==9 then return a~=b elseif o==10 then return a<b elseif o==11 then return a<=b elseif o==12 then return a>b elseif o==13 then return a>=b elseif o==14 then return math.floor(a/b) end end`,
     `if x[1]==${runtimeOps.LOGIC} then local a=${names.T}(e,x[3],false); if x[2]==1 then return a and ${names.T}(e,x[4],false) or a end return a or ${names.T}(e,x[4],false) end`,
-    `if x[1]==${runtimeOps.CALL} then local f=${names.T}(e,x[2],false); local a={}; for i=1,#x[3] do local r=${names.T}(e,x[3][i],i==#x[3]); if i==#x[3] and type(r)==\"table\" and r.__frezen_multi then for j=1,r.n do a[#a+1]=r[j] end else a[i]=r end end; local r=${names.F}(f,a); if multi then return setmetatable(r,{__frezen_multi=true}) end return r[1] end`,
-    `if x[1]==${runtimeOps.MCALL} then local b=${names.T}(e,x[2],false); local k=${names.T}(e,x[3],false); local f=b[k]; local a={b}; for i=1,#x[4] do local r=${names.T}(e,x[4][i],i==#x[4]); if i==#x[4] and type(r)==\"table\" and r.__frezen_multi then for j=1,r.n do a[#a+1]=r[j] end else a[i+1]=r end end; local r=${names.F}(f,a); if multi then return setmetatable(r,{__frezen_multi=true}) end return r[1] end`,
+    `if x[1]==${runtimeOps.CALL} then local f=${names.T}(e,x[2],false); local a={}; for i=1,#x[3] do local r=${names.T}(e,x[3][i],i==#x[3]); if i==#x[3] and type(r)==\"table\" and r.__frezen_multi then for j=1,r.n do a[#a+1]=r[j] end else a[i]=r end end; local r=${names.F}(f,a); if multi then r.__frezen_multi=true; return r end return r[1] end`,
+    `if x[1]==${runtimeOps.MCALL} then local b=${names.T}(e,x[2],false); local k=${names.T}(e,x[3],false); local f=b[k]; local a={b}; for i=1,#x[4] do local r=${names.T}(e,x[4][i],i==#x[4]); if i==#x[4] and type(r)==\"table\" and r.__frezen_multi then for j=1,r.n do a[#a+1]=r[j] end else a[i+1]=r end end; local r=${names.F}(f,a); if multi then r.__frezen_multi=true; return r end return r[1] end`,
     `if x[1]==${runtimeOps.FUNC} then return {__frezen_v3=true,p=x[2],va=x[3],b=x[4],e=e} end`,
     `if x[1]==${runtimeOps.TABLE} then local t={}; for i=1,#x[2] do local f=x[2][i]; if f[1]==1 then t[${names.D}(f[2])]=${names.T}(e,f[3]) elseif f[1]==2 then t[${names.T}(e,f[2])]=${names.T}(e,f[3]) else t[#t+1]=${names.T}(e,f[2]) end end return t end`,
     `error("FREZEN_VM_V3_BAD_EXPR")`,
