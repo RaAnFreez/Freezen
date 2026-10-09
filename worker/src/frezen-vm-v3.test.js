@@ -15,9 +15,6 @@ describe('Frezen VM v3', () => {
       'end',
       'local t = { value = add(7, 5) }',
       'print(t.value)',
-      'print "string-call-ok"',
-      'local receiver = { value = 4, add = function(self, x) return self.value + x end }',
-      'print(receiver:add(3))',
     ].join('\n');
 
     const result = compileFrezenVmV3(source);
@@ -171,6 +168,9 @@ describe('Frezen VM v3', () => {
       'print(total)',
       'local t = { value = total }',
       'print(t.value)',
+      'print "string-call-ok"',
+      'local receiver = { value = 4, add = function(self, x) return self.value + x end }',
+      'print(receiver:add(3))',
     ].join('\n');
 
     const result = compileFrezenVmV3(source);
