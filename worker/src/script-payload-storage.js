@@ -41,7 +41,7 @@ export async function resolveScriptPayload(env, value) {
 export async function deleteStoredScriptPayloads(env, ...values) {
   const keys = scriptPayloadR2Keys(...values);
   if (!keys.length || !env?.SCRIPT_PAYLOADS || typeof env.SCRIPT_PAYLOADS.delete !== 'function') return;
-  await Promise.all(keys.map((key) => env.SCRIPT_PAYLOADS.delete(key)));
+  await Promise.all(keys.map(async (key) => { try { await env.SCRIPT_PAYLOADS.delete(key); } catch {} }));
 }
 
 /**
