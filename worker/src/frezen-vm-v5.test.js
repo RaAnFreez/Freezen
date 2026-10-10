@@ -87,7 +87,7 @@ describe('Frezen Layered VM v5', () => {
 
     const source = 'print("MUST_NOT_EXECUTE_AFTER_TAMPER")';
     const result = compileFrezenVmV5(source);
-    const recordPattern = /(\\[\\d+\\]=\\{")([^"]+)/;
+    const recordPattern = /(\[\d+\]=\{")([^"]+)/;
     expect(result.code).toMatch(recordPattern);
     const tampered = result.code.replace(recordPattern, (_whole, prefix, payload) => {
       const first = payload[0] === '0' ? '1' : '0';
