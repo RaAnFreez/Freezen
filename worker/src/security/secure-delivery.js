@@ -1,6 +1,7 @@
 import { obfuscateLuaV11 } from '../script-obfuscator-v11.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from '../script-obfuscation-contract.js';
 import { isFrezenVmV4, FREZEN_VM_V4_PROFILE } from '../frezen-vm-v4.js';
+import { isFrezenVmV5, FREZEN_VM_V5_PROFILE } from '../frezen-vm-v5.js';
 
 const encoder = new TextEncoder();
 
@@ -129,7 +130,7 @@ export async function deliverScript(request, env, requestId, json) {
         "x-frezen-request-id": requestId,
         "x-frezen-payload-sha256": payloadSha256,
         "x-frezen-obfuscation-status": obfuscationVerified ? "verified" : "legacy-or-unverified",
-        "x-frezen-obfuscation-profile": obfuscationVerified ? (() => { const p = isFrezenVmV4(payload) ? FREZEN_VM_V4_PROFILE : (isRetiredVmArtifact(payload) ? { mode: 'Retired Frezen VM artifact', version: 'legacy', strength: 'LEGACY', protectionLevel: 0, algorithm: 'retired' } : OBFUSCATION_PROFILE); return `${p.mode};${p.version};${p.strength};${p.protectionLevel};${p.algorithm}`; })() : `legacy;marker-missing`,
+        "x-frezen-obfuscation-profile": obfuscationVerified ? (() => { const p = isFrezenVmV5(payload) ? FREZEN_VM_V5_PROFILE : (isFrezenVmV4(payload) ? FREZEN_VM_V4_PROFILE : (isRetiredVmArtifact(payload) ? { mode: 'Retired Frezen VM artifact', version: 'legacy', strength: 'LEGACY', protectionLevel: 0, algorithm: 'retired' } : OBFUSCATION_PROFILE)); return `${p.mode};${p.version};${p.strength};${p.protectionLevel};${p.algorithm}`; })() : `legacy;marker-missing`,
         "x-frezen-obfuscation-marker": obfuscationVerified ? OBFUSCATION_MARKER : "marker-missing",
       }
     });

@@ -8,14 +8,17 @@ describe('Layered VM v4 protection mode wiring', () => {
   it('exposes VM v4 in the production Scripts dashboard', () => {
     const source = read('public/dashboard/scripts-panel.js');
     expect(source).toContain('value="vm-v4"');
-    expect(source).toContain('Frezen Layered VM v4 (two-stage, compatibility-first)');
+    expect(source).toContain('value="vm-v5"');
+    expect(source).toContain('Frezen Layered VM v4 (compatibility baseline)');
+    expect(source).toContain('Frezen Layered VM v5 (manifest-sealed)');
     expect(source).not.toContain('value="vm-v3"');
   });
 
   it('exposes VM v4 in both Script Delivery protection selectors', () => {
     const source = read('public/dashboard/script-delivery-panel.js');
     expect((source.match(/value="vm-v4"/g) || []).length).toBeGreaterThanOrEqual(2);
-    expect(source).toContain('Frezen Layered VM v4 (two-stage, compatibility-first)');
+    expect((source.match(/value="vm-v5"/g) || []).length).toBeGreaterThanOrEqual(2);
+    expect(source).toContain('Frezen Layered VM v4 (compatibility baseline)');
     expect(source).not.toContain('value="vm-v3"');
   });
 
