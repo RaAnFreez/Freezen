@@ -48,6 +48,7 @@ describe('Frezen Layered VM v4', () => {
     expect(result.transforms.payloadLayers).toBe(2);
     expect(result.transforms.integrity).toContain('rolling-checksum');
     expect(result.code.startsWith(OBFUSCATION_WATERMARK + '\n')).toBe(true);
+    expect(result.code.split(/\r?\n/)).toHaveLength(2);
     expect(result.code.split(OBFUSCATION_WATERMARK).length - 1).toBe(1);
     expect(result.code).not.toContain('FREZEN_V4_SOURCE_MUST_NOT_APPEAR');
     expect(result.code).not.toContain('local secret');
