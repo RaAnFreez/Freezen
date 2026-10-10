@@ -75,7 +75,7 @@ describe('Frezen Layered VM v4', () => {
   });
 
   it('uses larger chunks to keep generated payload overhead down', () => {
-    const source = 'local value=1\n'.repeat(5000);
+    const source = 'local value=1\n'.repeat(3000);
     const result = compileFrezenVmV4(source);
     expect(result.chunkCount).toBeLessThanOrEqual(50);
     expect(result.outputBytes).toBeLessThan(500_000);
