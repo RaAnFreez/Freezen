@@ -325,7 +325,7 @@ export function compileFrezenVmV4(source, options = {}) {
     'end',
   ];
 
-  const code = OBFUSCATION_WATERMARK + '\n' + lines.join('\n');
+  const code = OBFUSCATION_WATERMARK + '\n' + lines.join(' ');
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_VM_V4_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
