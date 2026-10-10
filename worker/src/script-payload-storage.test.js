@@ -103,8 +103,8 @@ describe('Large Lua payload storage without R2', () => {
 
   it('preserves Unicode code points across chunk boundaries', async () => {
     const database = createD1();
-    const source = '😀café'.repeat(120_000);
-    const payload = 'π'.repeat(150_000);
+    const source = '😀café'.repeat(150_000);
+    const payload = 'π'.repeat(200_000);
     const pair = await storeScriptPayloadPair(database, {
       scope: 'delivery',
       fileId: 'unicode-file',
