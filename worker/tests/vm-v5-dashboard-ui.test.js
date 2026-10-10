@@ -31,10 +31,10 @@ describe('Layered VM v5 protection mode wiring', () => {
     const delivery = read('src/script-delivery.js');
     expect(scripts).toContain("mode === 'vm-v5'");
     expect(scripts).toContain('compileFrezenVmV5(source)');
-    expect(scripts).toContain('isFrezenVmV5(row.content)');
+    expect(scripts).toContain('isFrezenVmV5(existingContent)');
     expect(delivery).toContain("mode === 'vm-v5'");
     expect(delivery).toContain('compileFrezenVmV5(source)');
-    expect(delivery).toContain('isFrezenVmV5(row.content)');
+    expect(delivery).toContain('isFrezenVmV5(existingContent)');
   });
 
   it('reports the correct VM v5 profile through secure delivery', () => {
