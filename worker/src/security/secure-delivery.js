@@ -1,7 +1,6 @@
 import { obfuscateLuaV11 } from '../script-obfuscator-v11.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from '../script-obfuscation-contract.js';
-import { isFrezenVmV2, FREZEN_VM_V2_PROFILE } from '../frezen-vm-v2.js';
-import { isFrezenVmV3, FREZEN_VM_V3_PROFILE } from '../frezen-vm-v3.js';
+import { isFrezenVmV4, FREZEN_VM_V4_PROFILE } from '../frezen-vm-v4.js';
 
 const encoder = new TextEncoder();
 
@@ -9,6 +8,8 @@ async function sha256Hex(value) {
   const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+const isRetiredVmArtifact = (value) => { const source = String(value ?? ''); return source.startsWith(OBFUSCATION_MARKER) && ((source.includes('FREZEN_VM_V3_BAD_EXPR') && source.includes('__frezen_v3')) || source.includes('FREZEN_VM_V2_CHUNK_MISSING') || source.includes('FREZEN_VM_CHUNK_MISSING')); };
 
 const TOKEN_TTL_SECONDS = 60;
 const MAX_TOKEN_BYTES = 4096;
@@ -128,7 +129,7 @@ export async function deliverScript(request, env, requestId, json) {
         "x-frezen-request-id": requestId,
         "x-frezen-payload-sha256": payloadSha256,
         "x-frezen-obfuscation-status": obfuscationVerified ? "verified" : "legacy-or-unverified",
-        "x-frezen-obfuscation-profile": obfuscationVerified ? (() => { const p = isFrezenVmV3(payload) ? FREZEN_VM_V3_PROFILE : (isFrezenVmV2(payload) ? FREZEN_VM_V2_PROFILE : OBFUSCATION_PROFILE); return `${p.mode};${p.version};${p.strength};${p.protectionLevel};${p.algorithm}`; })() : `legacy;marker-missing`,
+        "x-frezen-obfuscation-profile": obfuscationVerified ? (() => { const p = isFrezenVmV4(payload) ? FREZEN_VM_V4_PROFILE : (isRetiredVmArtifact(payload) ? { mode: 'Retired Frezen VM artifact', version: 'legacy', strength: 'LEGACY', protectionLevel: 0, algorithm: 'retired' } : OBFUSCATION_PROFILE); return `${p.mode};${p.version};${p.strength};${p.protectionLevel};${p.algorithm}`; })() : `legacy;marker-missing`,
         "x-frezen-obfuscation-marker": obfuscationVerified ? OBFUSCATION_MARKER : "marker-missing",
       }
     });

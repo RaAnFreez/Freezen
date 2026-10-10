@@ -143,8 +143,7 @@ export function renderScripts(root) {
         <input placeholder="Version e.g. 1.0.0" data-version="${esc(script.id)}" maxlength="80" />
         <select data-protection-mode="${esc(script.id)}" aria-label="Protection mode">
           <option value="source-v11">Source V11 — compatibility</option>
-          <option value="vm-v2">VM V2 — layered runtime</option>
-          <option value="vm-v3">VM V3 — virtualized, strongest</option>
+          <option value="vm-v4">Frezen Layered VM v4 — two-stage runtime</option>
         </select>
         <input placeholder="Release notes (optional)" data-notes="${esc(script.id)}" maxlength="2000" />
         <button class="primary-button small" data-submit-upload="${esc(script.id)}">Upload</button>
