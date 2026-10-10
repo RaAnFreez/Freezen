@@ -2,7 +2,7 @@ import { obfuscateLuaV11 } from './script-obfuscator-v11.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from './script-obfuscation-contract.js';
 import { compileFrezenVmV4, FREZEN_VM_V4_PROFILE, isFrezenVmV4 } from './frezen-vm-v4.js';
 import { compileFrezenVmV5, FREZEN_VM_V5_PROFILE, isFrezenVmV5 } from './frezen-vm-v5.js';
-import { storeScriptPayloadPair, resolveScriptPayload, deleteStoredScriptPayloads, isR2ScriptPayload } from './script-payload-storage.js';
+import { storeScriptPayloadPair, resolveScriptPayload, deleteStoredScriptPayloads, isD1ScriptPayload } from './script-payload-storage.js';
 
 const MAX_LUA_BYTES = 3 * 1024 * 1024;
 const VERSION_RE = /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
@@ -375,7 +375,7 @@ export async function getScript(request, env, requestId, json, scriptId) {
       size_bytes: row.size_bytes,
       sha256: row.sha256,
       content_type: row.content_type,
-      obfuscation_verified: isFrezenObfuscated(row.content) || isR2ScriptPayload(row.content),
+      obfuscation_verified: isFrezenObfuscated(row.content) || isD1ScriptPayload(row.content),
       source_size_bytes: row.source_size_bytes,
       obfuscated_view_url: `/api/v1/scripts/${encodeURIComponent(scriptId)}?view=obfuscated&version_id=${encodeURIComponent(row.id)}`,
     }));
