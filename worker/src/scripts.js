@@ -172,6 +172,7 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
     return json({ version: { id: versionId, script_id: scriptId, version: parsed.version, file_name: parsed.fileName, size_bytes: outputSizeBytes, source_size_bytes: sourceSizeBytes, sha256: payloadSha256, source_sha256: sourceSha256, release_notes: parsed.releaseNotes, status: 'ARCHIVED', obfuscation: protectionProfile(parsed.protectionMode), protection_mode: parsed.protectionMode }, request_id: requestId }, 201, requestId);
   } catch (error) {
     if (String(error?.message ?? '').includes('UNIQUE')) return bad(json, requestId, 'VERSION_ALREADY_EXISTS', 409);
+    if (String(error?.message ?? error) === 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED') return bad(json, requestId, 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED', 503);
     return bad(json, requestId, 'DATABASE_ERROR', 503);
   }
 }
@@ -228,7 +229,7 @@ export async function updateScriptVersionSource(request, env, requestId, json, a
     if (body?.release_notes !== undefined) await env.DB.prepare('UPDATE script_versions SET release_notes=?1 WHERE id=?2 AND script_id=?3').bind(releaseNotes, versionId, scriptId).run();
     await audit(env, auth, 'SCRIPT_VERSION_UPDATED', 'script_version', versionId, 'SUCCESS', requestId, { script_id: scriptId, version: row.version, source_bytes: sourceBytes, output_bytes: outputBytes, obfuscation: protectionProfile(protectionMode), protection_mode: protectionMode });
     return json({ status: 'updated', version: { id: versionId, version: row.version, size_bytes: outputBytes, source_size_bytes: sourceBytes, sha256: payloadSha256, source_sha256: sourceSha256, release_notes: releaseNotes, obfuscation: protectionProfile(protectionMode), protection_mode: protectionMode }, request_id: requestId });
-  } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
+  } catch (error) { if (String(error?.message ?? error) === 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED') return bad(json, requestId, 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED', 503); return bad(json, requestId, 'DATABASE_ERROR', 503); }
 }
 
 export async function deleteScriptVersion(request, env, requestId, json, auth, scriptId, versionId) {
