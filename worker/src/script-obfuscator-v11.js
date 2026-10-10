@@ -437,7 +437,10 @@ export function obfuscateLuaV11(source, options = {}) {
   const rendered = renderTokens(tokens, { minify, keepComments }).trim();
   // Keep the watermark for legacy detection; detailed profile metadata stays outside the payload.
   const body = pooled.prefix ? `${pooled.prefix}\n${rendered}` : rendered;
-  const code = `${OBFUSCATION_WATERMARK}\n${body}`;
+  // Re-tokenize the generated body and render it without layout whitespace. This keeps
+  // quoted and long-bracket string contents intact while reducing ordinary output to one line.
+  const compactBody = keepComments ? body : renderTokens(tokenize(body), { minify: true });
+  const code = `${OBFUSCATION_WATERMARK}\n${compactBody}`;
   const outputBytes = new TextEncoder().encode(code).byteLength;
   if (outputBytes > MAX_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
