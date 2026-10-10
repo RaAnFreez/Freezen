@@ -20,6 +20,12 @@ describe('Layered VM v5 protection mode wiring', () => {
     expect(source).not.toContain('value="vm-v3"');
   });
 
+  it('exposes VM v5 in the dashboard source that feeds the deploy bundle', () => {
+    const source = read('../dashboard/src/scripts.js');
+    expect(source).toContain('<option value="vm-v4">Frezen Layered VM v4 — two-stage runtime</option>');
+    expect(source).toContain('<option value="vm-v5">Frezen Layered VM v5 — manifest-sealed</option>');
+  });
+
   it('routes both upload backends to the VM v5 compiler', () => {
     const scripts = read('src/scripts.js');
     const delivery = read('src/script-delivery.js');
