@@ -2,7 +2,7 @@ import { obfuscateLuaV11 } from './script-obfuscator-v11.js';
 import { compileFrezenVmV4, FREZEN_VM_V4_PROFILE, isFrezenVmV4 } from './frezen-vm-v4.js';
 import { compileFrezenVmV5, FREZEN_VM_V5_PROFILE, isFrezenVmV5 } from './frezen-vm-v5.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from './script-obfuscation-contract.js';
-import { storeScriptPayloadPair, resolveScriptPayload, deleteStoredScriptPayloads, isR2ScriptPayload } from './script-payload-storage.js';
+import { storeScriptPayloadPair, resolveScriptPayload, deleteStoredScriptPayloads } from './script-payload-storage.js';
 
 const VERSION_RE = /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const MAX_LUA_BYTES = 3 * 1024 * 1024;
@@ -117,7 +117,7 @@ export async function getDeliveryScript(request, env, requestId, json, deliveryI
         script_id: deliveryId,
         version: { id: row.id, version: row.version, status: row.status, release_notes: row.release_notes, created_at: row.created_at },
         source: { available: Boolean(source), content: source, size_bytes: source ? Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength) : 0, sha256: row.source_sha256 ?? (source ? await sha256Hex(source) : null), ...(sourceUnavailableReason ? { reason: sourceUnavailableReason } : {}) },
-        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? (isFrezenVmV5(payloadContent) ? FREZEN_VM_V5_PROFILE : (isFrezenVmV4(payloadContent) ? FREZEN_VM_V4_PROFILE : (isRetiredVmArtifact(payloadContent) ? { version: 'legacy', mode: 'Retired Frezen VM artifact', strength: 'LEGACY', protectionLevel: 0 } : OBFUSCATION_PROFILE))) : { version: 'legacy', status: 'unverified' }, content: payloadContent },
+        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(payloadContent) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? (isFrezenVmV5(payloadContent) ? FREZEN_VM_V5_PROFILE : (isFrezenVmV4(payloadContent) ? FREZEN_VM_V4_PROFILE : (isRetiredVmArtifact(payloadContent) ? { version: 'legacy', mode: 'Retired Frezen VM artifact', strength: 'LEGACY', protectionLevel: 0 } : OBFUSCATION_PROFILE))) : { version: 'legacy', status: 'unverified' }, content: payloadContent },
         request_id: requestId,
       });
     }
@@ -179,8 +179,8 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
     if (body?.release_notes !== undefined) await env.DB.prepare('UPDATE delivery_script_versions SET release_notes=?1 WHERE id=?2 AND delivery_script_id=?3').bind(releaseNotes,versionId,deliveryId).run();
     await env.DB.prepare('UPDATE delivery_scripts SET updated_at=CURRENT_TIMESTAMP WHERE id=?1').bind(deliveryId).run();
     await audit(env,auth,'DELIVERY_VERSION_UPDATED',deliveryId,requestId,{version_id:versionId,version:row.version,source_bytes:sourceBytes,output_bytes:outputBytes,obfuscation:protectionProfile(protectionMode),protection_mode:protectionMode});
-    return json({status:'updated',version:{id:versionId,version:row.version,size_bytes:outputBytes,source_size_bytes:sourceBytes,sha256:payloadSha256,source_sha256:sourceSha256,release_notes:releaseNotes,protection:OBFUSCATION_PROFILE},request_id:requestId});
-  } catch { return bad(json,requestId,'DATABASE_ERROR',503); }
+    return json({status:'updated',version:{id:versionId,version:row.version,size_bytes:outputBytes,source_size_bytes:sourceBytes,sha256:payloadSha256,source_sha256:sourceSha256,release_notes:releaseNotes,protection:protectionProfile(protectionMode)},request_id:requestId});
+  } catch (error) { if (String(error?.message ?? error) === 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED') return bad(json,requestId,'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED',503); return bad(json,requestId,'DATABASE_ERROR',503); }
 }
 
 export async function deleteDeliveryVersion(request, env, requestId, json, auth, deliveryId, versionId) {
