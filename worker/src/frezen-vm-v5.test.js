@@ -7,7 +7,7 @@ import {
   compileFrezenVmV5,
   FREZEN_VM_V5_PROFILE,
   isFrezenVmV5,
-} from './frezen-vm-v4.js';
+} from './frezen-vm-v5.js';
 import { OBFUSCATION_WATERMARK } from './script-obfuscation-contract.js';
 
 function runLua(runtime, source) {
