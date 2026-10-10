@@ -146,7 +146,7 @@ export function renderScripts(root) {
           <option value="vm-v4">Frezen Layered VM v4 — two-stage runtime</option>
           <option value="vm-v5">Frezen Layered VM v5 — manifest-sealed</option>
         </select>
-        <small>Source limit: 3 MiB. VM v4/v5 generated output: up to 20 MiB. Source V11 output remains limited to 3 MiB.</small>
+        <small>Source limit: 3 MiB. VM v4/v5 generated output: up to 5 MiB. Source V11 output remains limited to 3 MiB.</small>
         <input placeholder="Release notes (optional)" data-notes="${esc(script.id)}" maxlength="2000" />
         <button class="primary-button small" data-submit-upload="${esc(script.id)}">Upload</button>
       </div>
