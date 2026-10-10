@@ -240,7 +240,9 @@ export async function deleteScriptVersion(request, env, requestId, json, auth, s
     if (!access) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
     const version = await env.DB.prepare('SELECT id,version,status FROM script_versions WHERE id=?1 AND script_id=?2 LIMIT 1').bind(versionId, scriptId).first();
     if (!version) return bad(json, requestId, 'SCRIPT_VERSION_NOT_FOUND', 404);
+    const storedRows = await env.DB.prepare('SELECT content,source_content FROM script_files WHERE script_version_id=?1').bind(versionId).all();
     await env.DB.prepare('DELETE FROM script_versions WHERE id=?1 AND script_id=?2').bind(versionId, scriptId).run();
+    for (const stored of storedRows.results ?? []) await deleteStoredScriptPayloads(env, stored.content, stored.source_content);
     let promoted = null;
     if (String(version.status).toUpperCase() === 'ACTIVE') {
       const next = await env.DB.prepare("SELECT id,version FROM script_versions WHERE script_id=?1 ORDER BY created_at DESC LIMIT 1").bind(scriptId).first();
@@ -280,8 +282,10 @@ export async function deleteScript(request, env, requestId, json, auth, scriptId
     await ensureScriptSchema(env);
     const exists = await env.DB.prepare('SELECT s.id FROM scripts s JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 AND sv.owner_id=?2 LIMIT 1').bind(scriptId, auth?.user_id).first();
     if (!exists) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
+    const storedRows = await env.DB.prepare('SELECT f.content,f.source_content FROM script_files f JOIN script_versions v ON v.id=f.script_version_id WHERE v.script_id=?1').bind(scriptId).all();
     const result = await env.DB.prepare('DELETE FROM scripts WHERE id=?1').bind(scriptId).run();
     if (!result?.meta?.changes) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
+    for (const stored of storedRows.results ?? []) await deleteStoredScriptPayloads(env, stored.content, stored.source_content);
     await audit(env, auth, 'SCRIPT_DELETED', 'script', scriptId, 'SUCCESS', requestId);
     return json({ status: 'deleted', request_id: requestId });
   } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
