@@ -149,7 +149,7 @@ export async function uploadScriptVersion(request, env, requestId, json, auth, s
     // Owners can upload/prepare a new version while the script remains disabled.
     const service = await env.DB.prepare('SELECT id FROM frezen_key_services WHERE id=?1 AND owner_id=?2 LIMIT 1').bind(script.service_id, auth?.user_id).first();
     if (!service) return bad(json, requestId, 'SERVICE_NOT_FOUND', 404);
-    if (isVmProtectionMode(parsed.protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V4_DISABLED', 409);
+    if (isVmProtectionMode(parsed.protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, parsed.protectionMode === 'vm-v5' ? 'VM_V5_DISABLED' : 'VM_V4_DISABLED', 409);
     const versionId = id();
     const fileId = id();
     let obfuscated;
@@ -202,13 +202,13 @@ export async function updateScriptVersionSource(request, env, requestId, json, a
   if (sourceBytes > MAX_LUA_BYTES) return bad(json, requestId, 'LUA_FILE_TOO_LARGE', 413);
   try {
     await ensureScriptSchema(env);
-    if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V4_DISABLED', 409);
+    if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, protectionMode === 'vm-v5' ? 'VM_V5_DISABLED' : 'VM_V4_DISABLED', 409);
     const access = await env.DB.prepare('SELECT s.id FROM scripts s JOIN frezen_key_services sv ON sv.id=s.service_id WHERE s.id=?1 AND sv.owner_id=?2 LIMIT 1').bind(scriptId, auth?.user_id).first();
     if (!access) return bad(json, requestId, 'SCRIPT_NOT_FOUND', 404);
     const row = await env.DB.prepare('SELECT sv.id,sv.version,sv.release_notes,sf.id AS file_id,sf.content AS existing_content FROM script_versions sv JOIN script_files sf ON sf.script_version_id=sv.id WHERE sv.id=?1 AND sv.script_id=?2 LIMIT 1').bind(versionId, scriptId).first();
     if (!row) return bad(json, requestId, 'SCRIPT_VERSION_NOT_FOUND', 404);
     if (requestedProtectionMode === undefined) protectionMode = isFrezenVmV5(row.existing_content) ? 'vm-v5' : ((isFrezenVmV4(row.existing_content) || isRetiredVmArtifact(row.existing_content)) ? 'vm-v4' : 'source-v11');
-    if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V4_DISABLED', 409);
+    if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, protectionMode === 'vm-v5' ? 'VM_V5_DISABLED' : 'VM_V4_DISABLED', 409);
     let obfuscated;
     try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) {
       const reason = String(error?.message ?? error);
