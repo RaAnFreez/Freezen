@@ -2,6 +2,7 @@ import { obfuscateLuaV11 } from './script-obfuscator-v11.js';
 import { compileFrezenVmV4, FREZEN_VM_V4_PROFILE, isFrezenVmV4 } from './frezen-vm-v4.js';
 import { compileFrezenVmV5, FREZEN_VM_V5_PROFILE, isFrezenVmV5 } from './frezen-vm-v5.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from './script-obfuscation-contract.js';
+import { storeScriptPayloadPair, resolveScriptPayload, deleteStoredScriptPayloads, isR2ScriptPayload } from './script-payload-storage.js';
 
 const VERSION_RE = /^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const MAX_LUA_BYTES = 3 * 1024 * 1024;
@@ -103,10 +104,11 @@ export async function getDeliveryScript(request, env, requestId, json, deliveryI
         FROM delivery_script_versions v JOIN delivery_script_files f ON f.delivery_script_version_id=v.id
         WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1`).bind(requestedVersionId, deliveryId).first();
       if (!row) return bad(json, requestId, 'DELIVERY_VERSION_NOT_FOUND', 404);
-      const verified = isFrezenObfuscated(row.content);
-      const storedSource = row.source_content ?? '';
+      const payloadContent = await resolveScriptPayload(env, row.content);
+      const storedSource = row.source_content ? await resolveScriptPayload(env, row.source_content) : '';
+      const verified = isFrezenObfuscated(payloadContent);
       const sourceWasObfuscated = Boolean(storedSource && isFrezenObfuscated(storedSource));
-      const source = sourceWasObfuscated ? '' : (storedSource || (!verified ? row.content : ''));
+      const source = sourceWasObfuscated ? '' : (storedSource || (!verified ? payloadContent : ''));
       const sourceUnavailableReason = sourceWasObfuscated
         ? 'SOURCE_CONTENT_IS_OBFUSCATED'
         : (!source && verified ? 'LEGACY_SOURCE_UNAVAILABLE' : null);
@@ -115,7 +117,7 @@ export async function getDeliveryScript(request, env, requestId, json, deliveryI
         script_id: deliveryId,
         version: { id: row.id, version: row.version, status: row.status, release_notes: row.release_notes, created_at: row.created_at },
         source: { available: Boolean(source), content: source, size_bytes: source ? Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength) : 0, sha256: row.source_sha256 ?? (source ? await sha256Hex(source) : null), ...(sourceUnavailableReason ? { reason: sourceUnavailableReason } : {}) },
-        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? (isFrezenVmV5(row.content) ? FREZEN_VM_V5_PROFILE : (isFrezenVmV4(row.content) ? FREZEN_VM_V4_PROFILE : (isRetiredVmArtifact(row.content) ? { version: 'legacy', mode: 'Retired Frezen VM artifact', strength: 'LEGACY', protectionLevel: 0 } : OBFUSCATION_PROFILE))) : { version: 'legacy', status: 'unverified' }, content: row.content },
+        payload: { file_name: row.file_name, content_type: row.content_type, size_bytes: row.size_bytes, sha256: row.sha256, obfuscation_verified: verified, obfuscation_marker: isFrezenObfuscated(row.content) ? OBFUSCATION_MARKER : (verified ? 'profile-only' : 'marker-missing'), profile: verified ? (isFrezenVmV5(payloadContent) ? FREZEN_VM_V5_PROFILE : (isFrezenVmV4(payloadContent) ? FREZEN_VM_V4_PROFILE : (isRetiredVmArtifact(payloadContent) ? { version: 'legacy', mode: 'Retired Frezen VM artifact', strength: 'LEGACY', protectionLevel: 0 } : OBFUSCATION_PROFILE))) : { version: 'legacy', status: 'unverified' }, content: payloadContent },
         request_id: requestId,
       });
     }
@@ -137,11 +139,12 @@ export async function uploadDeliveryVersion(request, env, requestId, json, auth,
     if (script.status !== 'ACTIVE') return bad(json, requestId, 'DELIVERY_SCRIPT_DISABLED', 409);
     if (parsed.error) return bad(json, requestId, parsed.error, parsed.error === 'OBFUSCATED_LUA_TOO_LARGE' ? 413 : 422);
     const versionId = id(), fileId = id();
+    const storedPair = await storeScriptPayloadPair(env, { scope: 'delivery', fileId, source: parsed.code, payload: parsed.output });
     await env.DB.prepare(`INSERT INTO delivery_script_versions (id,delivery_script_id,version,file_reference,release_notes,status) VALUES (?1,?2,?3,?4,?5,'ARCHIVED')`).bind(versionId,deliveryId,parsed.version,fileId,parsed.releaseNotes).run();
-    await env.DB.prepare(`INSERT INTO delivery_script_files (id,delivery_script_version_id,file_name,size_bytes,content,sha256,source_size_bytes,source_content,source_sha256,obfuscation_version,obfuscation_strength,obfuscation_protection_level) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)`).bind(fileId,versionId,parsed.fileName,parsed.outputBytes,parsed.output,parsed.sha256,parsed.sourceBytes,parsed.code,parsed.sourceSha256,protectionProfile(parsed.protectionMode).version,protectionProfile(parsed.protectionMode).strength,protectionProfile(parsed.protectionMode).protectionLevel).run();
+    await env.DB.prepare(`INSERT INTO delivery_script_files (id,delivery_script_version_id,file_name,size_bytes,content,sha256,source_size_bytes,source_content,source_sha256,obfuscation_version,obfuscation_strength,obfuscation_protection_level) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)`).bind(fileId,versionId,parsed.fileName,parsed.outputBytes,storedPair.content,parsed.sha256,parsed.sourceBytes,storedPair.sourceContent,parsed.sourceSha256,protectionProfile(parsed.protectionMode).version,protectionProfile(parsed.protectionMode).strength,protectionProfile(parsed.protectionMode).protectionLevel).run();
     await audit(env, auth, 'DELIVERY_VERSION_UPLOADED', deliveryId, requestId, { version: parsed.version, source_bytes: parsed.sourceBytes, output_bytes: parsed.outputBytes, sha256: parsed.sha256, obfuscation: protectionProfile(parsed.protectionMode), protection_mode: parsed.protectionMode });
     return json({ version: { id: versionId, version: parsed.version, status: 'ARCHIVED', size_bytes: parsed.outputBytes, source_size_bytes: parsed.sourceBytes, sha256: parsed.sha256, source_sha256: parsed.sourceSha256, protection: protectionProfile(parsed.protectionMode), protection_mode: parsed.protectionMode }, request_id: requestId }, 201, requestId);
-  } catch (error) { if (String(error?.message ?? '').includes('UNIQUE')) return bad(json, requestId, 'VERSION_ALREADY_EXISTS', 409); return bad(json, requestId, 'DATABASE_ERROR', 503); }
+  } catch (error) { if (String(error?.message ?? '').includes('UNIQUE')) return bad(json, requestId, 'VERSION_ALREADY_EXISTS', 409); if (String(error?.message ?? error) === 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED') return bad(json, requestId, 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED', 503); return bad(json, requestId, 'DATABASE_ERROR', 503); }
 }
 
 export async function updateDeliveryVersionSource(request, env, requestId, json, auth, deliveryId, versionId) {
@@ -159,9 +162,10 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
     await ensureSchema(env);
     const script = await env.DB.prepare('SELECT id FROM delivery_scripts WHERE id=?1 LIMIT 1').bind(deliveryId).first();
     if (!script) return bad(json, requestId, 'DELIVERY_SCRIPT_NOT_FOUND', 404);
-    const row = await env.DB.prepare('SELECT v.id,v.version,v.release_notes,f.id AS file_id,f.content AS existing_content FROM delivery_script_versions v JOIN delivery_script_files f ON f.delivery_script_version_id=v.id WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1').bind(versionId,deliveryId).first();
+    const row = await env.DB.prepare('SELECT v.id,v.version,v.release_notes,f.id AS file_id,f.content AS existing_content,f.source_content AS existing_source_content FROM delivery_script_versions v JOIN delivery_script_files f ON f.delivery_script_version_id=v.id WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1').bind(versionId,deliveryId).first();
     if (!row) return bad(json, requestId, 'DELIVERY_VERSION_NOT_FOUND', 404);
-    if (requestedProtectionMode === undefined) protectionMode = isFrezenVmV5(row.existing_content) ? 'vm-v5' : ((isFrezenVmV4(row.existing_content) || isRetiredVmArtifact(row.existing_content)) ? 'vm-v4' : 'source-v11');
+    const existingContent = await resolveScriptPayload(env, row.existing_content);
+    if (requestedProtectionMode === undefined) protectionMode = isFrezenVmV5(existingContent) ? 'vm-v5' : ((isFrezenVmV4(existingContent) || isRetiredVmArtifact(existingContent)) ? 'vm-v4' : 'source-v11');
     if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, protectionMode === 'vm-v5' ? 'VM_V5_DISABLED' : 'VM_V4_DISABLED', 409);
     let obfuscated;
     try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) { const reason=String(error?.message??error); return bad(json,requestId,reason==='OBFUSCATED_LUA_TOO_LARGE'?'OBFUSCATED_LUA_TOO_LARGE':'OBFUSCATION_FAILED',reason==='OBFUSCATED_LUA_TOO_LARGE'?413:422); }
@@ -169,7 +173,9 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
     const payloadSha256=await sha256Hex(obfuscated.code);
     const outputBytes=new TextEncoder().encode(obfuscated.code).byteLength;
     const releaseNotes=body?.release_notes===undefined?row.release_notes:text(body.release_notes,2000);
-    await env.DB.prepare('UPDATE delivery_script_files SET content=?1,size_bytes=?2,sha256=?3,source_size_bytes=?4,source_content=?5,source_sha256=?6,obfuscation_version=?7,obfuscation_strength=?8,obfuscation_protection_level=?9 WHERE id=?10 AND delivery_script_version_id=?11').bind(obfuscated.code,outputBytes,payloadSha256,sourceBytes,source,sourceSha256,protectionProfile(protectionMode).version,protectionProfile(protectionMode).strength,protectionProfile(protectionMode).protectionLevel,row.file_id,versionId).run();
+    const storedPair=await storeScriptPayloadPair(env,{scope:'delivery',fileId:row.file_id,source,payload:obfuscated.code});
+    await env.DB.prepare('UPDATE delivery_script_files SET content=?1,size_bytes=?2,sha256=?3,source_size_bytes=?4,source_content=?5,source_sha256=?6,obfuscation_version=?7,obfuscation_strength=?8,obfuscation_protection_level=?9 WHERE id=?10 AND delivery_script_version_id=?11').bind(storedPair.content,outputBytes,payloadSha256,sourceBytes,storedPair.sourceContent,sourceSha256,protectionProfile(protectionMode).version,protectionProfile(protectionMode).strength,protectionProfile(protectionMode).protectionLevel,row.file_id,versionId).run();
+    await deleteStoredScriptPayloads(env,row.existing_content,row.existing_source_content);
     if (body?.release_notes !== undefined) await env.DB.prepare('UPDATE delivery_script_versions SET release_notes=?1 WHERE id=?2 AND delivery_script_id=?3').bind(releaseNotes,versionId,deliveryId).run();
     await env.DB.prepare('UPDATE delivery_scripts SET updated_at=CURRENT_TIMESTAMP WHERE id=?1').bind(deliveryId).run();
     await audit(env,auth,'DELIVERY_VERSION_UPDATED',deliveryId,requestId,{version_id:versionId,version:row.version,source_bytes:sourceBytes,output_bytes:outputBytes,obfuscation:protectionProfile(protectionMode),protection_mode:protectionMode});
@@ -185,7 +191,9 @@ export async function deleteDeliveryVersion(request, env, requestId, json, auth,
     if(!exists) return bad(json,requestId,'DELIVERY_SCRIPT_NOT_FOUND',404);
     const version=await env.DB.prepare('SELECT id,version,status FROM delivery_script_versions WHERE id=?1 AND delivery_script_id=?2 LIMIT 1').bind(versionId,deliveryId).first();
     if(!version) return bad(json,requestId,'DELIVERY_VERSION_NOT_FOUND',404);
+    const storedRows=await env.DB.prepare('SELECT content,source_content FROM delivery_script_files WHERE delivery_script_version_id=?1').bind(versionId).all();
     await env.DB.prepare('DELETE FROM delivery_script_versions WHERE id=?1 AND delivery_script_id=?2').bind(versionId,deliveryId).run();
+    for(const stored of storedRows.results ?? []) await deleteStoredScriptPayloads(env,stored.content,stored.source_content);
     let promoted=null;
     if(String(version.status).toUpperCase()==='ACTIVE'){
       const next=await env.DB.prepare("SELECT id,version FROM delivery_script_versions WHERE delivery_script_id=?1 ORDER BY created_at DESC LIMIT 1").bind(deliveryId).first();
@@ -228,7 +236,15 @@ export async function updateDeliveryScript(request, env, requestId, json, auth, 
 
 export async function deleteDeliveryScript(request, env, requestId, json, auth, deliveryId) {
   if (!env.DB) return bad(json, requestId, 'DATABASE_UNAVAILABLE', 503);
-  try { await ensureSchema(env); const result = await env.DB.prepare('DELETE FROM delivery_scripts WHERE id=?1').bind(deliveryId).run(); if (!result?.meta?.changes) return bad(json, requestId, 'DELIVERY_SCRIPT_NOT_FOUND', 404); await audit(env, auth, 'DELIVERY_SCRIPT_DELETED', deliveryId, requestId); return json({ status: 'deleted', request_id: requestId }); } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
+  try {
+    await ensureSchema(env);
+    const storedRows = await env.DB.prepare('SELECT f.content,f.source_content FROM delivery_script_files f JOIN delivery_script_versions v ON v.id=f.delivery_script_version_id WHERE v.delivery_script_id=?1').bind(deliveryId).all();
+    const result = await env.DB.prepare('DELETE FROM delivery_scripts WHERE id=?1').bind(deliveryId).run();
+    if (!result?.meta?.changes) return bad(json, requestId, 'DELIVERY_SCRIPT_NOT_FOUND', 404);
+    for (const stored of storedRows.results ?? []) await deleteStoredScriptPayloads(env, stored.content, stored.source_content);
+    await audit(env, auth, 'DELIVERY_SCRIPT_DELETED', deliveryId, requestId);
+    return json({ status: 'deleted', request_id: requestId });
+  } catch { return bad(json, requestId, 'DATABASE_ERROR', 503); }
 }
 
 export async function deliverPublicScript(request, env, requestId, deliveryId) {
@@ -238,15 +254,17 @@ export async function deliverPublicScript(request, env, requestId, deliveryId) {
     await ensureSchema(env);
     const row = await env.DB.prepare(`SELECT f.id,f.content,f.sha256,f.source_content,f.source_size_bytes,f.source_sha256,f.obfuscation_version,s.status AS script_status,v.status AS version_status FROM delivery_script_files f JOIN delivery_script_versions v ON v.id=f.delivery_script_version_id JOIN delivery_scripts s ON s.id=v.delivery_script_id WHERE s.id=?1 AND v.status='ACTIVE' LIMIT 1`).bind(deliveryId).first();
     if (!row || row.script_status !== 'ACTIVE' || row.version_status !== 'ACTIVE') return new Response('SCRIPT_DISABLED', { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'x-request-id': requestId } });
-    let payload=row.content;
+    let payload=await resolveScriptPayload(env,row.content);
     let payloadSha256=row.sha256;
     if (!isFrezenObfuscated(payload)) {
-      const source=row.source_content ?? payload;
+      const source=row.source_content ? await resolveScriptPayload(env,row.source_content) : payload;
       try {
         const rebuilt=obfuscateLuaV11(source);
         payload=rebuilt.code;
         payloadSha256=await sha256Hex(payload);
-        await env.DB.prepare('UPDATE delivery_script_files SET content=?1,size_bytes=?2,sha256=?3,source_size_bytes=COALESCE(source_size_bytes,?4),source_content=COALESCE(source_content,?5),source_sha256=COALESCE(source_sha256,?6),obfuscation_version=?7,obfuscation_strength=?8,obfuscation_protection_level=?9 WHERE id=?10').bind(payload,new TextEncoder().encode(payload).byteLength,payloadSha256,new TextEncoder().encode(source).byteLength,source,await sha256Hex(source),OBFUSCATION_PROFILE.version,OBFUSCATION_PROFILE.strength,OBFUSCATION_PROFILE.protectionLevel,row.id).run();
+        const storedPair=await storeScriptPayloadPair(env,{scope:'delivery',fileId:row.id,source,payload});
+        await env.DB.prepare('UPDATE delivery_script_files SET content=?1,size_bytes=?2,sha256=?3,source_size_bytes=COALESCE(source_size_bytes,?4),source_content=?5,source_sha256=COALESCE(source_sha256,?6),obfuscation_version=?7,obfuscation_strength=?8,obfuscation_protection_level=?9 WHERE id=?10').bind(storedPair.content,new TextEncoder().encode(payload).byteLength,payloadSha256,new TextEncoder().encode(source).byteLength,storedPair.sourceContent,await sha256Hex(source),OBFUSCATION_PROFILE.version,OBFUSCATION_PROFILE.strength,OBFUSCATION_PROFILE.protectionLevel,row.id).run();
+        await deleteStoredScriptPayloads(env,row.content,row.source_content);
       } catch {}
     }
     return new Response(payload, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store, no-cache, must-revalidate', pragma: 'no-cache', 'content-disposition': 'inline', 'etag': `"${payloadSha256}"`, 'x-frezen-delivery': 'keyless-obfuscated-v11', 'x-frezen-obfuscation-status': isFrezenObfuscated(payload) ? 'verified' : 'legacy-or-unverified', 'x-frezen-obfuscation-profile': isFrezenObfuscated(payload) ? `${OBFUSCATION_PROFILE.mode};${OBFUSCATION_PROFILE.version};${OBFUSCATION_PROFILE.strength};${OBFUSCATION_PROFILE.protectionLevel};${OBFUSCATION_PROFILE.algorithm}` : 'legacy;marker-missing', 'x-frezen-request-id': requestId } });
