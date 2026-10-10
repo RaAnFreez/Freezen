@@ -129,7 +129,7 @@ export async function uploadDeliveryVersion(request, env, requestId, json, auth,
   if (!env.DB) return bad(json, requestId, 'DATABASE_UNAVAILABLE', 503);
   const parsed = await parseUpload(request);
   if (parsed.error) return bad(json, requestId, parsed.error, parsed.error === 'LUA_FILE_TOO_LARGE' ? 413 : 422);
-  if (isVmProtectionMode(parsed.protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V4_DISABLED', 409);
+  if (isVmProtectionMode(parsed.protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, parsed.protectionMode === 'vm-v5' ? 'VM_V5_DISABLED' : 'VM_V4_DISABLED', 409);
   try {
     await ensureSchema(env);
     const script = await env.DB.prepare('SELECT id,status FROM delivery_scripts WHERE id=?1 LIMIT 1').bind(deliveryId).first();
@@ -151,7 +151,7 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
   const requestedProtectionMode = body?.protection_mode;
   let protectionMode = normalizeProtectionMode(requestedProtectionMode);
   if (!source.trim()) return bad(json, requestId, 'SOURCE_REQUIRED');
-  if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V4_DISABLED', 409);
+  if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, protectionMode === 'vm-v5' ? 'VM_V5_DISABLED' : 'VM_V4_DISABLED', 409);
   if (isFrezenObfuscated(source)) return bad(json, requestId, 'SOURCE_MUST_BE_PLAIN_LUA');
   const sourceBytes = new TextEncoder().encode(source).byteLength;
   if (sourceBytes > MAX_LUA_BYTES) return bad(json, requestId, 'LUA_FILE_TOO_LARGE', 413);
@@ -162,7 +162,7 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
     const row = await env.DB.prepare('SELECT v.id,v.version,v.release_notes,f.id AS file_id,f.content AS existing_content FROM delivery_script_versions v JOIN delivery_script_files f ON f.delivery_script_version_id=v.id WHERE v.id=?1 AND v.delivery_script_id=?2 LIMIT 1').bind(versionId,deliveryId).first();
     if (!row) return bad(json, requestId, 'DELIVERY_VERSION_NOT_FOUND', 404);
     if (requestedProtectionMode === undefined) protectionMode = isFrezenVmV5(row.existing_content) ? 'vm-v5' : ((isFrezenVmV4(row.existing_content) || isRetiredVmArtifact(row.existing_content)) ? 'vm-v4' : 'source-v11');
-    if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, 'VM_V4_DISABLED', 409);
+    if (isVmProtectionMode(protectionMode) && String(env.FREZEN_VM_ENABLED ?? '').toLowerCase() !== 'true') return bad(json, requestId, protectionMode === 'vm-v5' ? 'VM_V5_DISABLED' : 'VM_V4_DISABLED', 409);
     let obfuscated;
     try { obfuscated = compileProtectedLua(source, protectionMode); } catch (error) { const reason=String(error?.message??error); return bad(json,requestId,reason==='OBFUSCATED_LUA_TOO_LARGE'?'OBFUSCATED_LUA_TOO_LARGE':'OBFUSCATION_FAILED',reason==='OBFUSCATED_LUA_TOO_LARGE'?413:422); }
     const sourceSha256=await sha256Hex(source);
