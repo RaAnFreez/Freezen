@@ -144,7 +144,7 @@ export async function uploadDeliveryVersion(request, env, requestId, json, auth,
     await env.DB.prepare(`INSERT INTO delivery_script_files (id,delivery_script_version_id,file_name,size_bytes,content,sha256,source_size_bytes,source_content,source_sha256,obfuscation_version,obfuscation_strength,obfuscation_protection_level) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)`).bind(fileId,versionId,parsed.fileName,parsed.outputBytes,storedPair.content,parsed.sha256,parsed.sourceBytes,storedPair.sourceContent,parsed.sourceSha256,protectionProfile(parsed.protectionMode).version,protectionProfile(parsed.protectionMode).strength,protectionProfile(parsed.protectionMode).protectionLevel).run();
     await audit(env, auth, 'DELIVERY_VERSION_UPLOADED', deliveryId, requestId, { version: parsed.version, source_bytes: parsed.sourceBytes, output_bytes: parsed.outputBytes, sha256: parsed.sha256, obfuscation: protectionProfile(parsed.protectionMode), protection_mode: parsed.protectionMode });
     return json({ version: { id: versionId, version: parsed.version, status: 'ARCHIVED', size_bytes: parsed.outputBytes, source_size_bytes: parsed.sourceBytes, sha256: parsed.sha256, source_sha256: parsed.sourceSha256, protection: protectionProfile(parsed.protectionMode), protection_mode: parsed.protectionMode }, request_id: requestId }, 201, requestId);
-  } catch (error) { if (String(error?.message ?? '').includes('UNIQUE')) return bad(json, requestId, 'VERSION_ALREADY_EXISTS', 409); if (String(error?.message ?? error) === 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED') return bad(json, requestId, 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED', 503); return bad(json, requestId, 'DATABASE_ERROR', 503); }
+  } catch (error) { if (String(error?.message ?? '').includes('UNIQUE')) return bad(json, requestId, 'VERSION_ALREADY_EXISTS', 409); if (String(error?.message ?? error) === 'DATABASE_UNAVAILABLE') return bad(json, requestId, 'DATABASE_UNAVAILABLE', 503); return bad(json, requestId, 'DATABASE_ERROR', 503); }
 }
 
 export async function updateDeliveryVersionSource(request, env, requestId, json, auth, deliveryId, versionId) {
@@ -180,7 +180,7 @@ export async function updateDeliveryVersionSource(request, env, requestId, json,
     await env.DB.prepare('UPDATE delivery_scripts SET updated_at=CURRENT_TIMESTAMP WHERE id=?1').bind(deliveryId).run();
     await audit(env,auth,'DELIVERY_VERSION_UPDATED',deliveryId,requestId,{version_id:versionId,version:row.version,source_bytes:sourceBytes,output_bytes:outputBytes,obfuscation:protectionProfile(protectionMode),protection_mode:protectionMode});
     return json({status:'updated',version:{id:versionId,version:row.version,size_bytes:outputBytes,source_size_bytes:sourceBytes,sha256:payloadSha256,source_sha256:sourceSha256,release_notes:releaseNotes,protection:protectionProfile(protectionMode)},request_id:requestId});
-  } catch (error) { if (String(error?.message ?? error) === 'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED') return bad(json,requestId,'SCRIPT_PAYLOADS_R2_BINDING_REQUIRED',503); return bad(json,requestId,'DATABASE_ERROR',503); }
+  } catch (error) { if (String(error?.message ?? error) === 'DATABASE_UNAVAILABLE') return bad(json,requestId,'DATABASE_UNAVAILABLE',503); return bad(json,requestId,'DATABASE_ERROR',503); }
 }
 
 export async function deleteDeliveryVersion(request, env, requestId, json, auth, deliveryId, versionId) {
