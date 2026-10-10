@@ -1,4 +1,5 @@
 import { OBFUSCATION_WATERMARK } from './script-obfuscation-contract.js';
+import { MAX_VM_OUTPUT_BYTES } from './script-payload-storage.js';
 
 export const FREZEN_VM_V4_PROFILE = Object.freeze({
   version: '4.0',
@@ -129,9 +130,9 @@ export function compileFrezenVmV4(source, options = {}) {
   const sourceBytes = Array.from(new TextEncoder().encode(text));
   if (sourceBytes.length > MAX_VM_V4_SOURCE_BYTES) throw new Error('LUA_SOURCE_TOO_LARGE');
 
-  const chunkSize = Math.max(24, Math.min(72, Math.floor(Number(
-    options.chunkSize ?? 48,
-  )) || 48));
+  const chunkSize = Math.max(24, Math.min(4096, Math.floor(Number(
+    options.chunkSize ?? 1024,
+  )) || 1024));
   const chunks = splitBytes(sourceBytes, chunkSize);
   if (!chunks.length) throw new Error('EMPTY_LUA_SOURCE');
 
@@ -327,7 +328,7 @@ export function compileFrezenVmV4(source, options = {}) {
 
   const code = OBFUSCATION_WATERMARK + '\n' + lines.join(' ');
   const outputBytes = new TextEncoder().encode(code).byteLength;
-  if (outputBytes > MAX_VM_V4_SOURCE_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
+  if (outputBytes > MAX_VM_OUTPUT_BYTES) throw new Error('OBFUSCATED_LUA_TOO_LARGE');
 
   return {
     code,

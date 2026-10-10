@@ -26,7 +26,7 @@ describe('Layered VM v4 protection mode wiring', () => {
     const source = read('src/script-delivery.js');
     expect(source).toContain("mode === 'vm-v4'");
     expect(source).toContain('compileFrezenVmV4(source)');
-    expect(source).toContain('isFrezenVmV4(row.content)');
+    expect(source).toContain('isFrezenVmV4(existingContent)');
   });
 
   it('keeps an old vm-v3 form submission compatible by selecting the replacement', () => {

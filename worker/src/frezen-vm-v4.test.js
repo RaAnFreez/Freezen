@@ -74,6 +74,14 @@ describe('Frezen Layered VM v4', () => {
     expect(first.code).not.toBe(second.code);
   });
 
+  it('uses larger chunks to keep generated payload overhead down', () => {
+    const source = 'local value=1\n'.repeat(38_000);
+    const result = compileFrezenVmV4(source);
+    expect(result.sourceBytes).toBeGreaterThan(512 * 1024);
+    expect(result.chunkCount).toBeLessThanOrEqual(550);
+    expect(result.outputBytes).toBeLessThan(5 * 1024 * 1024);
+  });
+
   it('rejects empty and oversized source', () => {
     expect(() => compileFrezenVmV4(' \n  ')).toThrow('EMPTY_LUA_SOURCE');
     expect(() => compileFrezenVmV4('x'.repeat(3 * 1024 * 1024 + 1))).toThrow('LUA_SOURCE_TOO_LARGE');

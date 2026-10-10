@@ -2,6 +2,7 @@ import { obfuscateLuaV11 } from '../script-obfuscator-v11.js';
 import { isFrezenObfuscated, OBFUSCATION_MARKER, OBFUSCATION_PROFILE } from '../script-obfuscation-contract.js';
 import { isFrezenVmV4, FREZEN_VM_V4_PROFILE } from '../frezen-vm-v4.js';
 import { isFrezenVmV5, FREZEN_VM_V5_PROFILE } from '../frezen-vm-v5.js';
+import { resolveScriptPayload, storeScriptPayloadPair, deleteStoredScriptPayloads } from '../script-payload-storage.js';
 
 const encoder = new TextEncoder();
 
@@ -81,7 +82,7 @@ export async function deliverScript(request, env, requestId, json) {
   if (parsed.error) { await audit(env, null, "SCRIPT_DELIVERY_DENIED", null, "DENIED", requestId, { reason: parsed.error }); return deny(json, requestId, parsed.error, parsed.error === "DELIVERY_TOKEN_EXPIRED" ? 401 : 403); }
   const claims = parsed.payload;
   try {
-    const row = await env.DB.prepare(`SELECT u.status AS user_status,l.user_id,l.product_id,l.status AS license_status,l.expires_at,s.id AS script_id,s.status AS script_status,s.product_id AS script_product_id,p.status AS product_status,d.id AS device_id,d.status AS device_status,sv.id AS version_id,sv.version,sv.status AS version_status,sf.file_name,sf.content,sf.content_type,sf.size_bytes,sf.sha256,sf.source_content,sf.source_size_bytes,sf.source_sha256
+    const row = await env.DB.prepare(`SELECT u.status AS user_status,l.user_id,l.product_id,l.status AS license_status,l.expires_at,s.id AS script_id,s.status AS script_status,s.product_id AS script_product_id,p.status AS product_status,d.id AS device_id,d.status AS device_status,sv.id AS version_id,sv.version,sv.status AS version_status,sf.id AS file_id,sf.file_name,sf.content,sf.content_type,sf.size_bytes,sf.sha256,sf.source_content,sf.source_size_bytes,sf.source_sha256
       FROM licenses l
       JOIN users u ON u.id=l.user_id
       JOIN scripts s ON s.id=?1
@@ -98,18 +99,20 @@ export async function deliverScript(request, env, requestId, json) {
     if (String(row.device_status).toUpperCase() !== "ACTIVE") return deny(json, requestId, "HWID_BLOCKED");
     if (String(row.version_status).toUpperCase() !== "ACTIVE") return deny(json, requestId, "SCRIPT_VERSION_NOT_ACTIVE");
 
-    let payload = row.content;
+    let payload = await resolveScriptPayload(env, row.content);
     let payloadSha256 = row.sha256;
     let payloadBytes = Number(row.size_bytes ?? new TextEncoder().encode(payload).byteLength);
     let obfuscationVerified = isFrezenObfuscated(payload);
     if (!obfuscationVerified) {
       try {
-        const source = row.source_content ?? payload;
+        const source = row.source_content ? await resolveScriptPayload(env, row.source_content) : payload;
         const rebuilt = obfuscateLuaV11(source);
         payload = rebuilt.code;
         payloadSha256 = await sha256Hex(payload);
         payloadBytes = new TextEncoder().encode(payload).byteLength;
-        await env.DB.prepare("UPDATE script_files SET content=?1,size_bytes=?2,sha256=?3,source_size_bytes=COALESCE(source_size_bytes,?4),source_content=COALESCE(source_content,?5),source_sha256=COALESCE(source_sha256,?6) WHERE id=?7").bind(payload,payloadBytes,payloadSha256,Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength),source,row.source_sha256 ?? await sha256Hex(source),row.file_id).run();
+        const storedPair = await storeScriptPayloadPair(env, { scope: 'scripts', fileId: row.file_id, source, payload });
+        await env.DB.prepare("UPDATE script_files SET content=?1,size_bytes=?2,sha256=?3,source_size_bytes=COALESCE(source_size_bytes,?4),source_content=?5,source_sha256=COALESCE(source_sha256,?6) WHERE id=?7").bind(storedPair.content,payloadBytes,payloadSha256,Number(row.source_size_bytes ?? new TextEncoder().encode(source).byteLength),storedPair.sourceContent,row.source_sha256 ?? await sha256Hex(source),row.file_id).run();
+        await deleteStoredScriptPayloads(env, row.content, row.source_content);
         obfuscationVerified = isFrezenObfuscated(payload);
       } catch (error) {
         console.error("legacy secure-delivery obfuscation rebuild failed", { requestId, scriptId: claims.script_id, message: String(error?.message ?? error) });

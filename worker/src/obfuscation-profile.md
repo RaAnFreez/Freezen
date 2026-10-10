@@ -12,6 +12,8 @@
 - Per-build random dispatcher opcodes, shuffled payload records, and harmless no-op entries.
 - Runtime length, additive checksum, rolling checksum, and line-count validation.
 - Native Lua/Luau loading is used after validation to preserve functions, varargs, nil values, method calls, Unicode, closures, and runtime-specific globals.
+- Generated VM output limit: 5 MiB. Source upload limit remains 3 MiB until the compiler is refactored for streaming, because the current Worker compiler materializes the source and transformed output in memory.
+- Larger source/output pairs are split into 384 KiB chunks in the additive `script_payload_chunks` D1 table, keeping each row below D1's 2 MB limit without an R2 bucket.
 - Runtime loader supports `loadstring`, modern `load`, and Lua 5.1 reader-style `load` fallback.
 - The generated output begins with exactly one watermark: `-- This file obfuscation with Frezen Obfuscation`. The watermark occupies line 1 and the generated payload is compacted onto line 2 by default.
 
