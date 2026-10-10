@@ -81,7 +81,7 @@ describe('Frezen Layered VM v5', () => {
   });
 
 
-  it('detects tampering of an encoded chunk before payload execution', () => {
+  it('detects encoded-record and dispatcher-manifest tampering before payload execution', () => {
     const runtime = process.env.FREZEN_LUA_RUNTIME;
     if (!runtime) return;
 
@@ -89,13 +89,23 @@ describe('Frezen Layered VM v5', () => {
     const result = compileFrezenVmV5(source);
     const recordPattern = /(\[\d+\]=\{")([^"]+)/;
     expect(result.code).toMatch(recordPattern);
-    const tampered = result.code.replace(recordPattern, (_whole, prefix, payload) => {
+    const tamperedRecord = result.code.replace(recordPattern, (_whole, prefix, payload) => {
       const first = payload[0] === '0' ? '1' : '0';
       return prefix + first + payload.slice(1);
     });
-    expect(tampered).not.toBe(result.code);
-    expect(() => runLua(runtime, tampered)).toThrow(/Frezen could not validate this script/);
-    expect(tampered).not.toContain('MUST_NOT_EXECUTE_AFTER_TAMPER');
+    expect(tamperedRecord).not.toBe(result.code);
+    expect(() => runLua(runtime, tamperedRecord)).toThrow(/Frezen could not validate this script/);
+
+    const dispatcherPattern = /(local __f5i\d+=\{\{)(\d+)(,)/;
+    const dispatcherMatch = result.code.match(dispatcherPattern);
+    expect(dispatcherMatch).not.toBeNull();
+    const tamperedDispatcher = result.code.replace(
+      dispatcherPattern,
+      (_whole, prefix, opcode, separator) => prefix + String(Number(opcode) + 1) + separator,
+    );
+    expect(tamperedDispatcher).not.toBe(result.code);
+    expect(() => runLua(runtime, tamperedDispatcher)).toThrow(/Frezen could not validate this script/);
+    expect(result.code).not.toContain('MUST_NOT_EXECUTE_AFTER_TAMPER');
   });
 
   it('executes loops, functions, varargs, nil arguments, methods, and Unicode in Luau', () => {
