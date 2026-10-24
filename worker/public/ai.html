@@ -24,6 +24,7 @@
     .message{width:min(800px,100%);margin:0 auto 18px;display:grid;grid-template-columns:32px minmax(0,1fr);gap:12px;align-items:start}.avatar{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;border:1px solid #342a40;background:#16111e;color:#cbb0ef;font-size:12px;font-weight:800}.message.user .avatar{background:#14252a;border-color:#28515a;color:#8fe2ef}.bubble{min-width:0;padding:13px 15px;border:1px solid #2a2432;border-radius:4px 14px 14px 14px;background:#100d16;color:#e7dfef;font-size:13px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}.message.user .bubble{background:#15121c;border-color:#342b41}.message .who{font-size:10px;font-weight:800;letter-spacing:.06em;color:#968aa7;margin-bottom:6px}.message.user .who{color:#8bd4df}.bubble .answer{white-space:pre-wrap}
     .composer-wrap{padding:0 24px 20px;background:linear-gradient(0deg,#08070d 80%,transparent)}.composer{width:min(800px,100%);margin:auto;border:1px solid #3a3046;border-radius:17px;background:#100d16;box-shadow:0 10px 38px #0005;overflow:hidden}.composer:focus-within{border-color:#8154a9;box-shadow:0 0 0 3px #8956b11a}.composer textarea{display:block;resize:none;width:100%;min-height:58px;max-height:180px;border:0;outline:0;background:transparent;color:#f7f4ff;padding:16px 17px 8px;font-size:13px;line-height:1.6}.composer textarea::placeholder{color:#70667c}.controls{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px 10px 15px}.hint{font-size:10px;color:#71687d}.send{border:0;border-radius:10px;padding:9px 14px;background:linear-gradient(135deg,#8546cb,#6d42bd);color:white;font-size:12px;font-weight:800;box-shadow:0 5px 16px #7c3aed33}.send:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}.footnote{width:min(800px,100%);margin:9px auto 0;text-align:center;color:#5f586b;font-size:10px}
     .error-text{color:#f0b8b8}.hidden{display:none!important}
+    .history-list{display:grid;gap:5px;max-height:36vh;overflow:auto}.history-item{width:100%;text-align:left;border:1px solid transparent;background:transparent;color:#a99fb6;border-radius:9px;padding:9px 10px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.history-item:hover,.history-item.active{background:#1b1326;border-color:#4b3264;color:#e8d6ff}.history-empty{padding:7px 9px;color:#6f667c;font-size:10px;line-height:1.5}.composer-tools{display:flex;align-items:center;gap:8px}.attach-btn{border:1px solid #332840;background:#171220;color:#c2afd9;border-radius:9px;padding:8px 10px;font-size:11px;font-weight:700}.attach-btn:hover{border-color:#7951a3;color:#fff}.pending-attachments{display:flex;flex-wrap:wrap;gap:7px;padding:0 12px 8px}.attachment-chip{display:flex;align-items:center;gap:7px;max-width:100%;border:1px solid #362a43;background:#171220;color:#c6b5d6;border-radius:9px;padding:6px 8px;font-size:10px}.attachment-chip img{width:32px;height:32px;object-fit:cover;border-radius:5px}.attachment-chip span{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attachment-chip button{border:0;background:transparent;color:#d1bfdc;padding:2px 4px}.message-attachments{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.message-attachment-image{width:108px;height:96px;object-fit:cover;border-radius:10px;border:1px solid #443650;background:#09070d}.message-attachment-file{display:inline-flex;align-items:center;gap:6px;border:1px solid #392c47;border-radius:8px;padding:6px 8px;color:#c6b5d6;font-size:10px;max-width:100%;overflow-wrap:anywhere}.controls{flex-wrap:wrap}.attach-wrap{display:flex;align-items:center;gap:8px;min-width:0}.attachment-help{font-size:9px;color:#6e657c;margin:0 15px 8px}
     @media(max-width:720px){.app{grid-template-columns:1fr;border:0}.side{display:none}.top{padding:15px 16px}.thread{padding:22px 15px}.notice{width:calc(100% - 30px)}.composer-wrap{padding:0 12px 13px}.model-state{font-size:10px;padding:8px}.sub{max-width:240px}.examples{grid-template-columns:1fr}.welcome{margin-top:4vh}}
     @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;scroll-behavior:auto!important}}
   </style>
@@ -33,12 +34,13 @@
     <aside class="side">
       <a class="brand" href="/"><span class="mark">F</span><span>FREZEN AI</span></a>
       <button class="new-chat" id="newChat" type="button">＋ &nbsp; Percakapan baru</button>
+      <div class="side-label">Riwayat chat</div><div class="history-list" id="chatHistory"><div class="history-empty">Memuat riwayat…</div></div>
       <div class="side-label">Workspace</div>
       <div class="side-note">Asisten coding pribadi untuk proyek Frezen, Lua, Cloudflare Workers, JavaScript, dan debugging.</div>
       <div class="side-bottom">
         <a class="side-link" href="/">← Gerbang Frezen</a>
         <a class="side-link" href="/dashboard/">⌘ &nbsp; Frezen Script</a>
-        <div class="privacy">Mode privat Owner. Percakapan hanya ada di tab ini dan tidak disimpan ke D1.</div>
+        <div class="privacy">Mode privat Owner. Riwayat disimpan di browser ini, bukan di D1. Menghapus data situs dapat menghapus riwayat chat.</div>
       </div>
     </aside>
     <main class="main">
@@ -55,7 +57,7 @@
         <div class="welcome" id="welcome">
           <div class="welcome-mark" aria-hidden="true">✦</div>
           <h2>Apa yang ingin kamu bangun?</h2>
-          <p>Tanyakan sesuatu, minta bantuan debugging, atau susun langkah untuk fitur Frezen berikutnya. Hubungkan endpoint model terlebih dahulu agar chat bisa digunakan.</p>
+          <p>Kirim pertanyaan coding, unggah foto untuk dianalisis, atau lampirkan file teks dan source code. Percakapan tersimpan di browser ini.</p>
           <div class="examples">
             <button class="example" type="button" data-prompt="Bantu saya merancang endpoint Cloudflare Worker yang aman untuk fitur Frezen.">Rancang endpoint Worker yang aman</button>
             <button class="example" type="button" data-prompt="Jelaskan cara men-debug error JavaScript ini secara bertahap.">Bantu debugging kode</button>
@@ -66,177 +68,240 @@
       </section>
       <div class="composer-wrap">
         <form class="composer" id="composer">
-          <textarea id="prompt" rows="1" maxlength="5000" placeholder="Kirim pesan ke Frezen AI…" aria-label="Pesan ke Frezen AI"></textarea>
-          <div class="controls"><span class="hint">Enter untuk kirim · Shift + Enter untuk baris baru</span><button class="send" id="send" type="submit" disabled>Kirim ↑</button></div>
+          <input type="file" id="fileInput" class="hidden" multiple accept="image/*,.txt,.md,.json,.js,.jsx,.ts,.tsx,.lua,.html,.css,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.php,.sql,.toml,.yaml,.yml,.xml,.csv,.log,.sh,.bat,.ps1,.ini,.cfg">
+          <textarea id="prompt" rows="1" maxlength="20000" placeholder="Kirim pesan ke Frezen AI…" aria-label="Pesan ke Frezen AI"></textarea>
+          <div class="pending-attachments" id="pendingAttachments" aria-live="polite"></div>
+          <div class="attachment-help">Foto, file teks, dan source code. Gambar dikompres sebelum dikirim.</div>
+          <div class="controls"><div class="attach-wrap"><button class="attach-btn" id="attachFiles" type="button">＋ Lampirkan</button><span class="hint">Enter untuk kirim · Shift + Enter untuk baris baru</span></div><button class="send" id="send" type="submit" disabled>Kirim ↑</button></div>
         </form>
-        <div class="footnote">Periksa jawaban model sebelum menerapkan kode atau perubahan produksi.</div>
+        <div class="footnote">Batas teknis dan kuota model tetap berlaku. Periksa jawaban sebelum menerapkan kode.</div>
       </div>
     </main>
   </div>
   <script>
     (function () {
       "use strict";
-      const thread = document.querySelector("#thread");
-      const welcome = document.querySelector("#welcome");
-      const promptInput = document.querySelector("#prompt");
-      const sendButton = document.querySelector("#send");
-      const composer = document.querySelector("#composer");
-      const statusDot = document.querySelector("#statusDot");
-      const statusLabel = document.querySelector("#statusLabel");
-      const notice = document.querySelector("#notice");
-      const state = { messages: [], configured: false, busy: false };
+      const DB_NAME = "frezen-ai-history-v1", STORE = "history", KEY = "chats";
+      const FENCE = String.fromCharCode(96).repeat(3);
+      const MAX_ATTACHMENTS = 4, MAX_IMAGES = 3, MAX_IMAGE_BYTES = 500000, MAX_FILE_CHARS = 55000;
+      const EXTENSIONS = new Set(["txt","md","json","js","jsx","ts","tsx","lua","html","css","py","java","c","cpp","h","hpp","go","rs","php","sql","toml","yaml","yml","xml","csv","log","sh","bat","ps1","ini","cfg"]);
+      const thread = document.querySelector("#thread"), welcome = document.querySelector("#welcome"), input = document.querySelector("#prompt");
+      const send = document.querySelector("#send"), form = document.querySelector("#composer"), notice = document.querySelector("#notice");
+      const statusDot = document.querySelector("#statusDot"), statusLabel = document.querySelector("#statusLabel");
+      const fileInput = document.querySelector("#fileInput"), pendingRoot = document.querySelector("#pendingAttachments"), historyRoot = document.querySelector("#chatHistory");
+      const state = { chats: [], activeId: null, configured: false, busy: false, pending: [] };
+      let dbPromise, queue = Promise.resolve();
 
-      function showNotice(message, visible) {
-        notice.textContent = message;
-        notice.classList.toggle("show", Boolean(visible));
-      }
+      function activeChat() { return state.chats.find(function (c) { return c.id === state.activeId; }) || null; }
+      function alertUser(text, shown) { notice.textContent = text; notice.classList.toggle("show", !!shown); }
+      function scrollBottom() { thread.scrollTop = thread.scrollHeight; }
 
-      function scrollToBottom() {
-        thread.scrollTop = thread.scrollHeight;
-      }
-
-      function addMessage(role, content, pending) {
-        const item = document.createElement("article");
-        item.className = "message " + role;
-        const avatar = document.createElement("div");
-        avatar.className = "avatar";
-        avatar.setAttribute("aria-hidden", "true");
-        avatar.textContent = role === "user" ? "K" : "F";
-        const bubble = document.createElement("div");
-        bubble.className = "bubble";
-        const label = document.createElement("div");
-        label.className = "who";
-        label.textContent = role === "user" ? "KAMU" : "FREZEN AI";
-        const text = document.createElement("div");
-        text.className = "answer";
-        text.textContent = content;
-        if (pending) text.classList.add("pending");
-        bubble.append(label, text);
-        item.append(avatar, bubble);
-        thread.append(item);
-        scrollToBottom();
-        return text;
-      }
-
-      function updateSendState() {
-        sendButton.disabled = !state.configured || state.busy || !promptInput.value.trim();
-      }
-
-      function resetChat() {
-        state.messages = [];
-        thread.querySelectorAll(".message").forEach(function (node) { node.remove(); });
-        welcome.classList.remove("hidden");
-        showNotice("", false);
-        promptInput.value = "";
-        promptInput.style.height = "auto";
-        updateSendState();
-        promptInput.focus();
-      }
-
-      async function loadStatus() {
-        try {
-          const response = await fetch("/api/v1/ai/status", { method: "GET", credentials: "same-origin", headers: { accept: "application/json" } });
-          const data = await response.json().catch(function () { return {}; });
-          if (response.status === 401) {
-            window.location.replace("/login?next=%2Fai");
-            return;
-          }
-          if (response.status === 403) {
-            statusDot.classList.add("offline");
-            statusLabel.textContent = "Owner-only";
-            showNotice("Frezen AI hanya tersedia untuk akun Owner.", true);
-            return;
-          }
-          state.configured = response.ok && data.configured === true;
-          statusDot.classList.toggle("ready", state.configured);
-          statusDot.classList.toggle("offline", !state.configured);
-          statusLabel.textContent = state.configured ? ("Siap · " + String(data.model || "model lokal")) : "Model belum terhubung";
-          if (!state.configured) {
-            showNotice("AI belum aktif. Owner perlu mengonfigurasi FREZEN_AI_ENDPOINT dan FREZEN_AI_API_KEY di Cloudflare, lalu mengaktifkan FREZEN_AI_ENABLED. Kunci tidak dimasukkan di browser.", true);
-          } else {
-            showNotice("", false);
-          }
-          updateSendState();
-        } catch (error) {
-          state.configured = false;
-          statusDot.classList.add("offline");
-          statusLabel.textContent = "Tidak terhubung";
-          showNotice("Status model tidak dapat diperiksa. Periksa koneksi dan konfigurasi Worker.", true);
-          updateSendState();
-        }
-      }
-
-      async function sendMessage(event) {
-        if (event) event.preventDefault();
-        const content = promptInput.value.trim();
-        if (!content || state.busy || !state.configured) return;
-
-        state.messages.push({ role: "user", content: content });
-        welcome.classList.add("hidden");
-        addMessage("user", content, false);
-        promptInput.value = "";
-        promptInput.style.height = "auto";
-        state.busy = true;
-        updateSendState();
-        const answerNode = addMessage("assistant", "Frezen AI sedang berpikir…", true);
-
-        try {
-          const response = await fetch("/api/v1/ai/chat", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: { "content-type": "application/json", accept: "application/json" },
-            body: JSON.stringify({ messages: state.messages.slice(-12) })
-          });
-          const data = await response.json().catch(function () { return {}; });
-          if (!response.ok) {
-            if (response.status === 401) {
-              window.location.replace("/login?next=%2Fai");
-              return;
-            }
-            const friendly = {
-              AI_NOT_CONFIGURED: "Model belum dikonfigurasi di Worker.",
-              AI_UPSTREAM_TIMEOUT: "Model terlalu lama merespons. Coba lagi.",
-              AI_UPSTREAM_UNAVAILABLE: "Server model tidak dapat dijangkau. Periksa koneksi server AI.",
-              AI_UPSTREAM_ERROR: "Server model mengembalikan error. Periksa log layanan AI."
-            };
-            throw new Error(friendly[data.error] || data.message || "Permintaan gagal (" + response.status + ").");
-          }
-          answerNode.textContent = String(data.answer || "");
-          answerNode.classList.remove("pending");
-          state.messages.push({ role: "assistant", content: String(data.answer || "") });
-        } catch (error) {
-          answerNode.textContent = error.message || "Permintaan gagal. Coba lagi.";
-          answerNode.classList.add("error-text");
-        } finally {
-          state.busy = false;
-          updateSendState();
-          scrollToBottom();
-          promptInput.focus();
-        }
-      }
-
-      composer.addEventListener("submit", sendMessage);
-      promptInput.addEventListener("input", function () {
-        promptInput.style.height = "auto";
-        promptInput.style.height = Math.min(promptInput.scrollHeight, 180) + "px";
-        updateSendState();
-      });
-      promptInput.addEventListener("keydown", function (event) {
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          sendMessage(event);
-        }
-      });
-      document.querySelector("#newChat").addEventListener("click", resetChat);
-      document.querySelectorAll("[data-prompt]").forEach(function (button) {
-        button.addEventListener("click", function () {
-          promptInput.value = button.dataset.prompt || "";
-          promptInput.focus();
-          promptInput.dispatchEvent(new Event("input", { bubbles: true }));
+      function openDb() {
+        if (!("indexedDB" in window)) return Promise.reject(new Error("IndexedDB unavailable"));
+        if (!dbPromise) dbPromise = new Promise(function (resolve, reject) {
+          const r = indexedDB.open(DB_NAME, 1);
+          r.onupgradeneeded = function () { if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE); };
+          r.onsuccess = function () { resolve(r.result); };
+          r.onerror = function () { reject(r.error); };
         });
-      });
+        return dbPromise;
+      }
+      function readDb() {
+        return openDb().then(function (db) { return new Promise(function (resolve, reject) {
+          const r = db.transaction(STORE, "readonly").objectStore(STORE).get(KEY);
+          r.onsuccess = function () { resolve(r.result || null); }; r.onerror = function () { reject(r.error); };
+        }); });
+      }
+      function writeDb(data) {
+        return openDb().then(function (db) { return new Promise(function (resolve, reject) {
+          const tx = db.transaction(STORE, "readwrite"); tx.objectStore(STORE).put(data, KEY);
+          tx.oncomplete = resolve; tx.onerror = function () { reject(tx.error); }; tx.onabort = function () { reject(tx.error); };
+        }); });
+      }
+      function saveHistory() {
+        const snapshot = { chats: state.chats.slice(-15), activeId: state.activeId };
+        queue = queue.catch(function () {}).then(async function () {
+          try { await writeDb(snapshot); }
+          catch (_) {
+            try {
+              const fallback = JSON.parse(JSON.stringify(snapshot));
+              fallback.chats.forEach(function (c) { c.messages.forEach(function (m) { (m.attachments || []).forEach(function (a) { if (a.kind === "image") delete a.dataUrl; }); }); });
+              localStorage.setItem(DB_NAME, JSON.stringify(fallback));
+            } catch (_) { alertUser("Penyimpanan browser penuh. Beberapa lampiran mungkin tidak tersimpan.", true); }
+          }
+        });
+      }
+      function readFallback() { try { return JSON.parse(localStorage.getItem(DB_NAME) || "null"); } catch (_) { return null; } }
+      function newId() { return window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2); }
+      function newConversation() {
+        if (state.busy) return;
+        const old = activeChat();
+        if (old && old.messages.length === 0) { state.pending = []; renderPending(); input.value = ""; updateSend(); input.focus(); return; }
+        const chat = { id: newId(), title: "Percakapan baru", updatedAt: Date.now(), messages: [] };
+        state.chats.push(chat); state.chats = state.chats.slice(-15); state.activeId = chat.id; state.pending = [];
+        input.value = ""; renderHistory(); renderChat(); renderPending(); saveHistory(); updateSend(); input.focus();
+      }
+      function renderHistory() {
+        historyRoot.replaceChildren();
+        const chats = state.chats.slice().sort(function (a,b) { return b.updatedAt-a.updatedAt; });
+        if (!chats.length) { const e=document.createElement("div");e.className="history-empty";e.textContent="Belum ada percakapan.";historyRoot.append(e);return; }
+        chats.forEach(function (chat) {
+          const b=document.createElement("button");b.type="button";b.className="history-item"+(chat.id===state.activeId?" active":"");b.title=chat.title;
+          b.textContent=(chat.title||"Percakapan baru")+" · "+new Date(chat.updatedAt).toLocaleDateString("id-ID",{day:"2-digit",month:"short"});
+          b.addEventListener("click",function(){if(state.busy||chat.id===state.activeId)return;state.activeId=chat.id;state.pending=[];renderHistory();renderChat();renderPending();saveHistory();});
+          historyRoot.append(b);
+        });
+      }
+      function addMessage(role, content, attachments, pending) {
+        const article=document.createElement("article");article.className="message "+role;
+        const avatar=document.createElement("div");avatar.className="avatar";avatar.setAttribute("aria-hidden","true");avatar.textContent=role==="user"?"K":"F";
+        const bubble=document.createElement("div");bubble.className="bubble";
+        const label=document.createElement("div");label.className="who";label.textContent=role==="user"?"KAMU":"FREZEN AI";
+        const text=document.createElement("div");text.className="answer";text.textContent=content;if(pending)text.classList.add("pending");
+        bubble.append(label,text);
+        if(attachments&&attachments.length){const row=document.createElement("div");row.className="message-attachments";attachments.forEach(function(a){
+          if(a.kind==="image"&&a.dataUrl){const im=document.createElement("img");im.className="message-attachment-image";im.src=a.dataUrl;im.alt=a.name||"Gambar terlampir";im.loading="lazy";row.append(im);}
+          else{const chip=document.createElement("span");chip.className="message-attachment-file";chip.textContent="▤ "+a.name;row.append(chip);}
+        });bubble.append(row);}
+        article.append(avatar,bubble);thread.append(article);scrollBottom();return text;
+      }
+      function renderChat() {
+        thread.querySelectorAll(".message").forEach(function(n){n.remove();});
+        const chat=activeChat(), msgs=chat?chat.messages:[];
+        welcome.classList.toggle("hidden",msgs.length>0);
+        msgs.forEach(function(m){addMessage(m.role,m.content,m.attachments||[],false);});
+        scrollBottom();
+      }
+      function renderPending() {
+        pendingRoot.replaceChildren();
+        state.pending.forEach(function(a,index){
+          const chip=document.createElement("div");chip.className="attachment-chip";
+          if(a.kind==="image"&&a.dataUrl){const im=document.createElement("img");im.src=a.dataUrl;im.alt="";chip.append(im);}
+          const name=document.createElement("span");name.textContent=a.name;chip.append(name);
+          const remove=document.createElement("button");remove.type="button";remove.textContent="×";remove.setAttribute("aria-label","Hapus "+a.name);
+          remove.addEventListener("click",function(){state.pending.splice(index,1);renderPending();updateSend();});chip.append(remove);pendingRoot.append(chip);
+        });
+      }
+      function updateSend() { send.disabled=!state.configured||state.busy||(!input.value.trim()&&!state.pending.length); }
+      function extension(name) { const bits=String(name||"").toLowerCase().split(".");return bits.length>1?bits.pop():""; }
 
-      loadStatus();
+      async function compressImage(file) {
+        const bitmap=await createImageBitmap(file); let w=bitmap.width,h=bitmap.height;
+        const scale=Math.min(1,1280/Math.max(w,h));w=Math.max(1,Math.round(w*scale));h=Math.max(1,Math.round(h*scale));
+        const canvas=document.createElement("canvas"),ctx=canvas.getContext("2d",{alpha:false});
+        if(!ctx){bitmap.close();throw new Error("Browser tidak dapat memproses gambar.");}
+        try {
+          for(let i=0;i<5;i++){
+            canvas.width=w;canvas.height=h;ctx.drawImage(bitmap,0,0,w,h);
+            const blob=await new Promise(function(resolve){canvas.toBlob(resolve,"image/jpeg",i===0?0.78:0.62);});
+            if(!blob)throw new Error("Gagal mengompres gambar.");
+            if(blob.size<=MAX_IMAGE_BYTES){
+              const url=await new Promise(function(resolve,reject){const reader=new FileReader();reader.onload=function(){resolve(String(reader.result));};reader.onerror=function(){reject(new Error("Gagal membaca gambar."));};reader.readAsDataURL(blob);});
+              return {name:file.name,type:"image/jpeg",kind:"image",dataUrl:url};
+            }
+            w=Math.max(1,Math.round(w*0.75));h=Math.max(1,Math.round(h*0.75));
+          }
+          throw new Error("Foto tetap terlalu besar setelah dikompres.");
+        } finally { bitmap.close(); }
+      }
+      async function selectFiles(files) {
+        let totalChars=state.pending.filter(function(a){return a.kind==="file";}).reduce(function(n,a){return n+(a.text||"").length;},0);
+        for(const file of Array.from(files||[])){
+          if(state.pending.length>=MAX_ATTACHMENTS){alertUser("Maksimal 4 lampiran untuk satu pesan.",true);break;}
+          if(file.type&&file.type.startsWith("image/")){
+            if(state.pending.filter(function(a){return a.kind==="image";}).length>=MAX_IMAGES){alertUser("Maksimal 3 foto untuk satu pesan.",true);continue;}
+            if(file.size>8*1024*1024){alertUser("Foto asli maksimal 8 MB sebelum dikompres.",true);continue;}
+            try{state.pending.push(await compressImage(file));alertUser("",false);}catch(e){alertUser(e.message||"Foto tidak dapat diproses.",true);}
+            continue;
+          }
+          const ext=extension(file.name);
+          if(!EXTENSIONS.has(ext)){alertUser("Format file belum didukung. Gunakan file teks/source code atau gambar JPG, PNG, WebP.",true);continue;}
+          if(file.size>55000){alertUser("File teks/source code maksimal 55 KB per pesan.",true);continue;}
+          try{
+            const text=await file.text();
+            if(totalChars+text.length>MAX_FILE_CHARS){alertUser("Total isi lampiran teks maksimal 55.000 karakter per pesan.",true);continue;}
+            totalChars+=text.length;state.pending.push({kind:"file",name:file.name,type:file.type||"text/plain",text:text});alertUser("",false);
+          }catch(_){alertUser("File "+file.name+" tidak dapat dibaca.",true);}
+        }
+        fileInput.value="";renderPending();updateSend();
+      }
+      function fileContent(prompt,attachments) {
+        let content=prompt;
+        attachments.filter(function(a){return a.kind==="file";}).forEach(function(a){
+          content+="\n\n[File terlampir: "+a.name+"]\n"+FENCE+extension(a.name)+"\n"+a.text+"\n"+FENCE;
+        });
+        return content.trim()||"Tolong analisis gambar terlampir.";
+      }
+      function requestMessages(messages) {
+        const result=messages.slice(-18).map(function(m){return{role:m.role,content:m.content,attachments:(m.attachments||[]).map(function(a){return Object.assign({},a);})};});
+        let images=0,total=0;
+        for(let i=result.length-1;i>=0;i--){
+          const kept=[];(result[i].attachments||[]).forEach(function(a){
+            if(a.kind!=="image")kept.push({kind:a.kind,name:a.name,type:a.type});
+            else if(a.dataUrl&&images<3&&total+a.dataUrl.length<=2100000){images++;total+=a.dataUrl.length;kept.push(a);}
+          });
+          result[i].attachments=kept;if(!kept.length)delete result[i].attachments;
+        }
+        return result;
+      }
+      async function loadStatus() {
+        try{
+          const r=await fetch("/api/v1/ai/status",{credentials:"same-origin",headers:{accept:"application/json"}});
+          const d=await r.json().catch(function(){return{};});
+          if(r.status===401){window.location.replace("/login?next=%2Fai");return;}
+          if(r.status===403){statusDot.classList.add("offline");statusLabel.textContent="Owner-only";alertUser("Frezen AI hanya tersedia untuk akun Owner.",true);return;}
+          state.configured=r.ok&&d.configured===true;statusDot.classList.toggle("ready",state.configured);statusDot.classList.toggle("offline",!state.configured);
+          statusLabel.textContent=state.configured?("Siap · "+String(d.model||"Cloud model")):"Model belum terhubung";
+          if(!state.configured)alertUser("Workers AI belum aktif di Worker ini. Pastikan deployment versi terbaru sudah terpasang.",true);
+          else if(notice.textContent.indexOf("Workers AI belum aktif")===0)alertUser("",false);
+        }catch(_){state.configured=false;statusDot.classList.add("offline");statusLabel.textContent="Tidak terhubung";alertUser("Status model tidak dapat diperiksa.",true);}
+        updateSend();
+      }
+      async function sendMessage(event) {
+        if(event)event.preventDefault();
+        const typed=input.value.trim();if((!typed&&!state.pending.length)||state.busy||!state.configured)return;
+        let chat=activeChat();if(!chat){newConversation();chat=activeChat();}if(!chat)return;
+        const pending=state.pending.map(function(a){return Object.assign({},a);});
+        const message={role:"user",content:fileContent(typed,pending),attachments:pending.map(function(a){return a.kind==="image"?{kind:"image",name:a.name,type:a.type,dataUrl:a.dataUrl}:{kind:"file",name:a.name,type:a.type};})};
+        if(!message.attachments.length)delete message.attachments;
+        state.pending=[];renderPending();chat.messages.push(message);
+        if(chat.title==="Percakapan baru")chat.title=(typed||pending.map(function(a){return a.name;}).join(", ")).split("\n")[0].slice(0,48)||"Percakapan baru";
+        chat.updatedAt=Date.now();input.value="";input.style.height="auto";state.busy=true;welcome.classList.add("hidden");
+        addMessage("user",message.content,message.attachments||[],false);saveHistory();renderHistory();updateSend();
+        const answer=addMessage("assistant","Frezen AI sedang berpikir…",[],true);
+        try{
+          const r=await fetch("/api/v1/ai/chat",{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json",accept:"application/json"},body:JSON.stringify({messages:requestMessages(chat.messages)})});
+          const d=await r.json().catch(function(){return{};});
+          if(!r.ok){
+            if(r.status===401){window.location.replace("/login?next=%2Fai");return;}
+            const messages={AI_NOT_CONFIGURED:"Model belum dikonfigurasi di Worker.",AI_UPSTREAM_TIMEOUT:"Model terlalu lama merespons. Coba lagi.",AI_UPSTREAM_UNAVAILABLE:"Server model tidak dapat dijangkau.",AI_UPSTREAM_ERROR:"Layanan AI mengembalikan error.",INVALID_IMAGE_ATTACHMENT:"Gambar tidak valid atau terlalu besar.",TOO_MANY_IMAGES:"Maksimal 3 gambar per permintaan.",REQUEST_TOO_LARGE:"Riwayat dan lampiran terlalu besar. Mulai percakapan baru atau kurangi lampiran."};
+            throw new Error(messages[d.error]||d.message||"Permintaan gagal ("+r.status+").");
+          }
+          answer.textContent=String(d.answer||"");answer.classList.remove("pending");
+          chat.messages.push({role:"assistant",content:String(d.answer||"")});chat.updatedAt=Date.now();saveHistory();renderHistory();
+        }catch(e){answer.textContent=e.message||"Permintaan gagal.";answer.classList.add("error-text");}
+        finally{state.busy=false;updateSend();scrollBottom();input.focus();}
+      }
+      document.querySelector("#attachFiles").addEventListener("click",function(){fileInput.click();});
+      fileInput.addEventListener("change",function(){selectFiles(fileInput.files);});
+      form.addEventListener("submit",sendMessage);
+      input.addEventListener("input",function(){input.style.height="auto";input.style.height=Math.min(input.scrollHeight,180)+"px";updateSend();});
+      input.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage(e);}});
+      document.querySelector("#newChat").addEventListener("click",newConversation);
+      document.querySelectorAll("[data-prompt]").forEach(function(b){b.addEventListener("click",function(){input.value=b.dataset.prompt||"";input.focus();input.dispatchEvent(new Event("input",{bubbles:true}));});});
+
+      async function initialize(){
+        let saved=null;try{saved=await readDb();}catch(_){saved=readFallback();}
+        if(saved&&Array.isArray(saved.chats)){
+          state.chats=saved.chats.filter(function(c){return c&&typeof c.id==="string"&&Array.isArray(c.messages);}).slice(-15);
+          state.activeId=typeof saved.activeId==="string"?saved.activeId:null;
+          if(!state.chats.some(function(c){return c.id===state.activeId;}))state.activeId=null;
+        }
+        if(!state.activeId){const latest=state.chats.slice().sort(function(a,b){return b.updatedAt-a.updatedAt;})[0];if(latest)state.activeId=latest.id;}
+        if(!state.activeId){const c={id:newId(),title:"Percakapan baru",updatedAt:Date.now(),messages:[]};state.chats.push(c);state.activeId=c.id;}
+        renderHistory();renderChat();saveHistory();await loadStatus();updateSend();
+      }
+      initialize();
     }());
   </script>
 </body>
