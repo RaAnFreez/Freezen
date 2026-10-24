@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08070d">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Frezen — Gerbang</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:#08070d;color:#f7f4ff;font-synthesis:none;text-rendering:optimizeLegibility}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:radial-gradient(700px 450px at 50% -5%,rgba(124,58,237,.28),transparent 70%),radial-gradient(500px 400px at 95% 85%,rgba(34,211,238,.08),transparent 75%),#08070d}
+    a{color:inherit;text-decoration:none}
+    .wrap{width:min(1120px,100%);margin:auto;padding:26px 24px 32px;min-height:100vh;display:flex;flex-direction:column}
+    header{display:flex;align-items:center;justify-content:space-between;gap:20px}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:900;letter-spacing:.2em;font-size:13px}
+    .mark{width:40px;height:40px;display:grid;place-items:center;border:1px solid #7542b5;border-radius:13px;background:linear-gradient(145deg,#24153c,#100d19);box-shadow:0 8px 28px #8b5cf633;font-size:18px;letter-spacing:0}
+    .private{border:1px solid #292333;border-radius:999px;padding:8px 12px;color:#a9a2b8;font-size:11px;letter-spacing:.08em}
+    main{flex:1;display:flex;flex-direction:column;justify-content:center;padding:64px 0}
+    .intro{text-align:center;max-width:720px;margin:0 auto 42px}
+    .eyebrow{color:#bd8cff;text-transform:uppercase;letter-spacing:.2em;font-size:11px;font-weight:800}
+    h1{font-size:clamp(38px,7vw,66px);letter-spacing:-.055em;line-height:1.04;margin:16px 0 18px}
+    h1 span{background:linear-gradient(100deg,#fff 10%,#c9a8ff 55%,#89e7f6);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .intro p{font-size:16px;line-height:1.75;color:#9b95aa;margin:0 auto;max-width:600px}
+    .rooms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;width:min(890px,100%);margin:0 auto}
+    .room{position:relative;min-height:270px;border:1px solid #30263f;border-radius:22px;padding:27px;background:linear-gradient(145deg,rgba(24,19,34,.95),rgba(12,11,18,.95));box-shadow:0 18px 55px #0005;overflow:hidden;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+    .room:before{content:"";position:absolute;width:220px;height:220px;right:-95px;top:-100px;border-radius:50%;background:#8b5cf622;filter:blur(2px)}
+    .room:hover{transform:translateY(-4px);border-color:#8554bd;box-shadow:0 24px 65px #0008}
+    .room.script:before{background:#22d3ee16}
+    .room.ai{border-color:#69449a}
+    .room-icon{display:grid;place-items:center;width:54px;height:54px;border:1px solid #6b479a;border-radius:16px;background:#241635;color:#d9baff;font-size:24px;margin-bottom:23px}
+    .script .room-icon{border-color:#286777;background:#102329;color:#8be6f2}
+    h2{font-size:25px;letter-spacing:-.035em;margin:0 0 9px}
+    .room p{color:#a39caf;font-size:13px;line-height:1.7;margin:0;max-width:340px}
+    .enter{display:flex;justify-content:space-between;align-items:center;margin-top:27px;padding-top:17px;border-top:1px solid #30263f;color:#f0e8ff;font-weight:750;font-size:13px}
+    .enter span{font-size:20px;color:#bd8cff;transition:transform .2s}
+    .room:hover .enter span{transform:translateX(4px)}
+    .script .enter span{color:#8be6f2}
+    .foot{display:flex;justify-content:space-between;gap:16px;color:#676174;font-size:11px;border-top:1px solid #211b2b;padding-top:18px}
+    .foot a{color:#9c8cb8}
+    @media(max-width:680px){.wrap{padding:18px 16px 22px}.private{display:none}main{padding:55px 0 40px}.intro{margin-bottom:30px}.intro p{font-size:14px}.rooms{grid-template-columns:1fr}.room{min-height:235px;padding:22px}.foot{flex-direction:column}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;scroll-behavior:auto!important}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="/" aria-label="Frezen home"><span class="mark">F</span><span>FREZEN</span></a>
+      <span class="private">PRIVATE WORKSPACE · V3</span>
+    </header>
+    <main>
+      <section class="intro">
+        <div class="eyebrow">One gateway · two workspaces</div>
+        <h1>Masuk ke ruang <span>Frezen</span></h1>
+        <p>Pilih ruang kerja yang ingin kamu buka. Frezen AI untuk percakapan dan bantuan coding; Frezen Script untuk mengelola script, lisensi, versi, dan sistem Frezen.</p>
+      </section>
+      <section class="rooms" aria-label="Pilih ruang Frezen">
+        <a class="room ai" href="/ai">
+          <div class="room-icon" aria-hidden="true">✦</div>
+          <h2>Frezen AI</h2>
+          <p>Asisten AI pribadi untuk berdiskusi, menulis kode, mencari penyebab error, dan merencanakan perubahan proyek.</p>
+          <div class="enter">Masuk ke Frezen AI <span aria-hidden="true">→</span></div>
+        </a>
+        <a class="room script" href="/login?next=%2Fdashboard%2F">
+          <div class="room-icon" aria-hidden="true">⌘</div>
+          <h2>Frezen Script</h2>
+          <p>Ruang kontrol Frezen untuk dashboard, produk, script, versi, lisensi, HWID, keamanan, dan aktivitas.</p>
+          <div class="enter">Masuk ke Frezen Script <span aria-hidden="true">→</span></div>
+        </a>
+      </section>
+    </main>
+    <footer class="foot">
+      <span>© Frezen Control System V3</span>
+      <span>Model AI hanya aktif setelah dikonfigurasi oleh Owner.</span>
+    </footer>
+  </div>
+</body>
+</html>
