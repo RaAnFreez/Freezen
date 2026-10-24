@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08070d">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Frezen AI — Private Assistant</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:#08070d;color:#f7f4ff;font-synthesis:none;text-rendering:optimizeLegibility}
+    *{box-sizing:border-box}body{margin:0;min-width:320px;height:100vh;background:radial-gradient(650px 380px at 70% -15%,rgba(124,58,237,.22),transparent 70%),#08070d}button,a,textarea{font:inherit}a{color:inherit;text-decoration:none}button{cursor:pointer}
+    .app{height:100vh;min-height:560px;display:grid;grid-template-columns:260px minmax(0,1fr);max-width:1600px;margin:auto;border-left:1px solid #1f1a29;border-right:1px solid #1f1a29}
+    .side{display:flex;flex-direction:column;background:#0b0910;border-right:1px solid #24202c;padding:20px 14px;min-width:0}
+    .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 22px;font-weight:900;letter-spacing:.17em;font-size:12px}.mark{width:34px;height:34px;display:grid;place-items:center;border:1px solid #7542b5;border-radius:11px;background:linear-gradient(145deg,#24153c,#100d19);box-shadow:0 7px 22px #8b5cf633;font-size:17px;letter-spacing:0}
+    .new-chat{width:100%;border:1px solid #3e2b54;background:#171020;color:#eaddff;border-radius:11px;padding:11px 12px;text-align:left;font-weight:700;font-size:12px}.new-chat:hover{background:#21142f;border-color:#8056aa}
+    .side-label{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#6e657c;margin:25px 8px 8px}.side-note{font-size:12px;line-height:1.7;color:#898197;padding:11px 9px;border:1px solid #211a2a;border-radius:12px;background:#100d16}
+    .side-bottom{margin-top:auto;display:grid;gap:8px;padding-top:20px}.side-link{font-size:12px;color:#a69bb6;padding:10px;border-radius:9px}.side-link:hover{background:#17121f;color:#fff}.privacy{border-top:1px solid #211c29;margin-top:12px;padding:14px 9px 0;color:#70687b;font-size:10px;line-height:1.6}
+    .main{min-width:0;display:flex;flex-direction:column;height:100vh}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:19px 26px;border-bottom:1px solid #211c29;background:#0b0910cc;backdrop-filter:blur(14px)}
+    .crumb{color:#8e80a3;font-size:11px;margin-bottom:5px}.heading{display:flex;align-items:center;gap:10px}.heading h1{font-size:18px;letter-spacing:-.03em;margin:0}.heading .spark{color:#c49aff}.sub{color:#81788e;font-size:11px;margin-top:5px}
+    .model-state{display:flex;align-items:center;gap:8px;border:1px solid #2c2536;background:#100d16;border-radius:99px;padding:9px 12px;color:#b2a7c4;font-size:11px;white-space:nowrap}.dot{width:7px;height:7px;border-radius:50%;background:#9b8aa9}.dot.ready{background:#69d4a3;box-shadow:0 0 12px #69d4a355}.dot.offline{background:#e7b76c}
+    .notice{display:none;margin:16px auto 0;width:min(820px,calc(100% - 44px));padding:12px 15px;border:1px solid #6b4828;background:#261a10;border-radius:12px;color:#f1ca91;font-size:12px;line-height:1.6}.notice.show{display:block}
+    .thread{flex:1;min-height:0;overflow:auto;padding:32px 24px 24px;scroll-behavior:smooth}.welcome{width:min(800px,100%);margin:5vh auto 28px;text-align:center}.welcome-mark{display:grid;place-items:center;width:58px;height:58px;border:1px solid #7542b5;border-radius:19px;background:linear-gradient(145deg,#281742,#110c19);box-shadow:0 10px 40px #8b5cf626;margin:0 auto 22px;font-size:28px;color:#dfc4ff}.welcome h2{font-size:clamp(25px,4vw,35px);letter-spacing:-.045em;margin:0 0 12px}.welcome p{color:#93899f;line-height:1.7;font-size:13px;max-width:520px;margin:0 auto}
+    .examples{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:26px auto 0;max-width:640px;text-align:left}.example{border:1px solid #2c2437;background:#100d16;border-radius:12px;color:#b6a9c8;padding:13px;text-align:left;font-size:12px;line-height:1.5}.example:hover{border-color:#7648a2;background:#171020;color:#f4eaff}
+    .message{width:min(800px,100%);margin:0 auto 18px;display:grid;grid-template-columns:32px minmax(0,1fr);gap:12px;align-items:start}.avatar{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;border:1px solid #342a40;background:#16111e;color:#cbb0ef;font-size:12px;font-weight:800}.message.user .avatar{background:#14252a;border-color:#28515a;color:#8fe2ef}.bubble{min-width:0;padding:13px 15px;border:1px solid #2a2432;border-radius:4px 14px 14px 14px;background:#100d16;color:#e7dfef;font-size:13px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}.message.user .bubble{background:#15121c;border-color:#342b41}.message .who{font-size:10px;font-weight:800;letter-spacing:.06em;color:#968aa7;margin-bottom:6px}.message.user .who{color:#8bd4df}.bubble .answer{white-space:pre-wrap}
+    .composer-wrap{padding:0 24px 20px;background:linear-gradient(0deg,#08070d 80%,transparent)}.composer{width:min(800px,100%);margin:auto;border:1px solid #3a3046;border-radius:17px;background:#100d16;box-shadow:0 10px 38px #0005;overflow:hidden}.composer:focus-within{border-color:#8154a9;box-shadow:0 0 0 3px #8956b11a}.composer textarea{display:block;resize:none;width:100%;min-height:58px;max-height:180px;border:0;outline:0;background:transparent;color:#f7f4ff;padding:16px 17px 8px;font-size:13px;line-height:1.6}.composer textarea::placeholder{color:#70667c}.controls{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px 10px 15px}.hint{font-size:10px;color:#71687d}.send{border:0;border-radius:10px;padding:9px 14px;background:linear-gradient(135deg,#8546cb,#6d42bd);color:white;font-size:12px;font-weight:800;box-shadow:0 5px 16px #7c3aed33}.send:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}.footnote{width:min(800px,100%);margin:9px auto 0;text-align:center;color:#5f586b;font-size:10px}
+    .error-text{color:#f0b8b8}.hidden{display:none!important}
+    @media(max-width:720px){.app{grid-template-columns:1fr;border:0}.side{display:none}.top{padding:15px 16px}.thread{padding:22px 15px}.notice{width:calc(100% - 30px)}.composer-wrap{padding:0 12px 13px}.model-state{font-size:10px;padding:8px}.sub{max-width:240px}.examples{grid-template-columns:1fr}.welcome{margin-top:4vh}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;scroll-behavior:auto!important}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <a class="brand" href="/"><span class="mark">F</span><span>FREZEN AI</span></a>
+      <button class="new-chat" id="newChat" type="button">＋ &nbsp; Percakapan baru</button>
+      <div class="side-label">Workspace</div>
+      <div class="side-note">Asisten coding pribadi untuk proyek Frezen, Lua, Cloudflare Workers, JavaScript, dan debugging.</div>
+      <div class="side-bottom">
+        <a class="side-link" href="/">← Gerbang Frezen</a>
+        <a class="side-link" href="/dashboard/">⌘ &nbsp; Frezen Script</a>
+        <div class="privacy">Mode privat Owner. Percakapan hanya ada di tab ini dan tidak disimpan ke D1.</div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="top">
+        <div>
+          <div class="crumb"><a href="/">Frezen</a> / AI Workspace</div>
+          <div class="heading"><span class="spark" aria-hidden="true">✦</span><h1>Frezen AI</h1></div>
+          <div class="sub">Asisten AI pribadi · Owner-only</div>
+        </div>
+        <div class="model-state" aria-live="polite"><span id="statusDot" class="dot"></span><span id="statusLabel">Memeriksa model…</span></div>
+      </header>
+      <div id="notice" class="notice" role="status"></div>
+      <section class="thread" id="thread" aria-label="Percakapan" aria-live="polite">
+        <div class="welcome" id="welcome">
+          <div class="welcome-mark" aria-hidden="true">✦</div>
+          <h2>Apa yang ingin kamu bangun?</h2>
+          <p>Tanyakan sesuatu, minta bantuan debugging, atau susun langkah untuk fitur Frezen berikutnya. Hubungkan endpoint model terlebih dahulu agar chat bisa digunakan.</p>
+          <div class="examples">
+            <button class="example" type="button" data-prompt="Bantu saya merancang endpoint Cloudflare Worker yang aman untuk fitur Frezen.">Rancang endpoint Worker yang aman</button>
+            <button class="example" type="button" data-prompt="Jelaskan cara men-debug error JavaScript ini secara bertahap.">Bantu debugging kode</button>
+            <button class="example" type="button" data-prompt="Buatkan rencana pengujian untuk fitur baru pada Frezen tanpa mengubah D1 produksi.">Buat rencana pengujian Frezen</button>
+            <button class="example" type="button" data-prompt="Jelaskan kode Lua berikut dan tandai bagian yang tidak aman:\n\n">Analisis kode Lua</button>
+          </div>
+        </div>
+      </section>
+      <div class="composer-wrap">
+        <form class="composer" id="composer">
+          <textarea id="prompt" rows="1" maxlength="5000" placeholder="Kirim pesan ke Frezen AI…" aria-label="Pesan ke Frezen AI"></textarea>
+          <div class="controls"><span class="hint">Enter untuk kirim · Shift + Enter untuk baris baru</span><button class="send" id="send" type="submit" disabled>Kirim ↑</button></div>
+        </form>
+        <div class="footnote">Periksa jawaban model sebelum menerapkan kode atau perubahan produksi.</div>
+      </div>
+    </main>
+  </div>
+  <script>
+    (function () {
+      "use strict";
+      const thread = document.querySelector("#thread");
+      const welcome = document.querySelector("#welcome");
+      const promptInput = document.querySelector("#prompt");
+      const sendButton = document.querySelector("#send");
+      const composer = document.querySelector("#composer");
+      const statusDot = document.querySelector("#statusDot");
+      const statusLabel = document.querySelector("#statusLabel");
+      const notice = document.querySelector("#notice");
+      const state = { messages: [], configured: false, busy: false };
+
+      function showNotice(message, visible) {
+        notice.textContent = message;
+        notice.classList.toggle("show", Boolean(visible));
+      }
+
+      function scrollToBottom() {
+        thread.scrollTop = thread.scrollHeight;
+      }
+
+      function addMessage(role, content, pending) {
+        const item = document.createElement("article");
+        item.className = "message " + role;
+        const avatar = document.createElement("div");
+        avatar.className = "avatar";
+        avatar.setAttribute("aria-hidden", "true");
+        avatar.textContent = role === "user" ? "K" : "F";
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        const label = document.createElement("div");
+        label.className = "who";
+        label.textContent = role === "user" ? "KAMU" : "FREZEN AI";
+        const text = document.createElement("div");
+        text.className = "answer";
+        text.textContent = content;
+        if (pending) text.classList.add("pending");
+        bubble.append(label, text);
+        item.append(avatar, bubble);
+        thread.append(item);
+        scrollToBottom();
+        return text;
+      }
+
+      function updateSendState() {
+        sendButton.disabled = !state.configured || state.busy || !promptInput.value.trim();
+      }
+
+      function resetChat() {
+        state.messages = [];
+        thread.querySelectorAll(".message").forEach(function (node) { node.remove(); });
+        welcome.classList.remove("hidden");
+        showNotice("", false);
+        promptInput.value = "";
+        promptInput.style.height = "auto";
+        updateSendState();
+        promptInput.focus();
+      }
+
+      async function loadStatus() {
+        try {
+          const response = await fetch("/api/v1/ai/status", { method: "GET", credentials: "same-origin", headers: { accept: "application/json" } });
+          const data = await response.json().catch(function () { return {}; });
+          if (response.status === 401) {
+            window.location.replace("/login?next=%2Fai");
+            return;
+          }
+          if (response.status === 403) {
+            statusDot.classList.add("offline");
+            statusLabel.textContent = "Owner-only";
+            showNotice("Frezen AI hanya tersedia untuk akun Owner.", true);
+            return;
+          }
+          state.configured = response.ok && data.configured === true;
+          statusDot.classList.toggle("ready", state.configured);
+          statusDot.classList.toggle("offline", !state.configured);
+          statusLabel.textContent = state.configured ? ("Siap · " + String(data.model || "model lokal")) : "Model belum terhubung";
+          if (!state.configured) {
+            showNotice("AI belum aktif. Owner perlu mengonfigurasi FREZEN_AI_ENDPOINT dan FREZEN_AI_API_KEY di Cloudflare, lalu mengaktifkan FREZEN_AI_ENABLED. Kunci tidak dimasukkan di browser.", true);
+          } else {
+            showNotice("", false);
+          }
+          updateSendState();
+        } catch (error) {
+          state.configured = false;
+          statusDot.classList.add("offline");
+          statusLabel.textContent = "Tidak terhubung";
+          showNotice("Status model tidak dapat diperiksa. Periksa koneksi dan konfigurasi Worker.", true);
+          updateSendState();
+        }
+      }
+
+      async function sendMessage(event) {
+        if (event) event.preventDefault();
+        const content = promptInput.value.trim();
+        if (!content || state.busy || !state.configured) return;
+
+        state.messages.push({ role: "user", content: content });
+        welcome.classList.add("hidden");
+        addMessage("user", content, false);
+        promptInput.value = "";
+        promptInput.style.height = "auto";
+        state.busy = true;
+        updateSendState();
+        const answerNode = addMessage("assistant", "Frezen AI sedang berpikir…", true);
+
+        try {
+          const response = await fetch("/api/v1/ai/chat", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json", accept: "application/json" },
+            body: JSON.stringify({ messages: state.messages.slice(-12) })
+          });
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok) {
+            if (response.status === 401) {
+              window.location.replace("/login?next=%2Fai");
+              return;
+            }
+            const friendly = {
+              AI_NOT_CONFIGURED: "Model belum dikonfigurasi di Worker.",
+              AI_UPSTREAM_TIMEOUT: "Model terlalu lama merespons. Coba lagi.",
+              AI_UPSTREAM_UNAVAILABLE: "Server model tidak dapat dijangkau. Periksa koneksi server AI.",
+              AI_UPSTREAM_ERROR: "Server model mengembalikan error. Periksa log layanan AI."
+            };
+            throw new Error(friendly[data.error] || data.message || "Permintaan gagal (" + response.status + ").");
+          }
+          answerNode.textContent = String(data.answer || "");
+          answerNode.classList.remove("pending");
+          state.messages.push({ role: "assistant", content: String(data.answer || "") });
+        } catch (error) {
+          answerNode.textContent = error.message || "Permintaan gagal. Coba lagi.";
+          answerNode.classList.add("error-text");
+        } finally {
+          state.busy = false;
+          updateSendState();
+          scrollToBottom();
+          promptInput.focus();
+        }
+      }
+
+      composer.addEventListener("submit", sendMessage);
+      promptInput.addEventListener("input", function () {
+        promptInput.style.height = "auto";
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 180) + "px";
+        updateSendState();
+      });
+      promptInput.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          sendMessage(event);
+        }
+      });
+      document.querySelector("#newChat").addEventListener("click", resetChat);
+      document.querySelectorAll("[data-prompt]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          promptInput.value = button.dataset.prompt || "";
+          promptInput.focus();
+          promptInput.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+      });
+
+      loadStatus();
+    }());
+  </script>
+</body>
+</html>
