@@ -10,6 +10,7 @@ import { listAllHwid } from "./hwid-admin.js";
 import { cleanupHwidV2 } from "./security/runtime-hwid.js";
 import { deliverScriptByKey, deliverScriptFileByKey, buildLoaderSource } from "./script-loader.js";
 import { buildCompactLoaderSource, buildRuntimeLoaderSource } from "./short-loader.js";
+import { getFrezenAiStatus, postFrezenAiChat } from "./frezen-ai.js";
 
 const NO_STORE = { "cache-control": "no-store" };
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", ...NO_STORE };
@@ -32,6 +33,32 @@ async function asset(request, env, pathname) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if (request.method === "GET" && url.pathname === "/") {
+      return asset(request, env, "/index.html");
+    }
+
+    if (request.method === "GET" && (url.pathname === "/ai" || url.pathname === "/ai/")) {
+      const aiRequestId = crypto.randomUUID();
+      const access = await requirePrivateAccess(request, env, aiRequestId);
+      if (access instanceof Response) {
+        if (access.status === 401) {
+          return new Response(null, { status: 302, headers: { location: "/login?next=%2Fai", ...NO_STORE } });
+        }
+        return access;
+      }
+      if (String(access.role ?? "").trim().toUpperCase() !== "OWNER") {
+        return new Response(
+          '<!doctype html><html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Akses dibatasi — Frezen</title><body style="font:16px system-ui;background:#08070d;color:#eee;padding:3rem;max-width:42rem;margin:auto"><h1>Akses Frezen AI dibatasi</h1><p>Ruang AI pribadi hanya tersedia untuk akun Owner.</p><a style="color:#c4a5fd" href="/dashboard/">Kembali ke Frezen Script</a></body></html>',
+          { status: 403, headers: { "content-type": "text/html; charset=utf-8", ...NO_STORE } },
+        );
+      }
+      return asset(request, env, "/ai.html");
+    }
+
+    if (url.pathname === "/api/v1/ai/status") return getFrezenAiStatus(request, env);
+    if (url.pathname === "/api/v1/ai/chat") return postFrezenAiChat(request, env);
+
     const scriptFileMatch = url.pathname.match(/^\/files\/([^/]+)\.lua\/?$/i);
     if (scriptFileMatch) return deliverScriptFileByKey(request, env, crypto.randomUUID(), decodeURIComponent(scriptFileMatch[1]));
 
