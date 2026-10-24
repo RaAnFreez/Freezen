@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isCloudflareWorkersAiAvailable,
   isFrezenAiConfigured,
   isValidAiEndpoint,
   normalizeConversation,
@@ -15,7 +16,18 @@ describe("Frezen AI configuration", () => {
     })).toBe(false);
   });
 
-  it("requires HTTPS endpoints in production", () => {
+  it("uses the native Cloudflare Workers AI binding without an API key", () => {
+    const env = {
+      FREZEN_AI_ENABLED: "true",
+      FREZEN_AI_MODEL: "@cf/qwen/qwen2.5-coder-32b-instruct",
+      FREZEN_ENV: "production",
+      AI: { run: async () => ({ response: "ok" }) },
+    };
+    expect(isCloudflareWorkersAiAvailable(env)).toBe(true);
+    expect(isFrezenAiConfigured(env)).toBe(true);
+  });
+
+  it("requires HTTPS endpoints in production for the external provider", () => {
     expect(isValidAiEndpoint("http://localhost:11434/v1/chat/completions", true)).toBe(false);
     expect(isValidAiEndpoint("https://ai.example.test/v1/chat/completions", true)).toBe(true);
   });
@@ -25,7 +37,7 @@ describe("Frezen AI configuration", () => {
     expect(isValidAiEndpoint("http://ai.example.test/v1/chat/completions", false)).toBe(false);
   });
 
-  it("requires a long secret and a valid endpoint", () => {
+  it("requires a long secret and a valid endpoint for the external provider", () => {
     const base = {
       FREZEN_AI_ENABLED: "true",
       FREZEN_AI_ENDPOINT: "https://ai.example.test/v1/chat/completions",
