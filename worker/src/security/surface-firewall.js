@@ -8,6 +8,10 @@ const PUBLIC_GET_KEY_PREFIXES = [
 
 const PUBLIC_EXACT = new Set([
   "/",
+  "/ai",
+  "/ai/",
+  "/api/v1/ai/status",
+  "/api/v1/ai/chat",
   "/login",
   "/login/",
   "/api/v1/auth/login",
