@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { Script } from "node:vm";
 import {
   isCloudflareWorkersAiAvailable,
   isFrezenAiConfigured,
@@ -107,5 +109,16 @@ describe("Frezen AI conversation validation", () => {
       { role: "assistant", content: "a".repeat(1) },
       { role: "user", content: "b".repeat(1) },
     ]).error).toBe("CONVERSATION_TOO_LONG");
+  });
+});
+
+describe("Frezen AI chat UI", () => {
+  it("keeps the inline chat script syntactically valid", () => {
+    const html = readFileSync(new URL("../public/ai.html", import.meta.url), "utf8");
+    const match = html.match(/<script>([\\s\\S]*?)<\\/script>/);
+    expect(match).not.toBeNull();
+    expect(() => new Script(match[1])).not.toThrow();
+    expect(html).toContain('id="fileInput"');
+    expect(html).toContain('id="chatHistory"');
   });
 });
