@@ -50,9 +50,9 @@ describe("Frezen AI configuration", () => {
 
 describe("Frezen AI conversation validation", () => {
   it("accepts user and assistant messages and trims content", () => {
-    expect(normalizeConversation([
-      { role: "user", content: "  Halo Frezen  " },
-    ])).toEqual({ messages: [{ role: "user", content: "Halo Frezen" }] });
+    const result = normalizeConversation([{ role: "user", content: "  Halo Frezen  " }]);
+    expect(result.messages).toEqual([{ role: "user", content: "Halo Frezen" }]);
+    expect(result.hasImages).toBe(false);
   });
 
   it("rejects unsupported roles and requires a user message last", () => {
@@ -63,14 +63,49 @@ describe("Frezen AI conversation validation", () => {
     ]).error).toBe("LAST_MESSAGE_MUST_BE_USER");
   });
 
+  it("accepts image attachments for multimodal requests", () => {
+    const result = normalizeConversation([{
+      role: "user",
+      content: "Apa isi gambar ini?",
+      attachments: [{
+        kind: "image",
+        name: "screenshot.png",
+        type: "image/jpeg",
+        dataUrl: "data:image/jpeg;base64,aGVsbG8=",
+      }],
+    }]);
+    expect(result.error).toBeUndefined();
+    expect(result.hasImages).toBe(true);
+    expect(result.messages[0].attachments[0].kind).toBe("image");
+  });
+
+  it("rejects malformed images and too many image attachments", () => {
+    expect(normalizeConversation([{
+      role: "user",
+      content: "Lihat gambar",
+      attachments: [{ kind: "image", name: "bad.png", dataUrl: "https://example.test/image.png" }],
+    }]).error).toBe("INVALID_IMAGE_ATTACHMENT");
+
+    expect(normalizeConversation([{
+      role: "user",
+      content: "Bandingkan foto",
+      attachments: [
+        { kind: "image", name: "1.jpg", dataUrl: "data:image/jpeg;base64,aGVsbG8=" },
+        { kind: "image", name: "2.jpg", dataUrl: "data:image/jpeg;base64,aGVsbG8=" },
+        { kind: "image", name: "3.jpg", dataUrl: "data:image/jpeg;base64,aGVsbG8=" },
+        { kind: "image", name: "4.jpg", dataUrl: "data:image/jpeg;base64,aGVsbG8=" },
+      ],
+    }]).error).toBe("TOO_MANY_IMAGES");
+  });
+
   it("rejects oversized messages and conversations", () => {
-    expect(normalizeConversation([{ role: "user", content: "x".repeat(5_001) }]).error).toBe("INVALID_MESSAGE_LENGTH");
+    expect(normalizeConversation([{ role: "user", content: "x".repeat(80_001) }]).error).toBe("INVALID_MESSAGE_LENGTH");
     expect(normalizeConversation([
-      { role: "user", content: "x".repeat(5_000) },
-      { role: "assistant", content: "y".repeat(5_000) },
-      { role: "user", content: "z".repeat(5_000) },
-      { role: "assistant", content: "a".repeat(5_000) },
-      { role: "user", content: "b".repeat(5_000) },
+      { role: "user", content: "x".repeat(40_000) },
+      { role: "assistant", content: "y".repeat(40_000) },
+      { role: "user", content: "z".repeat(40_000) },
+      { role: "assistant", content: "a".repeat(1) },
+      { role: "user", content: "b".repeat(1) },
     ]).error).toBe("CONVERSATION_TOO_LONG");
   });
 });
