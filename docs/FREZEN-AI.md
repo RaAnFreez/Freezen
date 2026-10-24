@@ -1,42 +1,46 @@
 # Frezen AI — Cloudflare Workers AI
 
-Frezen AI adalah ruang chat privat yang hanya boleh digunakan akun dengan role **OWNER**. Gateway berada di `/`, chat di `/ai`, dan backend berjalan di Cloudflare Worker. Percakapan hanya berada di memori tab browser; tidak ada tabel atau migrasi D1 baru untuk riwayat chat.
+Frezen AI adalah ruang chat privat yang hanya boleh digunakan akun dengan role **OWNER**. Gateway berada di `/`, chat di `/ai`, dan backend berjalan di Cloudflare Worker.
 
-## Mode cloud tanpa laptop/PC
+## Model cloud
 
-Frezen AI sekarang dapat memanggil **Cloudflare Workers AI** langsung melalui binding `env.AI`. Model awal yang digunakan:
+Untuk chat biasa dan coding, Frezen memakai `@cf/qwen/qwen2.5-coder-32b-instruct`. Jika pesan memuat gambar, backend menggunakan model vision `@cf/qwen/qwen3.8-27b`, yang mendukung input gambar dan konteks panjang. Keduanya dijalankan di Cloudflare Workers AI sehingga tidak perlu memasang Ollama atau menyalakan PC.
 
-```text
-@cf/qwen/qwen2.5-coder-32b-instruct
-```
+- Model coding: https://developers.cloudflare.com/workers-ai/models/qwen2.5-coder-32b-instruct/
+- Model multimodal/vision: https://developers.cloudflare.com/workers-ai/models/qwen3.8-27b/
+- Harga dan kuota: https://developers.cloudflare.com/workers-ai/platform/pricing/
+- Batas layanan: https://developers.cloudflare.com/workers-ai/platform/limits/
 
-Model tersebut di-host oleh Cloudflare, jadi tidak perlu memasang Ollama, mengunduh bobot model, atau menyalakan komputer pribadi. Worker memanggil binding AI langsung; tidak diperlukan `FREZEN_AI_ENDPOINT` maupun `FREZEN_AI_API_KEY` untuk mode ini.
+## Lampiran
 
-Konfigurasi binding ditambahkan untuk root, staging, dan production di `worker/wrangler.toml`. Flag AI tetap nonaktif untuk development dan staging. Flag production diatur aktif, dengan akses chat tetap dibatasi ke Owner oleh handler Frezen.
+Halaman chat mendukung:
+- Gambar/foto JPG, PNG, dan WebP. Gambar diubah ke JPEG dan dikompres di browser sebelum dikirim ke model vision.
+- File teks/source code seperti Lua, JavaScript/TypeScript, HTML/CSS, JSON, Python, SQL, Markdown, YAML, TOML, dan format teks sejenis. Isi file dimasukkan ke konteks percakapan sebagai code block.
 
-## Catatan biaya
+Batas aplikasi saat ini adalah maksimum 4 lampiran dalam satu pesan, hingga 3 gambar per permintaan AI, foto asli sampai 8 MB sebelum kompresi, dan total isi file teks 55.000 karakter per pesan. File biner, PDF, dan dokumen Office belum diproses sebagai isi dokumen pada versi ini. Batas ini dibuat untuk menghindari payload terlalu besar dan error model; batas provider, konteks model, ukuran request, dan kuota tetap berlaku.
 
-Workers AI memiliki alokasi gratis harian yang tercantum pada halaman harga Cloudflare. Pemakaian di atas alokasi dapat memerlukan paket Workers berbayar dan menimbulkan biaya, tergantung akun dan model. Periksa pemakaian di dashboard Workers AI sebelum penggunaan intensif.
+## Riwayat percakapan
 
-- Harga resmi: https://developers.cloudflare.com/workers-ai/platform/pricing/
-- Katalog model: https://developers.cloudflare.com/workers-ai/models/qwen2.5-coder-32b-instruct/
-- Dokumen binding: https://developers.cloudflare.com/workers-ai/configuration/bindings/
+Riwayat disimpan di **IndexedDB pada browser yang sedang digunakan**, termasuk percakapan, jawaban, dan data gambar terkompresi. Sesudah refresh, chat dapat dimuat kembali. Sidebar menampilkan hingga 15 percakapan terbaru.
 
-## Keamanan dan batas
+Penyimpanan ini bersifat lokal: riwayat tidak tersinkron antar perangkat atau browser, tidak ditulis ke D1, dan dapat hilang jika data situs/browser dibersihkan atau pengguna membuka sesi privat. Jika IndexedDB tidak tersedia, aplikasi mencoba fallback localStorage; pada fallback ini data gambar tidak dijamin tersimpan.
+
+## Batas dan biaya
+
+Tidak ada cara realistis untuk membuat model hosted benar-benar tanpa batas. Konteks model, batas ukuran input, kuota/rate limit layanan, waktu respons, dan biaya tetap berlaku. Aplikasi meningkatkan batas teks/output dibanding versi awal, tetapi tidak menerima input atau menghasilkan output tak terbatas. Workers AI memiliki alokasi gratis harian dan pemakaian di atas batas dapat menimbulkan biaya sesuai akun/model; pantau dashboard sebelum penggunaan intensif.
+
+## Keamanan
 
 - Halaman chat dan endpoint status/chat memeriksa sesi privat dan role **OWNER**.
-- Endpoint chat memeriksa origin, membatasi ukuran body dan pesan, serta menolak role pesan yang tidak didukung.
-- Model tidak dijalankan dalam proses Worker biasa; inferensi dilakukan oleh layanan Workers AI.
-- Pesan percakapan tidak disimpan di D1.
-- Jangan menambahkan credential Cloudflare ke GitHub, HTML, atau chat.
-- Output AI harus ditinjau sebelum menjalankan kode atau mengubah produksi.
+- Endpoint chat memeriksa origin, membatasi ukuran request, memvalidasi bentuk lampiran gambar, dan membatasi ukuran gambar.
+- Isi file/foto dikirim ke penyedia model ketika pengguna mengirim pesan. Jangan lampirkan rahasia, password, API key, atau data sensitif yang tidak perlu.
+- Riwayat chat tidak disimpan ke D1 dan tidak dikirim ke GitHub.
+- Output AI perlu ditinjau dan diuji sebelum menjalankan kode atau menerapkan perubahan produksi.
 
-## Endpoint eksternal opsional
+## Provider eksternal opsional
 
-Frezen masih mendukung endpoint lain yang kompatibel dengan OpenAI Chat Completions jika binding Workers AI tidak dipakai. Untuk jalur tersebut, atur secret `FREZEN_AI_ENDPOINT` dan `FREZEN_AI_API_KEY` pada environment target, lalu sesuaikan `FREZEN_AI_MODEL`. Endpoint produksi wajib memakai HTTPS.
+Frezen juga mendukung endpoint yang kompatibel dengan OpenAI Chat Completions jika binding Workers AI tidak digunakan. Atur secret `FREZEN_AI_ENDPOINT` dan `FREZEN_AI_API_KEY` pada environment target. Jika ingin menggunakan gambar melalui provider lain, endpoint dan model yang dipilih harus benar-benar mendukung konten gambar.
 
 ## Deploy
 
-PR ini menyiapkan kode dan konfigurasi Wrangler, tetapi tidak mengubah akun Cloudflare dari GitHub. Sesudah perubahan masuk ke branch produksi dan berhasil dideploy, buka `https://frezen.my.id/`, login sebagai Owner, lalu masuk ke Frezen AI. Status backend dapat diperiksa dari `/api/v1/ai/status` setelah login Owner.
-
-Jika deployment dilakukan manual, jalankan dari direktori `worker` dengan proses rilis Frezen yang biasa digunakan. Jangan deploy dari root tanpa environment yang benar. Tidak ada perubahan pada D1, migrasi, rahasia utama, maupun alur autentikasi.
+Perubahan kode dan konfigurasi perlu masuk ke branch produksi dan berhasil dideploy melalui proses rilis Frezen. Pastikan `/api/v1/ai/status` menampilkan `configured: true` setelah login Owner. Tidak ada migrasi atau perubahan schema D1 untuk fitur lampiran dan riwayat lokal ini.
