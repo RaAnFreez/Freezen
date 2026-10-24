@@ -6,6 +6,8 @@ const MAX_MESSAGES = 12;
 const MAX_MESSAGE_CHARS = 5_000;
 const MAX_TOTAL_CHARS = 18_000;
 const MAX_OUTPUT_TOKENS = 1_536;
+const DEFAULT_CLOUDFLARE_MODEL = "@cf/qwen/qwen2.5-coder-32b-instruct";
+const DEFAULT_EXTERNAL_MODEL = "qwen2.5-coder:7b";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -46,8 +48,9 @@ async function requireOwner(request, env, requestId) {
 }
 
 function normalizedModel(env) {
-  const model = String(env?.FREZEN_AI_MODEL ?? "qwen2.5-coder:7b").trim();
-  return model.slice(0, 128) || "qwen2.5-coder:7b";
+  const fallback = env?.AI?.run ? DEFAULT_CLOUDFLARE_MODEL : DEFAULT_EXTERNAL_MODEL;
+  const model = String(env?.FREZEN_AI_MODEL ?? fallback).trim();
+  return model.slice(0, 128) || fallback;
 }
 
 export function isValidAiEndpoint(value, production = false) {
@@ -63,8 +66,14 @@ export function isValidAiEndpoint(value, production = false) {
   }
 }
 
+export function isCloudflareWorkersAiAvailable(env) {
+  return typeof env?.AI?.run === "function" && normalizedModel(env).startsWith("@cf/");
+}
+
 export function isFrezenAiConfigured(env) {
   if (String(env?.FREZEN_AI_ENABLED ?? "false").toLowerCase() !== "true") return false;
+  if (isCloudflareWorkersAiAvailable(env)) return true;
+
   const production = String(env?.FREZEN_ENV ?? "").toLowerCase() === "production";
   const endpoint = String(env?.FREZEN_AI_ENDPOINT ?? "").trim();
   const apiKey = String(env?.FREZEN_AI_API_KEY ?? "");
@@ -97,7 +106,8 @@ export function normalizeConversation(input) {
 }
 
 function safeContent(payload) {
-  const value = payload?.choices?.[0]?.message?.content;
+  if (typeof payload === "string") return payload.trim();
+  const value = payload?.choices?.[0]?.message?.content ?? payload?.response ?? payload?.result?.response;
   if (typeof value === "string") return value.trim();
   if (Array.isArray(value)) {
     return value.map((part) => {
@@ -115,13 +125,14 @@ export async function getFrezenAiStatus(request, env) {
   if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED" }, 405, requestId);
 
   const configured = isFrezenAiConfigured(env);
+  const cloudflareBinding = isCloudflareWorkersAiAvailable(env);
   return json({
     configured,
     model: normalizedModel(env),
-    provider: "OpenAI-compatible private endpoint",
+    provider: cloudflareBinding ? "Cloudflare Workers AI" : "OpenAI-compatible private endpoint",
     message: configured
       ? "Frezen AI is configured."
-      : "The model endpoint is not configured or AI is disabled.",
+      : "Enable Frezen AI and configure the Cloudflare AI binding or a private compatible endpoint.",
   }, 200, requestId);
 }
 
@@ -158,57 +169,77 @@ export async function postFrezenAiChat(request, env) {
   if (!isFrezenAiConfigured(env)) {
     return json({
       error: "AI_NOT_CONFIGURED",
-      message: "Configure FREZEN_AI_ENDPOINT, FREZEN_AI_API_KEY and enable FREZEN_AI_ENABLED.",
+      message: "Enable FREZEN_AI_ENABLED and configure the Cloudflare AI binding or FREZEN_AI_ENDPOINT plus FREZEN_AI_API_KEY.",
     }, 503, requestId);
   }
 
   const messages = [{ role: "system", content: SYSTEM_PROMPT }, ...conversation.messages];
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort("AI upstream timeout"), 60_000);
-  let upstream;
-  try {
-    upstream = await fetch(String(env.FREZEN_AI_ENDPOINT).trim(), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        authorization: "Bearer " + String(env.FREZEN_AI_API_KEY),
-      },
-      body: JSON.stringify({
-        model: normalizedModel(env),
+  let result;
+
+  if (isCloudflareWorkersAiAvailable(env)) {
+    try {
+      result = await env.AI.run(normalizedModel(env), {
         messages,
         temperature: 0.3,
         max_tokens: MAX_OUTPUT_TOKENS,
         stream: false,
-      }),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    clearTimeout(timeout);
-    const timedOut = error?.name === "AbortError" || String(error?.message ?? "").toLowerCase().includes("timeout");
-    return json({
-      error: timedOut ? "AI_UPSTREAM_TIMEOUT" : "AI_UPSTREAM_UNAVAILABLE",
-      message: timedOut
-        ? "The model took too long to respond. Please try again."
-        : "The model server could not be reached.",
-    }, timedOut ? 504 : 502, requestId);
-  } finally {
-    clearTimeout(timeout);
-  }
+      });
+    } catch (error) {
+      console.error("Frezen AI Cloudflare inference failed", {
+        requestId,
+        message: String(error?.message || error).slice(0, 180),
+      });
+      return json({
+        error: "AI_UPSTREAM_ERROR",
+        message: "Cloudflare Workers AI could not complete the request. Please retry.",
+      }, 502, requestId);
+    }
+  } else {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort("AI upstream timeout"), 60_000);
+    let upstream;
+    try {
+      upstream = await fetch(String(env.FREZEN_AI_ENDPOINT).trim(), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+          authorization: "Bearer " + String(env.FREZEN_AI_API_KEY),
+        },
+        body: JSON.stringify({
+          model: normalizedModel(env),
+          messages,
+          temperature: 0.3,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          stream: false,
+        }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const timedOut = error?.name === "AbortError" || String(error?.message ?? "").toLowerCase().includes("timeout");
+      return json({
+        error: timedOut ? "AI_UPSTREAM_TIMEOUT" : "AI_UPSTREAM_UNAVAILABLE",
+        message: timedOut
+          ? "The model took too long to respond. Please try again."
+          : "The model server could not be reached.",
+      }, timedOut ? 504 : 502, requestId);
+    } finally {
+      clearTimeout(timeout);
+    }
 
-  if (!upstream.ok) {
-    return json({
-      error: "AI_UPSTREAM_ERROR",
-      message: "The model server returned an error.",
-      upstream_status: upstream.status,
-    }, 502, requestId);
-  }
+    if (!upstream.ok) {
+      return json({
+        error: "AI_UPSTREAM_ERROR",
+        message: "The model server returned an error.",
+        upstream_status: upstream.status,
+      }, 502, requestId);
+    }
 
-  let result;
-  try {
-    result = await upstream.json();
-  } catch {
-    return json({ error: "AI_INVALID_UPSTREAM_RESPONSE", message: "The model server returned an invalid response." }, 502, requestId);
+    try {
+      result = await upstream.json();
+    } catch {
+      return json({ error: "AI_INVALID_UPSTREAM_RESPONSE", message: "The model server returned an invalid response." }, 502, requestId);
+    }
   }
 
   const answer = safeContent(result);
