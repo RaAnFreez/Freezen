@@ -115,9 +115,12 @@ describe("Frezen AI conversation validation", () => {
 describe("Frezen AI chat UI", () => {
   it("keeps the inline chat script syntactically valid", () => {
     const html = readFileSync(new URL("../public/ai.html", import.meta.url), "utf8");
-    const match = html.match(/<script>([\\s\\S]*?)<\\/script>/);
-    expect(match).not.toBeNull();
-    expect(() => new Script(match[1])).not.toThrow();
+    const start = html.indexOf("<script>");
+    const end = html.indexOf("</script>", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const source = html.slice(start + 8, end);
+    expect(() => new Script(source)).not.toThrow();
     expect(html).toContain('id="fileInput"');
     expect(html).toContain('id="chatHistory"');
   });
