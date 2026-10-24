@@ -214,3 +214,8 @@ FREZEN CONTROL SYSTEM V3 is production-ready only when:
 - Production smoke tests pass.
 - Backup/recovery is documented and tested where applicable.
 - Final Phase 45 verification passes.
+
+
+## Optional Frezen AI workspace
+
+The gateway and owner-only AI workspace setup is documented in [docs/FREZEN-AI.md](docs/FREZEN-AI.md). The AI endpoint is disabled by default, uses server-side secrets, and proxies to a separately hosted OpenAI-compatible model endpoint; Cloudflare Worker does not host model weights. No D1 migration is needed for the initial chat UI, and chat history is not persisted.
