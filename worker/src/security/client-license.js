@@ -78,6 +78,7 @@ export async function validateClientLicense(request, env, requestId, json) {
     const status = String(license.status ?? "").trim().toLowerCase();
     if (status === "revoked") return deny(json, requestId, "LICENSE_REVOKED");
     if (status === "banned") return deny(json, requestId, "LICENSE_BANNED");
+    if (status === "expired") return deny(json, requestId, "LICENSE_EXPIRED");
     if (status !== "active") return deny(json, requestId, "LICENSE_INACTIVE");
 
     if (license.expires_at) {
