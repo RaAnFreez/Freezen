@@ -31,6 +31,7 @@ binding = "AI"
 binding = "DB"
 database_name = "frezen-staging"
 database_id = "99e921da-2c62-4179-a8c5-f6a2918c0deb"
+migrations_dir = "migrations-staging"
 
 [env.production]
 name = "frezen"
