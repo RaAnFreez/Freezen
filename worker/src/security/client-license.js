@@ -10,8 +10,7 @@ const sha256Hex = async (value) => {
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
-const normalizeText = (value, maxLength) =>
-  typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+const readText = (value) => typeof value === "string" ? value.trim() : "";
 
 const statusCode = (reason) => ({
   INVALID_JSON: 400,
@@ -56,13 +55,13 @@ export async function validateClientLicense(request, env, requestId, json) {
     return deny(json, requestId, "INVALID_JSON");
   }
 
-  const licenseKey = normalizeText(body?.license_key, MAX_LICENSE_KEY_LENGTH);
-  const productId = normalizeText(body?.product_id, MAX_PRODUCT_ID_LENGTH);
-  const hwid = normalizeText(body?.hwid, MAX_HWID_LENGTH);
+  const licenseKey = readText(body?.license_key);
+  const productId = readText(body?.product_id);
+  const hwid = readText(body?.hwid);
 
-  if (!licenseKey) return deny(json, requestId, "INVALID_LICENSE_KEY");
-  if (!productId) return deny(json, requestId, "INVALID_PRODUCT_ID");
-  if (!hwid) return deny(json, requestId, "INVALID_HWID");
+  if (!licenseKey || licenseKey.length > MAX_LICENSE_KEY_LENGTH) return deny(json, requestId, "INVALID_LICENSE_KEY");
+  if (!productId || productId.length > MAX_PRODUCT_ID_LENGTH) return deny(json, requestId, "INVALID_PRODUCT_ID");
+  if (!hwid || hwid.length > MAX_HWID_LENGTH) return deny(json, requestId, "INVALID_HWID");
 
   try {
     const licenseKeyHash = await sha256Hex(licenseKey);
