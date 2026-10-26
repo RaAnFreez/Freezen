@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Validate the isolated staging D1 baseline with SQLite's schema engine."""
+"""Validate staging D1 isolation and its baseline using SQLite's schema engine."""
 
 from pathlib import Path
 import sqlite3
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
+CONFIG = ROOT / "worker" / "wrangler.toml"
 MIGRATION = ROOT / "worker" / "migrations-staging" / "0001_client_license_baseline.sql"
+
+EXPECTED_STAGING_DB_ID = "99e921da-2c62-4179-a8c5-f6a2918c0deb"
+EXPECTED_PRODUCTION_DB_ID = "ff6e12e2-c59b-4891-812c-9ce0bbae64fc"
 
 REQUIRED_COLUMNS = {
     "users": {"id"},
@@ -24,7 +29,45 @@ REQUIRED_COLUMNS = {
 }
 
 
+def validate_config() -> None:
+    config = tomllib.loads(CONFIG.read_text(encoding="utf-8"))
+    envs = config.get("env", {})
+    staging = envs.get("staging", {})
+    production = envs.get("production", {})
+
+    staging_dbs = staging.get("d1_databases", [])
+    production_dbs = production.get("d1_databases", [])
+    if len(staging_dbs) != 1:
+        raise SystemExit("Staging must configure exactly one D1 database binding.")
+    if len(production_dbs) != 1:
+        raise SystemExit("Production D1 binding configuration changed unexpectedly.")
+
+    staging_db = staging_dbs[0]
+    production_db = production_dbs[0]
+    if staging_db.get("database_name") != "frezen-staging":
+        raise SystemExit("Staging database name is not frezen-staging.")
+    if staging_db.get("database_id") != EXPECTED_STAGING_DB_ID:
+        raise SystemExit("Staging database ID does not match the saved staging database.")
+    if staging_db.get("binding") != "DB":
+        raise SystemExit("Staging D1 binding must be named DB.")
+    if staging_db.get("migrations_dir") != "migrations-staging":
+        raise SystemExit("Staging must use the isolated migrations-staging directory.")
+    if production_db.get("database_name") != "frezen-production":
+        raise SystemExit("Production database name changed unexpectedly.")
+    if production_db.get("database_id") != EXPECTED_PRODUCTION_DB_ID:
+        raise SystemExit("Production database ID changed unexpectedly.")
+    for name, environment in (("staging", staging), ("production", production)):
+        enabled = environment.get("vars", {}).get("FREZEN_CLIENT_LICENSE_API_ENABLED")
+        if enabled != "false":
+            raise SystemExit(f"FREZEN_CLIENT_LICENSE_API_ENABLED must remain false in {name}.")
+
+    staging_assets = staging.get("assets", {})
+    if staging_assets.get("directory") != "./public" or staging_assets.get("binding") != "ASSETS":
+        raise SystemExit("Staging must define its own ASSETS binding.")
+
+
 def main() -> None:
+    validate_config()
     if not MIGRATION.is_file():
         raise SystemExit(f"Missing staging migration: {MIGRATION}")
 
@@ -97,7 +140,7 @@ def main() -> None:
     if violations:
         raise SystemExit(f"Foreign-key violations in staging baseline: {violations!r}")
 
-    print("Staging D1 baseline validated: required tables, columns, joins, and foreign keys are valid.")
+    print("Staging config and D1 baseline validated: isolated IDs, required schema, joins, and foreign keys are valid.")
 
 
 if __name__ == "__main__":
