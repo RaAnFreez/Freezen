@@ -81,6 +81,10 @@ describe("Frezen client license validation", () => {
     const missing = await validateClientLicense(makeRequest({ license_key: "key" }), { DB }, "req-3", makeJson());
     expect(missing.status).toBe(400);
     expect((await missing.json()).reason).toBe("INVALID_PRODUCT_ID");
+
+    const oversized = await validateClientLicense(makeRequest({ ...validPayload, hwid: "x".repeat(513) }), { DB }, "req-3b", makeJson());
+    expect(oversized.status).toBe(400);
+    expect((await oversized.json()).reason).toBe("INVALID_HWID");
   });
 
   it("rejects unknown and non-active licenses", async () => {
