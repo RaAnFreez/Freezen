@@ -119,6 +119,12 @@ describe("Frezen client license validation", () => {
     }, "req-8", makeJson());
     expect(response.status).toBe(403);
     expect((await response.json()).reason).toBe("LICENSE_EXPIRED");
+
+    const persisted = await validateClientLicense(makeRequest(validPayload), {
+      DB: makeDb({ license: { ...activeLicense, status: "expired" } }),
+    }, "req-8b", makeJson());
+    expect(persisted.status).toBe(403);
+    expect((await persisted.json()).reason).toBe("LICENSE_EXPIRED");
   });
 
   it("validates an already-bound device without exposing the key or raw HWID", async () => {
