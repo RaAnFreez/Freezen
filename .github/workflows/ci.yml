@@ -30,6 +30,14 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate isolated staging D1 baseline
+        run: python3 scripts/verify-staging-schema.py
+
       - name: Build Luau runtime for VM integration tests
         run: |
           git clone --depth 1 https://github.com/luau-lang/luau.git "$RUNNER_TEMP/luau"

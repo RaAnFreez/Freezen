@@ -24,6 +24,10 @@ name = "frezen-control-system-v3-staging"
 workers_dev = true
 vars = { FREZEN_ENV = "staging", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_VM_ENABLED = "true", FREZEN_AI_ENABLED = "false", FREZEN_CLIENT_LICENSE_API_ENABLED = "false", FREZEN_AI_MODEL = "@cf/qwen/qwen2.5-coder-32b-instruct" }
 
+[env.staging.assets]
+directory = "./public"
+binding = "ASSETS"
+
 [env.staging.ai]
 binding = "AI"
 
@@ -31,6 +35,7 @@ binding = "AI"
 binding = "DB"
 database_name = "frezen-staging"
 database_id = "99e921da-2c62-4179-a8c5-f6a2918c0deb"
+migrations_dir = "migrations-staging"
 
 [env.production]
 name = "frezen"
