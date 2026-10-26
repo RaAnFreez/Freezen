@@ -18,6 +18,7 @@ const PUBLIC_EXACT = new Set([
   "/api/v1/auth/verify",
   "/api/v1/auth/forgot-password",
   "/api/v1/auth/reset-password",
+  "/api/v1/client/license/validate",
   "/forgot-password",
   "/forgot-password/",
 ]);
