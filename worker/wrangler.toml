@@ -27,6 +27,11 @@ vars = { FREZEN_ENV = "staging", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBE
 [env.staging.ai]
 binding = "AI"
 
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "frezen-staging"
+database_id = "99e921da-2c62-4179-a8c5-f6a2918c0deb"
+
 [env.production]
 name = "frezen"
 workers_dev = true
