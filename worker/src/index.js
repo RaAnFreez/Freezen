@@ -5,6 +5,7 @@ import { login, logout, listSessions, revokeSession, forgotPassword, resetPasswo
 import { setupOwner } from "./security/owner-setup.js";
 import { createInvite, listInvites, updateInvite, redeemInvite } from "./security/invite.js";
 import { validateLicense } from "./security/license.js";
+import { validateClientLicense } from "./security/client-license.js";
 import { updateLicenseStatus } from "./security/license-admin.js";
 import { listLicenses } from "./security/license-list.js";
 import { getLicenseAudit } from "./security/license-audit.js";
@@ -111,6 +112,14 @@ export default {
       if (auth instanceof Response) return auth;
       const deviceId = decodeURIComponent(hwidDeviceMatch[1]);
       return hwidDeviceMatch[2] === "block" ? blockHwid(request, env, requestId, json, deviceId) : unblockHwid(request, env, requestId, json, deviceId);
+    }
+
+    // Public client licensing endpoint for applications explicitly integrated with Frezen.
+    // Keep disabled by default until a Cloudflare rate-limit rule is configured and staging-tested.
+    if (url.pathname === "/api/v1/client/license/validate") {
+      if (env.FREZEN_CLIENT_LICENSE_API_ENABLED !== "true") return notFound(requestId);
+      if (request.method !== "POST") return methodNotAllowed(requestId);
+      return validateClientLicense(request, env, requestId, json);
     }
 
     if (url.pathname === "/api/v1/licenses") {

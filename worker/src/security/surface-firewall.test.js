@@ -5,6 +5,7 @@ describe("public surface firewall", () => {
   it("allows only the intended public entry points", () => {
     expect(isPublicSurface("/login")).toBe(true);
     expect(isPublicSurface("/api/v1/auth/login")).toBe(true);
+    expect(isPublicSurface("/api/v1/client/license/validate")).toBe(true);
     expect(isPublicSurface("/get-key/test-service")).toBe(true);
     expect(isPublicSurface("/api/v1/get-key/service/test-service")).toBe(true);
     expect(isPublicSurface("/loader/abc")).toBe(true);

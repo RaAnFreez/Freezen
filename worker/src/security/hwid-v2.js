@@ -49,12 +49,24 @@ async function ensureSchema(env) {
 async function maxDevicesForLicense(env, licenseId) {
   try {
     const row = await env.DB.prepare(
-      "SELECT max_devices FROM frezen_key_limits kl JOIN frezen_key_records kr ON kr.id = kl.key_id WHERE kr.license_id = ?1 LIMIT 1",
+      `SELECT COALESCE(kl.max_devices, l.max_devices) AS max_devices
+       FROM licenses l
+       LEFT JOIN frezen_key_records kr ON kr.license_id = l.id
+       LEFT JOIN frezen_key_limits kl ON kl.key_id = kr.id
+       WHERE l.id = ?1 LIMIT 1`,
     ).bind(licenseId).first();
     const value = Number(row?.max_devices);
     return Number.isInteger(value) && value > 0 && value <= 100 ? value : DEFAULT_MAX_DEVICES;
   } catch {
-    return DEFAULT_MAX_DEVICES;
+    try {
+      const row = await env.DB.prepare(
+        "SELECT max_devices FROM licenses WHERE id = ?1 LIMIT 1",
+      ).bind(licenseId).first();
+      const value = Number(row?.max_devices);
+      return Number.isInteger(value) && value > 0 && value <= 100 ? value : DEFAULT_MAX_DEVICES;
+    } catch {
+      return DEFAULT_MAX_DEVICES;
+    }
   }
 }
 
