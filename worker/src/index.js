@@ -41,6 +41,13 @@ export default {
     const requestId = crypto.randomUUID();
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...SECURITY_HEADERS, "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type,authorization,x-csrf-token,x-frezen-setup-secret", "access-control-max-age": "600" } });
+    if ((url.hostname === "topup1.frezen.my.id") && (url.pathname === "/topup" || url.pathname === "/topup/")) {
+      return new Response("<!doctype html><html lang=\"id\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Frezen Top Up</title><body style=\"font:16px system-ui;background:#10131a;color:#e8eaf0;max-width:680px;margin:12vh auto;padding:24px\"><h1>Frezen Top Up</h1><p>Fitur top-up belum tersedia di Frezen.</p><p>Gunakan dashboard Frezen untuk pengelolaan lisensi dan HWID.</p></body></html>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" }
+      });
+    }
+
     // Gated compatibility route for an owner-authorized SE client migration.
     // It never proxies to the original SE backend; actions execute against Frezen D1.
     if (url.pathname === "/api/request" || url.pathname === "/api/request/") {
