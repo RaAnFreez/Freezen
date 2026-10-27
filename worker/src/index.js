@@ -20,7 +20,6 @@ import { deliverScript } from "./security/secure-delivery.js";
 import { safelinkuConfigStatus, testSafeLinkUConnection, getSafeLinkUStats } from "./safelinku.js";
 import { getKeyPage, listPublicProducts, claimPublicKey } from "./get-key.js";
 import { listApiKeys, createApiKey, revokeApiKey, rotateApiKey, getApiKeyUsage } from "./security/api-keys-api.js";
-import { handleSeCompat } from "./se-compat.js";
 
 const SECURITY_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "strict-transport-security": "max-age=31536000; includeSubDomains" };
 const json = (data, status = 200, requestId = crypto.randomUUID(), extraHeaders = {}) => new Response(JSON.stringify(data), { status, headers: { ...SECURITY_HEADERS, ...extraHeaders, "x-request-id": requestId } });
@@ -41,19 +40,6 @@ export default {
     const requestId = crypto.randomUUID();
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...SECURITY_HEADERS, "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS", "access-control-allow-headers": "content-type,authorization,x-csrf-token,x-frezen-setup-secret", "access-control-max-age": "600" } });
-    if ((url.hostname === "topup1.frezen.my.id") && (url.pathname === "/topup" || url.pathname === "/topup/")) {
-      return new Response("<!doctype html><html lang=\"id\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Frezen Top Up</title><body style=\"font:16px system-ui;background:#10131a;color:#e8eaf0;max-width:680px;margin:12vh auto;padding:24px\"><h1>Frezen Top Up</h1><p>Fitur top-up belum tersedia di Frezen.</p><p>Gunakan dashboard Frezen untuk pengelolaan lisensi dan HWID.</p></body></html>", {
-        status: 200,
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" }
-      });
-    }
-
-    // Gated compatibility route for an owner-authorized SE client migration.
-    // It never proxies to the original SE backend; actions execute against Frezen D1.
-    if (url.pathname === "/api/request" || url.pathname === "/api/request/") {
-      return handleSeCompat(request, env, requestId);
-    }
-
     if (url.pathname === "/api/v1/status") { if (request.method !== "GET") return methodNotAllowed(requestId); return json({ name: "Frezen Control System V3", status: "ok", environment: env.FREZEN_ENV ?? "unknown", database: env.DB ? "configured" : "not_configured", request_id: requestId }); }
     if (url.pathname === "/api/v1/health/db") { if (request.method !== "GET") return methodNotAllowed(requestId); if (!env.DB) return databaseUnavailable(requestId); try { const result = await env.DB.prepare("SELECT 1 AS ok").first(); return json({ status: result?.ok === 1 ? "ok" : "error", request_id: requestId }, result?.ok === 1 ? 200 : 503, requestId); } catch { return json({ status: "error", request_id: requestId }, 503, requestId); } }
     if (url.pathname === "/api/v1/setup/owner") { if (request.method !== "POST") return methodNotAllowed(requestId); return setupOwner(request, env, requestId, json); }
