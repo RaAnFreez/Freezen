@@ -39,7 +39,7 @@ The bridge also accepts legacy-style aliases for common operation names, but the
 The route returns 404 unless `FREZEN_SE_COMPAT_ENABLED=true`. Keep it disabled in production while testing. Start in a separate staging Worker and isolated staging D1, configure Cloudflare rate limiting for `/api/request/`, and test valid/invalid keys, roles/scopes, wrong products, expired licenses, HWID ownership, block/unblock, and unsupported top-up.
 
 The proposed APK URL replacement uses same-length hosts so the existing AOT string lengths remain intact:
-- API host: `restfrezenapi1.frezen.my.id` (configure this hostname to route to the intended Frezen Worker)
+- API host: `restapi.frezen.my.id` (configure this hostname to route to the intended Frezen Worker)
 - Top-up placeholder: `topup1.frezen.my.id` (configure this hostname to the Worker; `/topup/` displays that top-up is not available)
 
 These hostnames are proposed routing names; DNS/certificate/Cloudflare Worker routing must be configured by the owner. Do not point the APK at a server that is not configured to answer its requests.
