@@ -1,4 +1,5 @@
 import protectedEntry from './entry-ui-getkey-protected.js';
+import { handleSeCompat } from './se-compat.js';
 import { obfuscateLuaV11, ADVANCED_V11_PROFILE } from './script-obfuscator-v11.js';
 import { MAX_LUA_BYTES, OBFUSCATION_MARKER, isFrezenObfuscated } from './script-obfuscation-contract.js';
 
@@ -105,6 +106,18 @@ async function obfuscateVersionUpload(request) {
 
 export default {
   async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    // The top-up feature does not exist in Frezen yet; show an honest placeholder.
+    if (url.hostname === 'topup1.frezen.my.id' && (url.pathname === '/topup' || url.pathname === '/topup/')) {
+      return new Response('<!doctype html><html lang="id"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Frezen Top Up</title><body style="font:16px system-ui;background:#10131a;color:#e8eaf0;max-width:680px;margin:12vh auto;padding:24px"><h1>Frezen Top Up</h1><p>Fitur top-up belum tersedia di Frezen.</p><p>Gunakan dashboard Frezen untuk pengelolaan lisensi dan HWID.</p></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }
+      });
+    }
+    if (url.pathname === '/api/request' || url.pathname === '/api/request/') {
+      return handleSeCompat(request, env, crypto.randomUUID());
+    }
+
     // Version uploads are handled by scripts.js, which must receive the plain Lua
     // source so it can persist source_content and generate exactly one obfuscated payload.
     // Do not pre-obfuscate here: that would send an already-obfuscated file into

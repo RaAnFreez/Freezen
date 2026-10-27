@@ -14,6 +14,7 @@ FREZEN_EMBEDDED_LOADER_ENABLED = "true"
 FREZEN_VM_ENABLED = "true"
 FREZEN_AI_ENABLED = "false"
 FREZEN_CLIENT_LICENSE_API_ENABLED = "false"
+FREZEN_SE_COMPAT_ENABLED = "false"
 FREZEN_AI_MODEL = "@cf/qwen/qwen2.5-coder-32b-instruct"
 
 [ai]
@@ -22,7 +23,7 @@ binding = "AI"
 [env.staging]
 name = "frezen-control-system-v3-staging"
 workers_dev = true
-vars = { FREZEN_ENV = "staging", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_VM_ENABLED = "true", FREZEN_AI_ENABLED = "false", FREZEN_CLIENT_LICENSE_API_ENABLED = "false", FREZEN_AI_MODEL = "@cf/qwen/qwen2.5-coder-32b-instruct" }
+vars = { FREZEN_ENV = "staging", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_VM_ENABLED = "true", FREZEN_AI_ENABLED = "false", FREZEN_CLIENT_LICENSE_API_ENABLED = "false", FREZEN_SE_COMPAT_ENABLED = "false", FREZEN_AI_MODEL = "@cf/qwen/qwen2.5-coder-32b-instruct" }
 
 [env.staging.assets]
 directory = "./public"
@@ -40,7 +41,7 @@ migrations_dir = "migrations-staging"
 [env.production]
 name = "frezen"
 workers_dev = true
-vars = { FREZEN_ENV = "production", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_VM_ENABLED = "true", FREZEN_AI_ENABLED = "true", FREZEN_CLIENT_LICENSE_API_ENABLED = "false", FREZEN_AI_MODEL = "@cf/qwen/qwen2.5-coder-32b-instruct", FREZEN_PUBLIC_ORIGIN = "https://frezen.my.id" }
+vars = { FREZEN_ENV = "production", FREZEN_KEY_LOADER_ENABLED = "true", FREZEN_EMBEDDED_LOADER_ENABLED = "true", FREZEN_VM_ENABLED = "true", FREZEN_AI_ENABLED = "true", FREZEN_CLIENT_LICENSE_API_ENABLED = "false", FREZEN_SE_COMPAT_ENABLED = "false", FREZEN_AI_MODEL = "@cf/qwen/qwen2.5-coder-32b-instruct", FREZEN_PUBLIC_ORIGIN = "https://frezen.my.id" }
 
 [env.production.ai]
 binding = "AI"
