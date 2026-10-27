@@ -14,6 +14,7 @@ FREZEN_EMBEDDED_LOADER_ENABLED = "true"
 FREZEN_VM_ENABLED = "true"
 FREZEN_AI_ENABLED = "false"
 FREZEN_CLIENT_LICENSE_API_ENABLED = "false"
+FREZEN_SE_COMPAT_ENABLED = "false"
 FREZEN_AI_MODEL = "@cf/qwen/qwen2.5-coder-32b-instruct"
 
 [ai]
