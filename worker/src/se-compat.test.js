@@ -13,7 +13,7 @@ describe("SE-to-Frezen compatibility route", () => {
   });
 
   it("fails closed while the bridge is disabled", async () => {
-    const request = new Request("https://restfrezenapi1.frezen.my.id/api/request/", {
+    const request = new Request("https://restapi.frezen.my.id/api/request/", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "status" }),
@@ -24,7 +24,7 @@ describe("SE-to-Frezen compatibility route", () => {
   });
 
   it("offers a status response without exposing credentials", async () => {
-    const request = new Request("https://restfrezenapi1.frezen.my.id/api/request/", {
+    const request = new Request("https://restapi.frezen.my.id/api/request/", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "status", token: "must-not-be-echoed" }),
@@ -38,7 +38,7 @@ describe("SE-to-Frezen compatibility route", () => {
   });
 
   it("does not fake top-up support", async () => {
-    const request = new Request("https://restfrezenapi1.frezen.my.id/api/request/", {
+    const request = new Request("https://restapi.frezen.my.id/api/request/", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "topup" }),
@@ -49,7 +49,7 @@ describe("SE-to-Frezen compatibility route", () => {
   });
 
   it("requires a user-scoped API key for write operations", async () => {
-    const request = new Request("https://restfrezenapi1.frezen.my.id/api/request/", {
+    const request = new Request("https://restapi.frezen.my.id/api/request/", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "generate_key", product_id: "product-1" }),
