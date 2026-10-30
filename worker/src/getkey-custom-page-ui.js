@@ -6,7 +6,8 @@ const ENHANCED_OPEN_HANDLER = `open.onclick=async()=>{if(!open.dataset.launch)re
 export function enhanceGetKeyPage(response) {
   return response.text().then((html) => {
     if (!html.includes(OPEN_MARKER)) return new Response(html, { status: response.status, statusText: response.statusText, headers: response.headers });
-    const enhanced = html.replace(OPEN_MARKER, ENHANCED_OPEN_HANDLER);
+    const themed = html.includes('</head>') && !html.includes('/frezen-soft-ui.css') ? html.replace('</head>', '<link rel="stylesheet" href="/frezen-soft-ui.css?v=soft-ui-v1"></head>') : html;
+    const enhanced = themed.replace(OPEN_MARKER, ENHANCED_OPEN_HANDLER);
     const headers = new Headers(response.headers);
     headers.delete('content-length');
     return new Response(enhanced, { status: response.status, statusText: response.statusText, headers });
